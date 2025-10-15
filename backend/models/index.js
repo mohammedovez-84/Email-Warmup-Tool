@@ -17,4 +17,4 @@ const sequelize = new Sequelize(
 
 const Account = require('./Account');
 
-module.exports = { sequelize, Account, WarmupSenderReceiverMetricsLog };
+module.exports = { sequelize, Account };
