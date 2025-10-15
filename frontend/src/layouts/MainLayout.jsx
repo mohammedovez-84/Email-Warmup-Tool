@@ -5,14 +5,32 @@ import Footer from '../components/Footer';
 
 const MainLayout = () => {
     return (
-        <div className="main-layout">
-            <Sidebar />
-            <div className="main-content">
-                <Navbar />
-                <main className="content-wrapper">
-                    <Outlet />
+        <div className="flex h-screen bg-gray-50">
+            {/* Sidebar */}
+            <div className="w-64 bg-white shadow-lg z-10">
+                <Sidebar />
+            </div>
+
+            {/* Main Content */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Navbar */}
+                <header className="bg-white shadow-sm z-10">
+                    <Navbar />
+                </header>
+
+                {/* Page Content */}
+                <main className="flex-1 overflow-auto p-6 bg-gray-50">
+                    <div className="max-w-7xl mx-auto">
+                        <Outlet />
+                    </div>
                 </main>
-                <Footer />
+
+                {/* Footer */}
+                <footer className="bg-white border-t border-gray-200 py-4">
+                    <div className="max-w-7xl mx-auto px-6">
+                        <Footer />
+                    </div>
+                </footer>
             </div>
         </div>
     );
