@@ -19,7 +19,7 @@ const MainLayout = () => {
                 </header>
 
                 {/* Page Content */}
-                <main className="flex-1 overflow-auto p-6 bg-gray-50">
+                <main className="flex-1 overflow-auto  bg-gray-50">
                     <div className="max-w-7xl mx-auto">
                         <Outlet />
                     </div>

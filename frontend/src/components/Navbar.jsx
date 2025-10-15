@@ -51,40 +51,12 @@ export default function Navbar() {
         { icon: <FiLogOut className="w-4 h-4" />, label: 'Logout', action: handleLogout }
     ];
 
-    // const publicMenuItems = [
-    //     { icon: <FiZap className="w-4 h-4" />, label: 'Features', path: '/features' },
-    //     { icon: <FiCreditCard className="w-4 h-4" />, label: 'Credits', path: '/credits' },
-    // ];
-
-    // const userMenuItems = [
-    //     { icon: <FiPieChart className="w-4 h-4" />, label: 'Dashboard', path: '/dashboard' },
-    //     { icon: <FiLayers className="w-4 h-4" />, label: 'Pool Manager', path: '/pool-manager' },
-    //     { icon: <FiBarChart2 className="w-4 h-4" />, label: 'Analytics', path: '/analytics' },
-    // ];
 
     return (
         <>
             <nav className="fixed top-0 left-64 right-0 h-16 bg-gradient-to-r from-slate-900 to-teal-600 shadow-lg border-b border-white/10 z-40 transition-all duration-300 hover:shadow-xl">
                 <div className="h-full px-8">
                     <div className="flex items-center justify-between h-full">
-                        {/* Left Section - Navigation Links */}
-                        {/* <div className="hidden md:flex items-center h-full space-x-1">
-                            {
-                                userMenuItems.map((item, index) => (
-                                    <NavLink
-                                        key={index}
-                                        to={item.path}
-                                        icon={item.icon}
-                                        label={item.label}
-                                        isHovered={hoveredItem === index}
-                                        onMouseEnter={() => setHoveredItem(index)}
-                                        onMouseLeave={() => setHoveredItem(null)}
-                                    />
-                                ))
-
-                            }
-                        </div> */}
-
                         {/* Right Section - User Profile or Auth */}
                         <div className="flex items-center space-x-4">
                             {user ? (
@@ -293,40 +265,6 @@ export default function Navbar() {
                                     </>
                                 ) : (
                                     <>
-                                        {/* Public Menu Items */}
-                                        {/* <div className="space-y-2">
-                                            {publicMenuItems.map((item, index) => (
-                                                <motion.div
-                                                    key={index}
-                                                    initial={{ x: 20, opacity: 0 }}
-                                                    animate={{ x: 0, opacity: 1 }}
-                                                    transition={{ delay: index * 0.1 }}
-                                                >
-                                                    <MobileNavLink
-                                                        to={item.path}
-                                                        icon={item.icon}
-                                                        label={item.label}
-                                                        setIsOpen={setIsOpen}
-                                                    />
-                                                </motion.div>
-                                            ))}
-                                        </div> */}
-
-                                        {/* Get Started Button */}
-                                        {/* <motion.div
-                                            initial={{ opacity: 0, y: 10 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            // transition={{ delay: publicMenuItems.length * 0.1 }}
-                                            className="pt-4 border-t border-white/20"
-                                        >
-                                            <Link
-                                                to="/login"
-                                                onClick={() => setIsOpen(false)}
-                                                className="block w-full bg-white text-slate-900 hover:bg-gray-100 px-6 py-3 rounded-xl font-semibold text-center shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200"
-                                            >
-                                                Get Started
-                                            </Link>
-                                        </motion.div> */}
                                     </>
                                 )}
                             </div>

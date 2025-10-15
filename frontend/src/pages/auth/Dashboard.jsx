@@ -429,206 +429,90 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         };
 
         return (
-            <div className="warmup-settings-container" style={{ display: email ? 'block' : 'none' }}>
-                <style jsx>{`
-                    .warmup-settings-container {
-                        position: fixed;
-                        top: 0;
-                        right: 0;
-                        bottom: 0;
-                        width: 85%;
-                        max-width: 400px;
-                        background: white;
-                        box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
-                        z-index: 1000;
-                        overflow-y: auto;
-                        padding: 24px;
-                    }
-
-                    .settings-header {
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                        margin-bottom: 24px;
-                        padding-bottom: 16px;
-                        border-bottom: 1px solid #e2e8f0;
-                    }
-
-                    .settings-title {
-                        font-size: 20px;
-                        font-weight: 600;
-                        color: #1e293b;
-                    }
-
-                    .close-btn {
-                        background: none;
-                        border: none;
-                        cursor: pointer;
-                        color: #64748b;
-                        font-size: 20px;
-                    }
-
-                    .settings-form {
-                        display: flex;
-                        flex-direction: column;
-                        gap: 20px;
-                    }
-
-                    .form-group {
-                        display: flex;
-                        flex-direction: column;
-                        gap: 8px;
-                    }
-
-                    .form-label {
-                        font-size: 14px;
-                        font-weight: 500;
-                        color: #334155;
-                    }
-
-                    .form-input {
-                        padding: 10px 12px;
-                        border: 1px solid #e2e8f0;
-                        border-radius: 6px;
-                        font-size: 14px;
-                        transition: all 0.2s;
-                    }
-
-                    .form-input:focus {
-                        outline: none;
-                        border-color: #6366f1;
-                        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-                    }
-
-                    .recommended {
-                        font-size: 12px;
-                        color: #64748b;
-                        margin-top: -4px;
-                    }
-
-                    .checkbox-group {
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                        margin-top: 8px;
-                    }
-
-                    .checkbox-input {
-                        width: 16px;
-                        height: 16px;
-                    }
-
-                    .checkbox-label {
-                        font-size: 14px;
-                        color: #334155;
-                    }
-
-                    .form-actions {
-                        display: flex;
-                        justify-content: space-between;
-                        margin-top: 32px;
-                        padding-top: 16px;
-                        border-top: 1px solid #e2e8f0;
-                    }
-
-                    .btn {
-                        padding: 10px 16px;
-                        border-radius: 6px;
-                        font-size: 14px;
-                        font-weight: 500;
-                        cursor: pointer;
-                        display: flex;
-                        align-items: center;
-                        gap: 8px;
-                        transition: all 0.2s;
-                    }
-
-                    .btn-discard {
-                        background: #f8fafc;
-                        border: 1px solid #e2e8f0;
-                        color: #64748b;
-                    }
-
-                    .btn-discard:hover {
-                        background: #f1f5f9;
-                    }
-
-                    .btn-save {
-                        background: #0d9488;
-                        border: 1px solid #0d9488;
-                        color: white;
-                    }
-
-                    .btn-save:hover {
-                        background: #0f766e;
-                    }
-
-                    .error-message {
-                        color: #dc2626;
-                        font-size: 12px;
-                        margin-top: 4px;
-                    }
-                `}</style>
-
-                <div className="settings-header">
-                    <h2 className="settings-title">Warm-up Settings</h2>
-                    <button className="close-btn" onClick={onClose}>
+            <div
+                className={`fixed top-0 right-0 bottom-0 w-[85%] max-w-[400px] bg-white shadow-lg z-[1000] overflow-y-auto p-6 transition-all ${email ? "block" : "hidden"
+                    }`}
+            >
+                {/* Header */}
+                <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
+                    <h2 className="text-[20px] font-semibold text-slate-800">Warm-up Settings</h2>
+                    <button
+                        className="text-slate-500 text-xl hover:text-slate-700"
+                        onClick={onClose}
+                    >
                         <FiX />
                     </button>
                 </div>
 
-                <div className="settings-form">
-                    <div className="form-group">
-                        <label className="form-label">Start with emails/day (Recommended 3)</label>
+                {/* Settings Form */}
+                <div className="flex flex-col gap-5">
+                    {/* Start Emails Per Day */}
+                    <div className="flex flex-col gap-2">
+                        <label className="text-sm font-medium text-slate-700">
+                            Start with emails/day (Recommended 3)
+                        </label>
                         <input
                             type="number"
                             name="startEmailsPerDay"
-                            className="form-input"
+                            className="px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
                             value={settings.startEmailsPerDay}
                             onChange={handleChange}
                             min="1"
                         />
                         {settings.startEmailsPerDay < 1 && (
-                            <p className="error-message">The value could not be less than 1 or in fraction.</p>
+                            <p className="text-red-600 text-xs mt-1">
+                                The value could not be less than 1 or in fraction.
+                            </p>
                         )}
                     </div>
 
-                    <div className="form-group">
-                        <label className="form-label">Increase by emails every day (Recommended 3)</label>
+                    {/* Increase By Emails Per Day */}
+                    <div className="flex flex-col gap-2">
+                        <label className="text-sm font-medium text-slate-700">
+                            Increase by emails every day (Recommended 3)
+                        </label>
                         <input
                             type="number"
                             name="increaseByPerDay"
-                            className="form-input"
+                            className="px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
                             value={settings.increaseByPerDay}
                             onChange={handleChange}
                             min="1"
                         />
                         {settings.increaseByPerDay < 1 && (
-                            <p className="error-message">The value could not be less than 1 or in fraction.</p>
+                            <p className="text-red-600 text-xs mt-1">
+                                The value could not be less than 1 or in fraction.
+                            </p>
                         )}
                     </div>
 
-                    <div className="form-group">
-                        <label className="form-label">Maximum emails to be sent per day (Recommended 25)</label>
+                    {/* Max Emails Per Day */}
+                    <div className="flex flex-col gap-2">
+                        <label className="text-sm font-medium text-slate-700">
+                            Maximum emails to be sent per day (Recommended 25)
+                        </label>
                         <input
                             type="number"
                             name="maxEmailsPerDay"
-                            className="form-input"
+                            className="px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
                             value={settings.maxEmailsPerDay}
                             onChange={handleChange}
                             min="1"
                         />
                         {settings.maxEmailsPerDay < 1 && (
-                            <p className="error-message">The value could not be less than 1 or in fraction.</p>
+                            <p className="text-red-600 text-xs mt-1">
+                                The value could not be less than 1 or in fraction.
+                            </p>
                         )}
                     </div>
 
-                    <div className="form-group">
-                        <label className="form-label">Reply rate</label>
+                    {/* Reply Rate */}
+                    <div className="flex flex-col gap-2">
+                        <label className="text-sm font-medium text-slate-700">Reply rate</label>
                         <input
                             type="number"
                             name="replyRate"
-                            className="form-input"
+                            className="px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
                             value={settings.replyRate}
                             onChange={handleChange}
                             min="0"
@@ -636,39 +520,44 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         />
                     </div>
 
-                    <div className="form-group">
-                        <label className="form-label">Sender name</label>
+                    {/* Sender Name */}
+                    <div className="flex flex-col gap-2">
+                        <label className="text-sm font-medium text-slate-700">Sender name</label>
                         <input
                             type="text"
                             name="senderName"
-                            className="form-input"
+                            className="px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
                             value={settings.senderName}
                             onChange={handleChange}
                         />
                     </div>
 
-                    <div className="checkbox-group">
+                    {/* Checkbox */}
+                    <div className="flex items-center gap-2 mt-2">
                         <input
                             type="checkbox"
                             id="customFolder"
-                            className="checkbox-input"
+                            className="w-4 h-4"
                             checked={!!settings.customFolderName}
-                            onChange={(e) => setSettings(prev => ({
-                                ...prev,
-                                customFolderName: e.target.checked ? 'Custom Folder' : ''
-                            }))}
+                            onChange={(e) =>
+                                setSettings((prev) => ({
+                                    ...prev,
+                                    customFolderName: e.target.checked ? "Custom Folder" : "",
+                                }))
+                            }
                         />
-                        <label htmlFor="customFolder" className="checkbox-label">
+                        <label htmlFor="customFolder" className="text-sm text-slate-700">
                             + Add custom name for warmup folder
                         </label>
                     </div>
 
+                    {/* Custom Folder Name Input */}
                     {settings.customFolderName && (
-                        <div className="form-group">
+                        <div className="flex flex-col gap-2">
                             <input
                                 type="text"
                                 name="customFolderName"
-                                className="form-input"
+                                className="px-3 py-2 border border-slate-200 rounded-md text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
                                 value={settings.customFolderName}
                                 onChange={handleChange}
                                 placeholder="Enter folder name"
@@ -677,12 +566,16 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     )}
                 </div>
 
-                <div className="form-actions">
-                    <button className="btn btn-discard" onClick={onClose}>
+                {/* Action Buttons */}
+                <div className="flex justify-between mt-8 pt-4 border-t border-slate-200">
+                    <button
+                        className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-all"
+                        onClick={onClose}
+                    >
                         <FiTrash2 /> Discard
                     </button>
                     <button
-                        className="btn btn-save"
+                        className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-teal-600 bg-teal-600 text-white hover:bg-teal-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                         onClick={handleSave}
                         disabled={
                             settings.startEmailsPerDay < 1 ||
@@ -694,6 +587,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     </button>
                 </div>
             </div>
+
         );
     };
 
@@ -706,13 +600,12 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     margin-right: 40px;
                     padding: 2rem;
                     color: #333;
-                    min-height: 180vh;
                     display: flex;
                     flex-direction: column;
                     background-color: #f8fafc;
                     transition: margin-left 0.3s ease;
                     position: relative;
-                    width: calc(100% - 280px);
+                    
                 }
 
                 .dashboard.sidebar-collapsed {
