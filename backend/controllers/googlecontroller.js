@@ -84,35 +84,40 @@ exports.addGoogleUser = async (req, res) => {
     const user_id = req.user.id;
     console.log('Received payload:', { name, email, appPassword, user_id });
 
-    // Basic validation to avoid undefined or missing parameters
     if (!name || !email || !appPassword) {
         return res.status(400).json({ success: false, message: 'Name, email, and app password are required.' });
     }
 
     try {
         const cleanedPassword = cleanAndValidatePassword(appPassword);
-        // const hashedPassword = await bcrypt.hash(cleanedPassword, 10);
 
-        // ✅ Use Sequelize Model instead of pool.execute
+        // ✅ Create or find Google user
         const [user, created] = await GoogleUser.findOrCreate({
             where: { email },
             defaults: {
                 name,
                 app_password: cleanedPassword,
-                user_id //
+                user_id
             },
         });
-
-
 
         if (!created) {
             return res.status(409).json({ success: false, message: 'Email already exists' });
         }
 
-        return res.status(201).json({ success: true, message: 'Google user added and health check done', health });
+        // ✅ Run domain-level health check
+        const domain = email.split("@")[1];
+        const health = await runHealthCheckInternal({
+            emails: [email],
+            domain,
+            knownDomains: ["gmail.com", "outlook.com", "yahoo.com"], // optional known list
+        });
 
-
-
+        return res.status(201).json({
+            success: true,
+            message: 'Google user added and domain health check completed successfully',
+            health,
+        });
 
     } catch (error) {
         console.error("DB ERROR:", error.message);

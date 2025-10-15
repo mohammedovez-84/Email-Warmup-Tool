@@ -10,6 +10,7 @@ export const signupUser = async (data) => {
 
 // 🔐 Verify email with OTP
 export const verifyEmail = async (email, otp) => {
+
   const res = await axios.post(`${API_URL}/verify-email`, { email, otp });
   return res.data;
 };

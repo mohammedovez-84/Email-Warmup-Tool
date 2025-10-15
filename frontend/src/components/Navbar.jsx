@@ -9,13 +9,10 @@ import {
     FiSettings,
     FiLogOut,
     FiHelpCircle,
-    FiMail,
     FiBarChart2,
     FiLayers,
     FiPieChart,
-    FiSend,
     FiZap,
-    FiDollarSign,
     FiCreditCard
 } from 'react-icons/fi';
 import { HiOutlineChevronDown } from 'react-icons/hi';
@@ -48,466 +45,92 @@ export default function Navbar() {
     };
 
     const profileMenuItems = [
-        { icon: <FiUser className="mr-2" />, label: 'Profile', path: '/profile' },
-        { icon: <FiSettings className="mr-2" />, label: 'Settings', path: '/settings' },
-        { icon: <FiHelpCircle className="mr-2" />, label: 'Help', path: '/help' },
-        { icon: <FiLogOut className="mr-2" />, label: 'Logout', action: handleLogout }
+        { icon: <FiUser className="w-4 h-4" />, label: 'Profile', path: '/profile' },
+        { icon: <FiSettings className="w-4 h-4" />, label: 'Settings', path: '/settings' },
+        { icon: <FiHelpCircle className="w-4 h-4" />, label: 'Help', path: '/help' },
+        { icon: <FiLogOut className="w-4 h-4" />, label: 'Logout', action: handleLogout }
     ];
 
-    const publicMenuItems = [
-        { icon: <FiZap className="mr-2" />, label: 'Features', path: '/features' },
-        { icon: <FiCreditCard className="mr-2" />, label: 'Credits', path: '/credits' },
-    ];
+    // const publicMenuItems = [
+    //     { icon: <FiZap className="w-4 h-4" />, label: 'Features', path: '/features' },
+    //     { icon: <FiCreditCard className="w-4 h-4" />, label: 'Credits', path: '/credits' },
+    // ];
 
-    const userMenuItems = [
-        { icon: <FiPieChart className="mr-2" />, label: 'Dashboard', path: '/dashboard' },
-        { icon: <FiLayers className="mr-2" />, label: 'Pool Manager', path: '/pool-manager' },
-        { icon: <FiBarChart2 className="mr-2" />, label: 'Analytics', path: '/analytics' },
-        // { icon: <FiSend className="mr-2" />, label: 'Campaigns', path: '/campaigns' }
-    ];
+    // const userMenuItems = [
+    //     { icon: <FiPieChart className="w-4 h-4" />, label: 'Dashboard', path: '/dashboard' },
+    //     { icon: <FiLayers className="w-4 h-4" />, label: 'Pool Manager', path: '/pool-manager' },
+    //     { icon: <FiBarChart2 className="w-4 h-4" />, label: 'Analytics', path: '/analytics' },
+    // ];
 
     return (
         <>
-            <style>{`
-                .navbar {
-                    background: linear-gradient(to right, #0B1E3F 0%, #008080 100%);
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-                    position: sticky;
-                    top: 0;
-                    z-index: 40;
-                    margin-left: 240px;
-                    width: calc(100% - 240px);
-                    height: 64px;
-                    transition: all 0.3s ease;
-                }
+            <nav className="fixed top-0 left-64 right-0 h-16 bg-gradient-to-r from-slate-900 to-teal-600 shadow-lg border-b border-white/10 z-40 transition-all duration-300 hover:shadow-xl">
+                <div className="h-full px-8">
+                    <div className="flex items-center justify-between h-full">
+                        {/* Left Section - Navigation Links */}
+                        {/* <div className="hidden md:flex items-center h-full space-x-1">
+                            {
+                                userMenuItems.map((item, index) => (
+                                    <NavLink
+                                        key={index}
+                                        to={item.path}
+                                        icon={item.icon}
+                                        label={item.label}
+                                        isHovered={hoveredItem === index}
+                                        onMouseEnter={() => setHoveredItem(index)}
+                                        onMouseLeave={() => setHoveredItem(null)}
+                                    />
+                                ))
 
-                .navbar:hover {
-                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
-                }
+                            }
+                        </div> */}
 
-                .navbar-container {
-                    max-width: 100%;
-                    padding: 0 2rem;
-                    height: 100%;
-                }
-
-                .navbar-inner {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    height: 100%;
-                    position: relative;
-                }
-
-                .logo-container {
-                    display: none;
-                }
-
-                .desktop-nav {
-                    display: none;
-                    align-items: center;
-                    height: 100%;
-                }
-
-                .nav-left {
-                    display: flex;
-                    align-items: center;
-                    height: 100%;
-                }
-
-                .nav-right {
-                    display: flex;
-                    align-items: center;
-                    height: 100%;
-                    margin-left: auto;
-                }
-
-                .nav-link {
-                    display: flex;
-                    align-items: center;
-                    padding: 0 1.25rem;
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                    color: rgba(255, 255, 255, 0.9);
-                    transition: all 0.2s ease;
-                    text-decoration: none;
-                    height: 100%;
-                    position: relative;
-                }
-
-                .nav-link:hover {
-                    color: white;
-                }
-
-                .nav-link::after {
-                    content: '';
-                    position: absolute;
-                    right: 1rem;
-                    bottom: 1rem;
-                    left: 1rem;
-                    height: 2px;
-                    background: white;
-                    transform: scaleX(0);
-                    transform-origin: right;
-                    transition: transform 0.3s ease;
-                }
-
-                .nav-link:hover::after {
-                    transform: scaleX(1);
-                    transform-origin: left;
-                }
-
-                .profile-dropdown {
-                    margin-left: 1rem;
-                    position: relative;
-                    height: 100%;
-                    display: flex;
-                    align-items: center;
-                }
-
-                .profile-button {
-                    display: flex;
-                    align-items: center;
-                    font-size: 0.875rem;
-                    border-radius: 9999px;
-                    outline: none;
-                    text-decoration: none;
-                    padding: 0.25rem;
-                    height: 100%;
-                    background: transparent;
-                    border: none;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    color: white;
-                }
-
-                .profile-button:hover {
-                    background: rgba(255, 255, 255, 0.1);
-                }
-
-                .profile-avatar {
-                    height: 2.25rem;
-                    width: 2.25rem;
-                    border-radius: 9999px;
-                    background: rgba(255, 255, 255, 0.2);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: white;
-                    font-weight: 500;
-                    transition: all 0.2s ease;
-                }
-
-                .profile-button:hover .profile-avatar {
-                    background: rgba(255, 255, 255, 0.3);
-                }
-
-                .profile-name {
-                    margin-left: 0.5rem;
-                    color: white;
-                    font-weight: 500;
-                }
-
-                .profile-chevron {
-                    margin-left: 0.25rem;
-                    height: 1rem;
-                    width: 1rem;
-                    color: rgba(255, 255, 255, 0.7);
-                    transition: all 0.2s ease;
-                }
-
-                .profile-chevron-open {
-                    transform: rotate(180deg);
-                    color: white;
-                }
-
-                .dropdown-menu {
-                    position: absolute;
-                    right: 0;
-                    top: 100%;
-                    margin-top: 0.25rem;
-                    width: 12rem;
-                    border-radius: 0.5rem;
-                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-                    background: linear-gradient(to right, #0B1E3F 0%, #008080 100%);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    z-index: 50;
-                    overflow: hidden;
-                    backdrop-filter: blur(5px);
-                }
-
-                .dropdown-header {
-                    padding: 0.75rem 1rem;
-                    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-                }
-
-                .dropdown-name {
-                    font-size: 0.875rem;
-                    font-weight: 600;
-                    color: white;
-                }
-
-                .dropdown-email {
-                    font-size: 0.75rem;
-                    color: rgba(255, 255, 255, 0.7);
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-
-                .dropdown-item {
-                    display: flex;
-                    align-items: center;
-                    padding: 0.5rem 1rem;
-                    font-size: 0.875rem;
-                    color: rgba(255, 255, 255, 0.9);
-                    width: 100%;
-                    text-align: left;
-                    text-decoration: none;
-                    background: transparent;
-                    border: none;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                }
-
-                .dropdown-item:hover {
-                    background: rgba(255, 255, 255, 0.1);
-                    color: white;
-                }
-
-                .signup-button {
-                    margin-left: 1rem;
-                    padding: 0.5rem 1.25rem;
-                    border-radius: 0.375rem;
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                    color: #0B1E3F;
-                    background: white;
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-                    text-decoration: none;
-                    transition: all 0.2s ease;
-                }
-
-                .signup-button:hover {
-                    background: rgba(255, 255, 255, 0.9);
-                    transform: translateY(-1px);
-                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                }
-
-                .mobile-menu-button {
-                    display: flex;
-                    align-items: center;
-                    margin-right: -0.5rem;
-                }
-
-                .mobile-menu-icon {
-                    height: 1.5rem;
-                    width: 1.5rem;
-                    color: white;
-                    transition: all 0.2s ease;
-                }
-
-                .mobile-menu-button:hover .mobile-menu-icon {
-                    transform: rotate(90deg);
-                }
-
-                .mobile-menu {
-                    position: absolute;
-                    top: 64px;
-                    left: 240px;
-                    width: calc(100% - 240px);
-                    background: linear-gradient(to right, #0B1E3F 0%, #008080 100%);
-                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                    z-index: 30;
-                    overflow: hidden;
-                    border-top: 1px solid rgba(255, 255, 255, 0.1);
-                }
-
-                .mobile-menu-inner {
-                    padding: 1rem;
-                }
-
-                .mobile-nav-link {
-                    display: flex;
-                    align-items: center;
-                    padding: 0.75rem;
-                    border-radius: 0.375rem;
-                    font-size: 1rem;
-                    font-weight: 500;
-                    color: rgba(255, 255, 255, 0.9);
-                    text-decoration: none;
-                    transition: all 0.2s ease;
-                    margin: 0.25rem 0;
-                }
-
-                .mobile-nav-link:hover {
-                    color: white;
-                    background: rgba(255, 255, 255, 0.1);
-                    transform: translateX(5px);
-                }
-
-                .mobile-profile-section {
-                    padding-top: 1rem;
-                    border-top: 1px solid rgba(255, 255, 255, 0.1);
-                    margin-top: 1rem;
-                }
-
-                .mobile-profile-info {
-                    display: flex;
-                    align-items: center;
-                    padding: 0.75rem;
-                    background: rgba(255, 255, 255, 0.05);
-                    border-radius: 0.375rem;
-                    transition: all 0.2s ease;
-                }
-
-                .mobile-profile-info:hover {
-                    background: rgba(255, 255, 255, 0.1);
-                }
-
-                .mobile-profile-avatar {
-                    height: 2.25rem;
-                    width: 2.25rem;
-                    border-radius: 9999px;
-                    background: rgba(255, 255, 255, 0.2);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: white;
-                    font-weight: 500;
-                }
-
-                .mobile-profile-details {
-                    margin-left: 0.75rem;
-                }
-
-                .mobile-profile-name {
-                    font-size: 0.875rem;
-                    font-weight: 600;
-                    color: white;
-                }
-
-                .mobile-profile-email {
-                    font-size: 0.75rem;
-                    color: rgba(255, 255, 255, 0.7);
-                }
-
-                .mobile-menu-items {
-                    margin-top: 0.75rem;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 0.25rem;
-                }
-
-                .mobile-menu-item {
-                    display: flex;
-                    align-items: center;
-                    padding: 0.75rem;
-                    border-radius: 0.375rem;
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                    color: rgba(255, 255, 255, 0.9);
-                    text-decoration: none;
-                    transition: all 0.2s ease;
-                }
-
-                .mobile-menu-item:hover {
-                    color: white;
-                    background: rgba(255, 255, 255, 0.1);
-                    padding-left: 1rem;
-                }
-
-                .mobile-signup-button {
-                    display: block;
-                    padding: 0.75rem;
-                    border-radius: 0.375rem;
-                    font-size: 1rem;
-                    font-weight: 500;
-                    text-align: center;
-                    color: #0B1E3F;
-                    background: white;
-                    text-decoration: none;
-                    margin-top: 0.5rem;
-                    transition: all 0.2s ease;
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-                }
-
-                .mobile-signup-button:hover {
-                    background: rgba(255, 255, 255, 0.9);
-                    transform: translateY(-1px);
-                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                }
-
-                @media (min-width: 768px) {
-                    .desktop-nav {
-                        display: flex;
-                        width: 100%;
-                    }
-                    .mobile-menu-button {
-                        display: none;
-                    }
-                }
-            `}</style>
-
-            <nav className="navbar">
-                <div className="navbar-container">
-                    <div className="navbar-inner">
-                        <div className="logo-container">
-                            {/* Logo removed as it's in sidebar */}
-                        </div>
-
-                        <div className="desktop-nav">
+                        {/* Right Section - User Profile or Auth */}
+                        <div className="flex items-center space-x-4">
                             {user ? (
-                                <>
-                                    <div className="nav-left">
-                                        {userMenuItems.map((item, index) => (
-                                            <NavLink
-                                                key={index}
-                                                to={item.path}
-                                                label={
-                                                    <>
-                                                        {item.icon}
-                                                        {item.label}
-                                                    </>
-                                                }
-                                                onMouseEnter={() => setHoveredItem(index)}
-                                                onMouseLeave={() => setHoveredItem(null)}
-                                                isHovered={hoveredItem === index}
+                                <div className="hidden md:flex items-center h-full" ref={profileRef}>
+                                    <div className="relative h-full flex items-center">
+                                        <button
+                                            onClick={() => setProfileOpen(!profileOpen)}
+                                            className="flex items-center space-x-2 px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200 group"
+                                        >
+                                            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-semibold group-hover:bg-white/30 transition-colors duration-200">
+                                                {user.name.charAt(0).toUpperCase()}
+                                            </div>
+                                            <span className="text-white font-medium text-sm">
+                                                {user.name.split(' ')[0]}
+                                            </span>
+                                            <HiOutlineChevronDown
+                                                className={`w-4 h-4 text-white/70 transition-transform duration-200 ${profileOpen ? 'rotate-180' : ''
+                                                    }`}
                                             />
-                                        ))}
-                                    </div>
-                                    <div className="nav-right">
-                                        <div className="profile-dropdown" ref={profileRef}>
-                                            <button
-                                                onClick={() => setProfileOpen(!profileOpen)}
-                                                className="profile-button"
-                                            >
-                                                <div className="profile-avatar">
-                                                    {user.name.charAt(0).toUpperCase()}
-                                                </div>
-                                                <span className="profile-name">
-                                                    {user.name.split(' ')[0]}
-                                                </span>
-                                                <HiOutlineChevronDown className={`profile-chevron ${profileOpen ? 'profile-chevron-open' : ''}`} />
-                                            </button>
+                                        </button>
 
-                                            <AnimatePresence>
-                                                {profileOpen && (
-                                                    <motion.div
-                                                        initial={{ opacity: 0, y: -10 }}
-                                                        animate={{ opacity: 1, y: 0 }}
-                                                        exit={{ opacity: 0, y: -10 }}
-                                                        transition={{ duration: 0.2 }}
-                                                        className="dropdown-menu"
-                                                    >
-                                                        <div className="dropdown-header">
-                                                            <p className="dropdown-name">{user.name}</p>
-                                                            <p className="dropdown-email">{user.email}</p>
-                                                        </div>
+                                        <AnimatePresence>
+                                            {profileOpen && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    transition={{ duration: 0.2 }}
+                                                    className="absolute right-0 top-full mt-2 w-64 bg-white/95 backdrop-blur-lg rounded-xl shadow-2xl border border-white/20 overflow-hidden"
+                                                >
+                                                    {/* Profile Header */}
+                                                    <div className="p-4 border-b border-gray-200/50 bg-gradient-to-r from-slate-900/95 to-teal-600/95">
+                                                        <p className="text-white font-semibold text-sm truncate">
+                                                            {user.name}
+                                                        </p>
+                                                        <p className="text-white/70 text-xs truncate mt-1">
+                                                            {user.email}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Menu Items */}
+                                                    <div className="p-2">
                                                         {profileMenuItems.map((item, index) => (
                                                             <motion.div
                                                                 key={index}
-                                                                initial={{ x: 10, opacity: 0 }}
+                                                                initial={{ x: -10, opacity: 0 }}
                                                                 animate={{ x: 0, opacity: 1 }}
                                                                 transition={{ delay: index * 0.05 }}
                                                             >
@@ -515,139 +138,139 @@ export default function Navbar() {
                                                                     <Link
                                                                         to={item.path}
                                                                         onClick={() => setProfileOpen(false)}
-                                                                        className="dropdown-item"
+                                                                        className="flex items-center space-x-3 w-full px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100/80 rounded-lg transition-all duration-200 group"
                                                                     >
-                                                                        {item.icon}
-                                                                        {item.label}
+                                                                        <div className="text-gray-600 group-hover:text-teal-600 transition-colors duration-200">
+                                                                            {item.icon}
+                                                                        </div>
+                                                                        <span className="font-medium">{item.label}</span>
                                                                     </Link>
                                                                 ) : (
                                                                     <button
                                                                         onClick={item.action}
-                                                                        className="dropdown-item"
+                                                                        className="flex items-center space-x-3 w-full px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100/80 rounded-lg transition-all duration-200 group"
                                                                     >
-                                                                        {item.icon}
-                                                                        {item.label}
+                                                                        <div className="text-gray-600 group-hover:text-red-600 transition-colors duration-200">
+                                                                            {item.icon}
+                                                                        </div>
+                                                                        <span className="font-medium">{item.label}</span>
                                                                     </button>
                                                                 )}
                                                             </motion.div>
                                                         ))}
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
-                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
                                     </div>
-                                </>
+                                </div>
                             ) : (
-                                <>
-                                    <div className="nav-left"></div>
-                                    <div className="nav-right">
-                                        {publicMenuItems.map((item, index) => (
-                                            <NavLink
-                                                key={index}
-                                                to={item.path}
-                                                label={
-                                                    <>
-                                                        {item.icon}
-                                                        {item.label}
-                                                    </>
-                                                }
-                                                onMouseEnter={() => setHoveredItem(index)}
-                                                onMouseLeave={() => setHoveredItem(null)}
-                                                isHovered={hoveredItem === index}
-                                            />
-                                        ))}
+                                <div className="hidden md:flex items-center space-x-4">
+                                    {/* {publicMenuItems.map((item, index) => (
                                         <Link
-                                            to="/login"
-                                            className="signup-button"
+                                            key={index}
+                                            to={item.path}
+                                            className="flex items-center space-x-1 text-white/90 hover:text-white transition-colors duration-200 text-sm font-medium px-3 py-2 rounded-lg hover:bg-white/10"
                                         >
-                                            Get Started
+                                            {item.icon}
+                                            <span>{item.label}</span>
                                         </Link>
-                                    </div>
-                                </>
+                                    ))} */}
+                                    <Link
+                                        to="/login"
+                                        className="bg-white text-slate-900 hover:bg-gray-100 px-4 py-2 rounded-lg font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200"
+                                    >
+                                        Get Started
+                                    </Link>
+                                </div>
                             )}
-                        </div>
 
-                        <div className="mobile-menu-button">
+                            {/* Mobile Menu Button */}
                             <button
                                 onClick={() => setIsOpen(!isOpen)}
-                                className="p-2 rounded-md hover:bg-white/10 focus:outline-none"
+                                className="md:hidden p-2 rounded-lg hover:bg-white/10 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-white/50"
                             >
-                                <span className="sr-only">Open menu</span>
                                 {isOpen ? (
-                                    <FiX className="mobile-menu-icon" />
+                                    <FiX className="w-6 h-6 text-white" />
                                 ) : (
-                                    <FiMenu className="mobile-menu-icon" />
+                                    <FiMenu className="w-6 h-6 text-white" />
                                 )}
                             </button>
                         </div>
                     </div>
                 </div>
 
+                {/* Mobile Menu */}
                 <AnimatePresence>
                     {isOpen && (
                         <motion.div
                             initial={{ opacity: 0, height: 0 }}
                             animate={{ opacity: 1, height: 'auto' }}
                             exit={{ opacity: 0, height: 0 }}
-                            transition={{ duration: 0.3 }}
-                            className="mobile-menu"
+                            transition={{ duration: 0.3, ease: 'easeInOut' }}
+                            className="md:hidden absolute top-16 left-0 right-0 bg-gradient-to-b from-slate-900 to-teal-700/95 backdrop-blur-lg border-b border-white/10 shadow-2xl"
                         >
-                            <div className="mobile-menu-inner">
+                            <div className="p-6 space-y-4">
                                 {user ? (
                                     <>
-                                        {userMenuItems.map((item, index) => (
-                                            <motion.div
-                                                key={index}
-                                                initial={{ x: 10, opacity: 0 }}
-                                                animate={{ x: 0, opacity: 1 }}
-                                                transition={{ delay: index * 0.05 }}
-                                            >
-                                                <MobileNavLink
-                                                    to={item.path}
-                                                    label={
-                                                        <>
-                                                            {item.icon}
-                                                            {item.label}
-                                                        </>
-                                                    }
-                                                    setIsOpen={setIsOpen}
-                                                />
-                                            </motion.div>
-                                        ))}
+                                        {/* User Menu Items */}
+                                        <div className="space-y-2">
+                                            {userMenuItems.map((item, index) => (
+                                                <motion.div
+                                                    key={index}
+                                                    initial={{ x: 20, opacity: 0 }}
+                                                    animate={{ x: 0, opacity: 1 }}
+                                                    transition={{ delay: index * 0.1 }}
+                                                >
+                                                    <MobileNavLink
+                                                        to={item.path}
+                                                        icon={item.icon}
+                                                        label={item.label}
+                                                        setIsOpen={setIsOpen}
+                                                    />
+                                                </motion.div>
+                                            ))}
+                                        </div>
 
+                                        {/* User Profile Section */}
                                         <motion.div
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
-                                            transition={{ delay: userMenuItems.length * 0.05 }}
-                                            className="mobile-profile-section"
+                                            transition={{ delay: userMenuItems.length * 0.1 }}
+                                            className="pt-4 border-t border-white/20"
                                         >
-                                            <div className="mobile-profile-info">
-                                                <div className="mobile-profile-avatar">
+                                            <div className="flex items-center space-x-3 p-3 bg-white/10 rounded-xl mb-3">
+                                                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-semibold">
                                                     {user.name.charAt(0).toUpperCase()}
                                                 </div>
-                                                <div className="mobile-profile-details">
-                                                    <p className="mobile-profile-name">{user.name}</p>
-                                                    <p className="mobile-profile-email">{user.email}</p>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-white font-semibold text-sm truncate">
+                                                        {user.name}
+                                                    </p>
+                                                    <p className="text-white/70 text-xs truncate">
+                                                        {user.email}
+                                                    </p>
                                                 </div>
                                             </div>
-                                            <div className="mobile-menu-items">
+
+                                            <div className="space-y-1">
                                                 {profileMenuItems.map((item, index) => (
                                                     <motion.div
                                                         key={index}
-                                                        initial={{ x: 10, opacity: 0 }}
+                                                        initial={{ x: 20, opacity: 0 }}
                                                         animate={{ x: 0, opacity: 1 }}
-                                                        transition={{ delay: (userMenuItems.length + index) * 0.05 }}
+                                                        transition={{ delay: (userMenuItems.length + index) * 0.1 }}
                                                     >
                                                         {item.path ? (
                                                             <Link
                                                                 to={item.path}
                                                                 onClick={() => setIsOpen(false)}
-                                                                className="mobile-menu-item"
+                                                                className="flex items-center space-x-3 w-full px-4 py-3 text-white/90 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 group"
                                                             >
-                                                                <div className="flex items-center">
+                                                                <div className="text-white/70 group-hover:text-white transition-colors duration-200">
                                                                     {item.icon}
-                                                                    {item.label}
                                                                 </div>
+                                                                <span className="font-medium">{item.label}</span>
                                                             </Link>
                                                         ) : (
                                                             <button
@@ -655,12 +278,12 @@ export default function Navbar() {
                                                                     item.action();
                                                                     setIsOpen(false);
                                                                 }}
-                                                                className="mobile-menu-item"
+                                                                className="flex items-center space-x-3 w-full px-4 py-3 text-white/90 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 group"
                                                             >
-                                                                <div className="flex items-center">
+                                                                <div className="text-white/70 group-hover:text-red-300 transition-colors duration-200">
                                                                     {item.icon}
-                                                                    {item.label}
                                                                 </div>
+                                                                <span className="font-medium">{item.label}</span>
                                                             </button>
                                                         )}
                                                     </motion.div>
@@ -670,38 +293,40 @@ export default function Navbar() {
                                     </>
                                 ) : (
                                     <>
-                                        {publicMenuItems.map((item, index) => (
-                                            <motion.div
-                                                key={index}
-                                                initial={{ x: 10, opacity: 0 }}
-                                                animate={{ x: 0, opacity: 1 }}
-                                                transition={{ delay: index * 0.05 }}
-                                            >
-                                                <MobileNavLink
-                                                    to={item.path}
-                                                    label={
-                                                        <>
-                                                            {item.icon}
-                                                            {item.label}
-                                                        </>
-                                                    }
-                                                    setIsOpen={setIsOpen}
-                                                />
-                                            </motion.div>
-                                        ))}
-                                        <motion.div
+                                        {/* Public Menu Items */}
+                                        {/* <div className="space-y-2">
+                                            {publicMenuItems.map((item, index) => (
+                                                <motion.div
+                                                    key={index}
+                                                    initial={{ x: 20, opacity: 0 }}
+                                                    animate={{ x: 0, opacity: 1 }}
+                                                    transition={{ delay: index * 0.1 }}
+                                                >
+                                                    <MobileNavLink
+                                                        to={item.path}
+                                                        icon={item.icon}
+                                                        label={item.label}
+                                                        setIsOpen={setIsOpen}
+                                                    />
+                                                </motion.div>
+                                            ))}
+                                        </div> */}
+
+                                        {/* Get Started Button */}
+                                        {/* <motion.div
                                             initial={{ opacity: 0, y: 10 }}
                                             animate={{ opacity: 1, y: 0 }}
-                                            transition={{ delay: publicMenuItems.length * 0.05 }}
+                                            // transition={{ delay: publicMenuItems.length * 0.1 }}
+                                            className="pt-4 border-t border-white/20"
                                         >
                                             <Link
-                                                to="/signup"
+                                                to="/login"
                                                 onClick={() => setIsOpen(false)}
-                                                className="mobile-signup-button"
+                                                className="block w-full bg-white text-slate-900 hover:bg-gray-100 px-6 py-3 rounded-xl font-semibold text-center shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200"
                                             >
-                                                Sign Up
+                                                Get Started
                                             </Link>
-                                        </motion.div>
+                                        </motion.div> */}
                                     </>
                                 )}
                             </div>
@@ -709,41 +334,58 @@ export default function Navbar() {
                     )}
                 </AnimatePresence>
             </nav>
+
+            {/* Spacer for fixed navbar */}
+            <div className="h-16"></div>
         </>
     );
 }
 
-function NavLink({ to, label, onMouseEnter, onMouseLeave, isHovered }) {
+// Desktop NavLink Component
+function NavLink({ to, icon, label, isHovered, onMouseEnter, onMouseLeave }) {
     return (
         <Link
             to={to}
-            className="nav-link"
+            className="relative flex items-center space-x-2 px-4 py-2 text-white/90 hover:text-white transition-colors duration-200 group"
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}
         >
-            {label}
-            {isHovered && (
-                <motion.span
-                    className="absolute right-1rem bottom-1rem left-1rem h-0.5 bg-white"
-                    layoutId="navHover"
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: 1 }}
-                    exit={{ scaleX: 0 }}
-                    transition={{ duration: 0.3 }}
-                />
-            )}
+            <div className="flex items-center space-x-2">
+                <div className="text-white/70 group-hover:text-white transition-colors duration-200">
+                    {icon}
+                </div>
+                <span className="font-medium text-sm">{label}</span>
+            </div>
+
+            {/* Animated underline */}
+            <div className="absolute bottom-0 left-4 right-4 h-0.5 bg-transparent group-hover:bg-white/50 transition-all duration-300">
+                {isHovered && (
+                    <motion.div
+                        className="h-full bg-white"
+                        layoutId="navHover"
+                        initial={{ scaleX: 0 }}
+                        animate={{ scaleX: 1 }}
+                        exit={{ scaleX: 0 }}
+                        transition={{ duration: 0.3 }}
+                    />
+                )}
+            </div>
         </Link>
     );
 }
 
-function MobileNavLink({ to, label, setIsOpen }) {
+// Mobile NavLink Component
+function MobileNavLink({ to, icon, label, setIsOpen }) {
     return (
         <Link
             to={to}
             onClick={() => setIsOpen(false)}
-            className="mobile-nav-link"
+            className="flex items-center space-x-3 w-full px-4 py-3 text-white/90 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 group"
         >
-            {label}
+            <div className="text-white/70 group-hover:text-white transition-colors duration-200">
+                {icon}
+            </div>
+            <span className="font-medium">{label}</span>
         </Link>
     );
 }
