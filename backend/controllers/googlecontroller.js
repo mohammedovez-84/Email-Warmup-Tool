@@ -3,7 +3,7 @@ const imaps = require('imap-simple');
 const bcrypt = require('bcrypt');
 const sequelize = require('../config/db');
 const GoogleUser = require('../models/GoogleUser');
-const HealthCheck = require('../models/HealthCheck');
+// const HealthCheck = require('../models/HealthCheck');
 //const UserAlert = require('../models/UserAlert');
 const { runHealthCheckInternal } = require('../services/internalhealth'); // adjust path
 
