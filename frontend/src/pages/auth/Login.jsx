@@ -284,7 +284,7 @@ export default function Login() {
       <AuroraBackground>
         {/* Main card container */}
         <motion.div
-          className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[600px] relative z-10 border border-gray-200 dark:border-gray-700"
+          className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-4xl overflow-hidden flex flex-col md:flex-row min-h-[600px] relative z-10 border border-gray-200 "
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
