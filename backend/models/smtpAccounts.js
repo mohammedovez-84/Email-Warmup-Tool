@@ -117,6 +117,10 @@ const SmtpAccount = sequelize.define('smtpimap_accounts', {
     primaryKey: true,
     autoIncrement: true
   },
+  user_id: {                // ✅ add this
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
   sender_name: DataTypes.STRING,
   email: {
     type: DataTypes.STRING,
