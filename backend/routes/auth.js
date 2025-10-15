@@ -4,10 +4,10 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../controllers/authController');
-const { authenticate, authRateLimiter } = require('../middleware/authMiddleware');
+const { authenticate } = require('../middleware/authMiddleware');
 // 🔐 Registration and Email Verification
 router.post('/signup', auth.signup);                  // ➤ User signs up (OTP sent to email)
-router.post('/verify-email', auth.verifyEmail);       // ➤ User submits OTP to verify email
+router.post('/verify-email', authenticate, auth.verifyEmail);       // ➤ User submits OTP to verify email
 router.post('/resend-otp', auth.resendOTP);
 
 // 🔐 Login and Two-Factor Auth (2FA)

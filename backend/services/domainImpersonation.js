@@ -41,9 +41,7 @@ function generateImpersonationCandidates(domain) {
     return Array.from(results);
 }
 
-/**
-* Check if a domain exists, has MX records, and optionally SPF/DMARC
-*/
+
 async function checkDomainRecords(domain) {
     let hasMx = false, hasSpf = false;
     let dmarcStatus = "not_found"; // not_found | policy_not_enabled | valid

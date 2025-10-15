@@ -1,21 +1,3 @@
-// const { Sequelize } = require('sequelize');
-
-// const sequelize = new Sequelize(
-//     process.env.DB_NAME,
-//     process.env.DB_USER,
-//     process.env.DB_PASS,
-//     {
-//         host: process.env.DB_HOST,
-//         port: process.env.DB_PORT,
-//         dialect: 'mysql',
-//         logging: false
-//     }
-// );
-
-// const Account = require('./Account');
-// const WarmupLog = require('./WarmupLog');
-
-// module.exports = { sequelize, Account, WarmupLog };
 
 
 
@@ -34,7 +16,5 @@ const sequelize = new Sequelize(
 );
 
 const Account = require('./Account');
-
-const SenderReceiverMetrics = require('./SenderReceiverMetrics');
 
 module.exports = { sequelize, Account, WarmupSenderReceiverMetricsLog };

@@ -3,7 +3,7 @@ const nodemailer = require('nodemailer');
 const speakeasy = require('speakeasy');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
-const { generateToken, generateOTP } = require('../utils/tokenUtils');
+const { generateOTP } = require('../utils/tokenUtils');
 const logger = require('../utils/logger');
 const QRCode = require('qrcode');
 
@@ -73,11 +73,15 @@ exports.signup = async (req, res) => {
         logger.log(`📨 OTP sent to ${email}`);
         console.log(`✅ signuped ${email}, OTP sent`);
 
+
+        const token = jwt.sign({ id: user.id, email: user.email }, process.env.JWT_SECRET, { expiresIn: "1h" })
+
         // ✅ Always return a proper JSON response
         return res.status(201).json({
             success: true,    // ✅ add success flag
             message: 'Signup successful, check email for OTP',
             requiresEmailVerification: true,
+            token,
             user: {           // ✅ include safe user info
                 id: user.id,
                 email: user.email,
@@ -99,23 +103,23 @@ exports.signup = async (req, res) => {
 
 // ✅ Verify Email OTP
 exports.verifyEmail = async (req, res) => {
-    const { email, otp } = req.body;
+    const userId = req.user?.id;
+    const { otp } = req.body;
 
     try {
-        if (!email || !otp) {
-            console.log('❌ Missing email or OTP in request');
-            return res.status(400).json({ error: 'Email and OTP are required' });
+        if (!otp) {
+            console.log('❌ Missing OTP in request');
+            return res.status(400).json({ error: ' OTP is required' });
         }
 
-        const user = await User.findOne({ where: { email } });
+        const user = await User.findOne({ where: { id: userId } })
 
         if (!user) {
-            console.log(`❌ No user found with email: ${email}`);
             return res.status(404).json({ error: 'User not found' });
         }
 
         if (user.email_verified) {
-            console.log(`⚠️ Email already verified: ${email}`);
+
             return res.status(400).json({ error: 'Email already verified' });
         }
 
@@ -124,7 +128,7 @@ exports.verifyEmail = async (req, res) => {
             !user.email_verification_expires ||
             new Date() > user.email_verification_expires
         ) {
-            console.log(`❌ Invalid or expired OTP for ${email}`);
+
             return res.status(400).json({ error: 'Invalid or expired OTP' });
         }
 
@@ -134,11 +138,11 @@ exports.verifyEmail = async (req, res) => {
             email_verification_expires: null
         });
 
-        console.log(`✅ Email verified for ${email}`);
+
         res.json({ message: 'Email verified successfully' });
 
     } catch (err) {
-        console.error('❌ Verify Email Error:', err.message);
+
         res.status(500).json({ error: 'Internal server error during verification' });
     }
 };

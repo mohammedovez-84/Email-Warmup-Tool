@@ -73,11 +73,14 @@ app.use('/api/health', healthRoutes);
         startWarmupScheduler();
 
         // Start server
-        app.listen(PORT, () => {
-            console.log(`🚀 Server started on http://localhost:${PORT}`);
-        });
+
 
     } catch (err) {
         console.error('❌ Unable to connect to the DB:', err);
     }
 })();
+
+
+app.listen(PORT, () => {
+    console.log(`🚀 Server started on http://localhost:${PORT}`);
+});
