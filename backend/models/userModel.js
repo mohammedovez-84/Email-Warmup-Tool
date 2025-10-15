@@ -89,7 +89,7 @@ const User = sequelize.define('User', {
     last_login: { type: DataTypes.DATE }
 }, {
     timestamps: true,
-    tableName: 'Users'
+    tableName: 'users'
 });
 
 // Password check method
