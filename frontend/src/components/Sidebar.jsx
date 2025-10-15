@@ -18,8 +18,6 @@ import {
     FiChevronRight
 } from "react-icons/fi";
 import { motion } from "framer-motion";
-
-// Import your logo - update the path accordingly
 import logo from "../assets/bounce.png";
 
 const Sidebar = ({ onToggle }) => {
@@ -74,41 +72,33 @@ const Sidebar = ({ onToggle }) => {
                 {/* Header with Perfectly Fixed Logo */}
                 <div className={`
                     h-20 border-b border-white/10 
-                    flex items-center
+                    flex items-center justify-center
                     transition-all duration-300
-                    ${isCollapsed ? 'justify-center px-0' : 'justify-start px-6'}
+                    relative
                 `}>
                     <Link
                         to="/dashboard"
-                        className={`
-                            inline-flex items-center
-                            transition-all duration-300
-                            ${isCollapsed ? 'justify-center' : 'justify-start'}
-                        `}
+                        className="flex items-center justify-center w-full h-full"
                     >
-                        {/* Logo Image */}
-                        <img
-                            src={logo}
-                            alt="Endbounce Warmup"
-                            className={`
-                                transition-all duration-300 
-                                object-contain
-                                drop-shadow-lg
-                                ${isCollapsed ? 'w-12 h-12' : 'w-14 h-14'}
-                            `}
-                        />
-
-                        {/* Text - Only show when expanded */}
-                        {!isCollapsed && (
-                            <div className="ml-4 flex flex-col">
-                                <span className="text-xl font-bold text-white leading-tight">
-                                    Endbounce
-                                </span>
-                                <span className="text-sm text-white/90 font-medium leading-tight">
-                                    Warmup
-                                </span>
-                            </div>
-                        )}
+                        {/* Logo Container */}
+                        <div className={`
+                            flex items-center justify-center
+                            transition-all duration-300
+                            ${isCollapsed ? 'w-12 h-12' : 'w-66 h-19'}
+                        `}>
+                            <img
+                                src={logo}
+                                alt="Endbounce Warmup"
+                                className={`
+                                    w-full h-full
+                                    object-contain
+                                    drop-shadow-lg
+                                    transition-all duration-300
+                                    ${isCollapsed ? 'rounded-lg' : 'rounded-xl'}
+                                    hover:scale-110
+                                `}
+                            />
+                        </div>
                     </Link>
                 </div>
 
@@ -210,8 +200,8 @@ const Sidebar = ({ onToggle }) => {
                         className={`
                             group flex items-center w-full rounded-lg 
                             transition-all duration-300 text-white/80 
-                            hover:bg-red-500/20 hover:text-red-200 relative
-                            ${isCollapsed ? 'justify-center p-3' : 'justify-start p-3'}
+                            hover:bg-red-700 hover:text-white-500 relative
+                            ${isCollapsed ? 'justify-center p-7' : 'justify-start p-3'}
                         `}
                     >
                         <span className={`
@@ -227,24 +217,13 @@ const Sidebar = ({ onToggle }) => {
                         )}
 
                         {/* Tooltip for collapsed state */}
-                        {isCollapsed && (
+                        {/* {isCollapsed && (
                             <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 pointer-events-none transition-opacity duration-200 group-hover:opacity-100 z-50 whitespace-nowrap shadow-xl border border-gray-700">
                                 Logout
                                 <div className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-l-4 border-transparent border-r-gray-900"></div>
                             </div>
-                        )}
+                        )} */}
                     </button>
-
-                    {/* Toggle Button */}
-                    {/* <div className="flex justify-center pt-2">
-                        <button
-                            onClick={handleToggle}
-                            className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center text-white transition-all duration-300 hover:bg-white/20 hover:rotate-180 focus:outline-none focus:ring-2 focus:ring-white/30"
-                            aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                        >
-                            {isCollapsed ? <FiMenu size={18} /> : <FiChevronLeft size={18} />}
-                        </button>
-                    </div> */}
                 </div>
             </motion.div>
         </div>
