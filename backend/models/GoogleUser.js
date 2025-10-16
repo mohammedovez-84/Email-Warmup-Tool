@@ -144,7 +144,11 @@ const GoogleUser = sequelize.define('google_users', {
   roundRobinIndexGoogle: {
     type: DataTypes.INTEGER,
     defaultValue: 0,
-  }
+  },
+  provider: {
+    type: DataTypes.STRING,
+    defaultValue: 'google',
+  },
 
 }, {
   timestamps: false,

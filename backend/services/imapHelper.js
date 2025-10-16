@@ -1,346 +1,146 @@
-// const imaps = require('imap-simple');
-// const { simpleParser } = require('mailparser');
-// const { sendEmail } = require('./emailSender');
-
-// /**
-//  * Create IMAP config
-//  */
-// function getImapConfig(account) {
-//     return {
-//         imap: {
-//             user: account.imapUser,
-//             password: account.imapPass,
-//             host: account.imapHost,
-//             port: account.imapPort,
-//             tls: true,
-//             tlsOptions: {
-//                 rejectUnauthorized: false
-//             },
-//             connTimeout: 10000, // ⏰ 10 seconds for TCP connection
-//             authTimeout: 10000, // ⏰ 10 seconds for login/auth
-//             keepalive: true     // Optional: keeps connection alive longer
-//         },
-//         onmail: () => { } // noopss
-//     };
-// }
-
-// const { refreshMicrosoftToken } = require('./microsoftTokenHelper'); // the file from above
-// const MS_CLIENT_ID = 'your-client-id';
-// const MS_CLIENT_SECRET = 'your-client-secret';
-// const MS_TENANT_ID = 'common';
-
-
-// Mark getImapConfig as async
-// async function getImapConfig(account) {
-//   if (account.type === 'microsoft') {
-//     const now = Date.now();
-//     if (!account.expiresAt || (account.expiresAt - now) < 300000) { // 5 min buffer
-//       const tokenData = await refreshMicrosoftToken(
-//         MS_CLIENT_ID,
-//         MS_CLIENT_SECRET,
-//         account.refreshToken,
-//         MS_TENANT_ID
-//       );
-//       account.accessToken = tokenData.access_token;
-//       account.expiresAt = now + tokenData.expires_in * 1000;
-
-//       await account.save(); // save tokens to DB
-//     }
-
-//     return {
-//       imap: {
-//         user: account.imapUser,
-//         xoauth2: account.accessToken,  // Use OAuth2 token, not password
-//         host: account.imapHost || 'outlook.office365.com',
-//         port: account.imapPort || 993,
-//         tls: true,
-//         tlsOptions: { rejectUnauthorized: false },
-//         authTimeout: 10000,
-//         connTimeout: 10000,
-//         keepalive: true
-//       },
-//       onmail: () => {}
-//     };
-//   } else {
-//     return {
-//       imap: {
-//         user: account.imapUser,
-//         password: account.imapPass,
-//         host: account.imapHost,
-//         port: account.imapPort,
-//         tls: true,
-//         tlsOptions: { rejectUnauthorized: false },
-//         authTimeout: 10000,
-//         connTimeout: 10000,
-//         keepalive: true
-//       },
-//       onmail: () => {}
-//     };
-//   }
-// }
-
-
-/**
- * Sleep helper
- */
-// async function delay(ms) {
-//     return new Promise(resolve => setTimeout(resolve, ms));
-// }
-
-// /**
-//  * Search all folders for the message and mark it seen + flagged
-//  */
-// async function checkEmailStatus(account, messageId) {
-//     try {
-//         const config = getImapConfig(account);
-//         const connection = await imaps.connect(config);
-//         const folders = ['INBOX', '[Gmail]/Spam', 'Spam', '[Gmail]/All Mail'];
-
-//         await delay(15000); // wait for sync
-
-//         for (const folder of folders) {
-//             try {
-//                 console.log(`Checking folder: ${folder}`);
-//                 await connection.openBox(folder, false);
-
-//                 const searchCriteria = [['HEADER', 'Message-ID', messageId]];
-//                 const fetchOptions = { bodies: ['HEADER.FIELDS (MESSAGE-ID)'], markSeen: false };
-
-//                 const results = await connection.search(searchCriteria, fetchOptions);
-
-//                 if (results.length > 0) {
-//                     const uid = results[0].attributes.uid;
-
-//                     //Mark as Seen and Flagged (Starred) in any folder
-//                     await new Promise((resolve, reject) => {
-//                         connection.imap.addFlags(uid, ['\\Seen', '\\Flagged'], (err) => {
-//                             if (err) reject(err);
-//                             else resolve();
-//                         });
-//                     });
-
-//                     console.log(`Found & marked in: ${folder}`);
-//                     await connection.end();
-//                     return { success: true, folder };
-//                 }
-//             } catch (err) {
-//                 console.warn(`Folder ${folder} check failed: ${err.message}`);
-//             }
-//         }
-
-//         await connection.end();
-//         return { success: false, error: 'Message not found in any folder' };
-//     } catch (err) {
-//         return { success: false, error: err.message };
-//     }
-// }
-
-// /**
-//  * Move message from Spam to INBOX
-//  */
-// async function moveEmailToInbox(account, messageId) {
-//     const config = getImapConfig(account);
-//     const connection = await imaps.connect(config);
-
-//     try {
-//         await connection.openBox('Spam').catch(() => connection.openBox('[Gmail]/Spam'));
-
-//         const searchCriteria = [['HEADER', 'Message-ID', messageId]];
-//         const results = await connection.search(searchCriteria, { bodies: [''], struct: true });
-
-//         if (results.length > 0) {
-//             const uid = results[0].attributes.uid;
-//             await connection.moveMessage(uid, 'INBOX');
-//             console.log(`Moved message ${messageId} to INBOX`);
-
-//             //Always open INBOX and re-flag it
-//             await connection.openBox('INBOX');
-
-//             await new Promise((resolve, reject) => {
-//                 connection.imap.addFlags(uid, ['\\Seen', '\\Flagged'], (err) => {
-//                     if (err) reject(err);
-//                     else resolve();
-//                 });
-//             });
-
-//             console.log(`Marked as Seen + Flagged in INBOX after moving`);
-//         } else {
-//             console.warn(`Message not found in Spam folders to move`);
-//         }
-//     } catch (err) {
-//         console.error(`Error during moving email: ${err.message}`);
-//     }
-
-//     await connection.end();
-// }
-
-// /**
-//  * Reply to message via SMTP
-//  */
-// async function replyToEmail(account, options) {
-//     const { to, subject, html, inReplyTo, references } = options;
-
-//     const replyResult = await sendEmail(account, {
-//         to,
-//         subject,
-//         html,
-//         headers: {
-//             'In-Reply-To': inReplyTo,
-//             'References': references.join(' ')
-//         }
-//     });
-
-//     return replyResult;
-// }
-
-// module.exports = {
-//     checkEmailStatus,
-//     moveEmailToInbox,
-//     replyToEmail
-// };
-
-
-
 const imaps = require('imap-simple');
-const { simpleParser } = require('mailparser');
 const { sendEmail } = require('./emailSender');
 
 /**
-* Create IMAP config
-*/
+ * Create IMAP config based on account type
+ */
 function getImapConfig(account) {
+    const { email, password, app_password, provider, accessToken, imapHost, imapPort } = account;
+
+    if (!provider) throw new Error(`Provider not defined for account: ${email}`);
+
+    // ✅ Gmail
+    if (provider === 'google') {
+        if (!app_password && !accessToken) {
+            throw new Error('Gmail account requires either accessToken or App Password.');
+        }
+
+        return {
+            imap: {
+                user: email,
+                password: app_password || undefined,
+                xoauth2: accessToken || undefined,
+                host: 'imap.gmail.com',
+                port: 993,
+                tls: true,
+                tlsOptions: { rejectUnauthorized: false },
+                authTimeout: 10000
+            }
+        };
+    }
+
+    // ✅ Microsoft
+    if (provider === 'microsoft') {
+        if (!accessToken) throw new Error('Microsoft account requires accessToken.');
+        return {
+            imap: {
+                user: email,
+                xoauth2: accessToken,
+                host: 'outlook.office365.com',
+                port: 993,
+                tls: true,
+                tlsOptions: { rejectUnauthorized: false },
+                authTimeout: 10000
+            }
+        };
+    }
+
+    // ✅ Custom domain
+    if (!imapHost) {
+        throw new Error(`IMAP host must be provided for custom domain: ${email}`);
+    }
+
     return {
         imap: {
-            user: account.imapUser,
-            password: account.imapPass,
-            host: account.imapHost,
-            port: account.imapPort,
+            user: email,
+            password,
+            host: imapHost,
+            port: imapPort || 993,
             tls: true,
-            tlsOptions: {
-                rejectUnauthorized: false
-            },
-            connTimeout: 10000,
-            authTimeout: 10000,
-            keepalive: true
-        },
-        onmail: () => { } // noopss
+            tlsOptions: { rejectUnauthorized: false },
+            authTimeout: 10000
+        }
     };
 }
 
-// const { refreshMicrosoftToken } = require('./microsoftTokenHelper'); // the file from above
-// const MS_CLIENT_ID = 'your-client-id';
-// const MS_CLIENT_SECRET = 'your-client-secret';
-// const MS_TENANT_ID = 'common'; 
-
-
-// Mark getImapConfig as async
-// async function getImapConfig(account) {
-//   if (account.type === 'microsoft') {
-//     const now = Date.now();
-//     if (!account.expiresAt || (account.expiresAt - now) < 300000) { // 5 min buffer
-//       const tokenData = await refreshMicrosoftToken(
-//         MS_CLIENT_ID,
-//         MS_CLIENT_SECRET,
-//         account.refreshToken,
-//         MS_TENANT_ID
-//       );
-//       account.accessToken = tokenData.access_token;
-//       account.expiresAt = now + tokenData.expires_in * 1000;
-
-//       await account.save(); // save tokens to DB
-//     }
-
-//     return {
-//       imap: {
-//         user: account.imapUser,
-//         xoauth2: account.accessToken,  // Use OAuth2 token, not password
-//         host: account.imapHost || 'outlook.office365.com',
-//         port: account.imapPort || 993,
-//         tls: true,
-//         tlsOptions: { rejectUnauthorized: false },
-//         authTimeout: 10000,
-//         connTimeout: 10000,
-//         keepalive: true
-//       },
-//       onmail: () => {}
-//     };
-//   } else {
-//     return {
-//       imap: {
-//         user: account.imapUser,
-//         password: account.imapPass,
-//         host: account.imapHost,
-//         port: account.imapPort,
-//         tls: true,
-//         tlsOptions: { rejectUnauthorized: false },
-//         authTimeout: 10000,
-//         connTimeout: 10000,
-//         keepalive: true
-//       },
-//       onmail: () => {}
-//     };
-//   }
-// }
-
-
 /**
-* Sleep helper
-*/
-async function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-/**
-* Search all folders for the message and mark it seen + flagged
-*/
+ * 🔹 Check email status in multiple folders
+ */
 async function checkEmailStatus(account, messageId) {
     try {
+        if (!messageId) throw new Error('Missing Message-ID');
+
         const config = getImapConfig(account);
         const connection = await imaps.connect(config);
-        const folders = ['INBOX', '[Gmail]/Spam', 'Spam', '[Gmail]/All Mail'];
 
-        await delay(15000); // wait for sync
+        const folders = ['INBOX', '[Gmail]/Spam', 'Spam', '[Gmail]/All Mail'];
+        const cleanMessageId = messageId.replace(/[<>]/g, '');
 
         for (const folder of folders) {
             try {
-                console.log(`Checking folder: ${folder}`);
-                await connection.openBox(folder, false);
+                await connection.openBox(folder, true);
+                const searchCriteria = [['HEADER', 'Message-ID', cleanMessageId]];
+                const fetchOptions = { bodies: ['HEADER.FIELDS (FROM TO SUBJECT MESSAGE-ID)'], struct: true };
 
-                const searchCriteria = [['HEADER', 'Message-ID', messageId]];
-                const fetchOptions = { bodies: ['HEADER.FIELDS (MESSAGE-ID)'], markSeen: false };
+                let results = await connection.search(searchCriteria, fetchOptions);
 
-                const results = await connection.search(searchCriteria, fetchOptions);
+                // Fallback search by lastSubject
+                if (results.length === 0 && account.lastSubject) {
+                    results = await connection.search([['HEADER', 'Subject', account.lastSubject]], fetchOptions);
+                }
 
                 if (results.length > 0) {
-                    const uid = results[0].attributes.uid;
-
-                    //Mark as Seen and Flagged (Starred) in any folder
-                    await new Promise((resolve, reject) => {
-                        connection.imap.addFlags(uid, ['\\Seen', '\\Flagged'], (err) => {
-                            if (err) reject(err);
-                            else resolve();
-                        });
-                    });
-
-                    console.log(`Found & marked in: ${folder}`);
                     await connection.end();
                     return { success: true, folder };
                 }
             } catch (err) {
-                console.warn(`Folder ${folder} check failed: ${err.message}`);
+                console.warn(`[IMAP] Failed folder check: ${folder} => ${err.message}`);
             }
         }
 
         await connection.end();
         return { success: false, error: 'Message not found in any folder' };
     } catch (err) {
+        console.error('IMAP check failed:', err.message);
         return { success: false, error: err.message };
     }
 }
 
 /**
-* Move message from Spam to INBOX
-*/
+ * 🔹 Move email from Spam to Inbox
+ */
+async function moveEmailToInbox(account, messageId) {
+    const config = getImapConfig(account);
+    const connection = await imaps.connect(config);
+
+    try {
+        await connection.openBox('Spam').catch(() => connection.openBox('[Gmail]/Spam'));
+
+        const searchCriteria = [['HEADER', 'Message-ID', messageId]];
+        const results = await connection.search(searchCriteria, { bodies: [''], struct: true });
+
+        if (results.length > 0) {
+            const uid = results[0].attributes.uid;
+            await connection.moveMessage(uid, 'INBOX');
+
+            await connection.openBox('INBOX');
+            await new Promise((resolve, reject) => {
+                connection.imap.addFlags(uid, ['\\Seen', '\\Flagged'], (err) => (err ? reject(err) : resolve()));
+            });
+
+            console.log(`Moved and flagged message ${messageId} in INBOX`);
+        } else {
+            console.warn(`Message not found in Spam folders to move`);
+        }
+    } catch (err) {
+        console.error(`Error moving email: ${err.message}`);
+    }
+
+    await connection.end();
+}
+/**
+ * Move message from Spam to INBOX
+ */
 async function moveEmailToInbox(account, messageId) {
     const config = getImapConfig(account);
     const connection = await imaps.connect(config);
@@ -356,9 +156,7 @@ async function moveEmailToInbox(account, messageId) {
             await connection.moveMessage(uid, 'INBOX');
             console.log(`Moved message ${messageId} to INBOX`);
 
-            //Always open INBOX and re-flag it
             await connection.openBox('INBOX');
-
             await new Promise((resolve, reject) => {
                 connection.imap.addFlags(uid, ['\\Seen', '\\Flagged'], (err) => {
                     if (err) reject(err);
@@ -378,8 +176,8 @@ async function moveEmailToInbox(account, messageId) {
 }
 
 /**
-* Reply to message via SMTP
-*/
+ * Reply to message via SMTP
+ */
 async function replyToEmail(account, options) {
     const { to, subject, html, inReplyTo, references } = options;
 
