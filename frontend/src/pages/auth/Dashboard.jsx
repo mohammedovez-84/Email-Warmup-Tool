@@ -11,7 +11,6 @@ import { toast } from 'react-toastify';
 import GoogleConnect from './GoogleConnect';
 import MicrosoftConnect from './MicrosoftConnect';
 import SMTPConnect from './SMTPConnect';
-import WarmupSettings from "./WarmupSettings";
 
 const API_BASE_URL = 'http://localhost:5000';
 
@@ -29,7 +28,8 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         togglingEmails: {},
         stats: null,
         accountDetails: null,
-        emailStats: {}
+        emailStats: {},
+        viewMode: 'list'
     });
 
     // Warmup Settings state
@@ -172,7 +172,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     inbox: senderStats.deliveredInbox,
                     spam: senderStats.landedSpam,
                     movedToInbox: senderStats.movedToInbox,
-                    deliverability: senderStats.deliverabilityScore, // 👈 renamed for UI
+                    deliverability: senderStats.deliverabilityScore,
                 };
             }
 
@@ -187,7 +187,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         }
     };
 
-    // Get stats for a specific email (from normalized emailStats)
+    // Get stats for a specific email
     const getEmailStats = (email) => {
         return state.emailStats?.[email] || {
             sent: 0,
@@ -199,8 +199,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             deliverability: 100,
         };
     };
-
-
 
     // Enhanced toggle function with proper status handling
     const handleToggle = async (emailAddress, currentWarmupStatus) => {
@@ -351,10 +349,9 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             updateState({ loading: false });
         }
 
-        const interval = setInterval(fetchStats, 15000); // auto-refresh stats every 15 seconds
+        const interval = setInterval(fetchStats, 15000);
         return () => clearInterval(interval);
     }, []);
-
 
     // Filter emails based on search term
     const filteredEmails = state.warmupEmails.filter(email =>
@@ -405,7 +402,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
     };
 
     // Warmup Settings Component
-    const WarmupSettings = ({ email, onClose, onSave }) => {
+    const WarmupSettingsPanel = ({ email, onClose, onSave }) => {
         const [settings, setSettings] = useState({
             startEmailsPerDay: email?.warmupSettings?.startEmailsPerDay || 3,
             increaseByPerDay: email?.warmupSettings?.increaseByPerDay || 3,
@@ -429,15 +426,12 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         };
 
         return (
-            <div
-                className={`fixed top-0 right-0 bottom-0 w-[85%] max-w-[400px] bg-white shadow-lg z-[1000] overflow-y-auto p-6 transition-all ${email ? "block" : "hidden"
-                    }`}
-            >
+            <div className={`fixed top-0 right-0 bottom-0 w-85 max-w-[400px] bg-white shadow-lg z-[1000] overflow-y-auto p-6 transition-all ${email ? "block" : "hidden"}`}>
                 {/* Header */}
                 <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-200">
                     <h2 className="text-[20px] font-semibold text-slate-800">Warm-up Settings</h2>
                     <button
-                        className="text-slate-500 text-xl hover:text-slate-700"
+                        className="text-slate-500 text-xl hover:text-slate-700 transition-colors"
                         onClick={onClose}
                     >
                         <FiX />
@@ -537,7 +531,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         <input
                             type="checkbox"
                             id="customFolder"
-                            className="w-4 h-4"
+                            className="w-4 h-4 text-indigo-600 focus:ring-indigo-500 border-slate-300 rounded"
                             checked={!!settings.customFolderName}
                             onChange={(e) =>
                                 setSettings((prev) => ({
@@ -587,1106 +581,259 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     </button>
                 </div>
             </div>
-
         );
     };
 
     return (
-        <div className={`dashboard ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
-            <style jsx>{`
-                .dashboard {
-                    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-                    margin-left: 250px;
-                    margin-right: 40px;
-                    padding: 2rem;
-                    color: #333;
-                    display: flex;
-                    flex-direction: column;
-                    background-color: #f8fafc;
-                    transition: margin-left 0.3s ease;
-                    position: relative;
-                    
-                }
-
-                .dashboard.sidebar-collapsed {
-                margin-left: 380px; // Increased from 340px
-                margin-right: 30px; // Added right margin
-                width: calc(100% - 380px); // Adjusted calculation (380px left + 30px right)
-                }
-
-                .dashboard-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 1.5rem;
-                    gap: 1rem;
-                    flex-wrap: wrap;
-                }
-
-                .search-container {
-                    position: relative;
-                    flex-grow: 1;
-                    max-width: 200px;
-                }
-
-                .search-input {
-                    width: 100%;
-                    padding: 0.75rem 1rem 0.75rem 2.5rem;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 0.5rem;
-                    font-size: 0.875rem;
-                    background-color: white;
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-                    transition: all 0.2s ease;
-                }
-
-                .search-input:focus {
-                    outline: none;
-                    border-color: #6366f1;
-                    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-                }
-
-                .search-icon {
-                    position: absolute;
-                    left: 1rem;
-                    top: 50%;
-                    transform: translateY(-50%);
-                    color: #94a3b8;
-                    pointer-events: none;
-                }
-
-                .action-buttons {
-                    display: flex;
-                    gap: 0.75rem;
-                    align-items: center;
-                }
-
-                .btn {
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 0.75rem 1.25rem;
-                    border-radius: 0.5rem;
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    gap: 0.5rem;
-                    border: none;
-                }
-
-                .btn-primary {
-                    background: linear-gradient(135deg, #0d9488 0%, #075985 100%);
-                    color: white;
-                }
-
-                .btn-primary:hover {
-                    opacity: 0.9;
-                }
-
-                .btn-outline {
-                    background: white;
-                    border: 1px solid #e2e8f0;
-                    color: #64748b;
-                }
-
-                .btn-outline:hover {
-                    background-color: #f8fafc;
-                }
-
-                .btn:disabled {
-                    opacity: 0.6;
-                    cursor: not-allowed;
-                }
-
-                .emails-table {
-                    background-color: white;
-                    border-radius: 0.75rem;
-                    overflow: hidden;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                    margin-bottom: 2rem;
-                    flex-grow: 1;
-                    width: 100%;
-                    max-width: 2400px; // Add this to limit maximum width
-                    margin-left: auto; // Center the table
-                    margin-right: auto; // Center the table
-                }
-
-                .table-header {
-                    display: grid;
-                    grid-template-columns: 2fr 1fr 1fr 1fr 1.1fr 0.5fr; 
-                    background: linear-gradient(135deg, #0d9488 0%, #075985 100%);
-                    padding: 1rem 1.5rem;
-                    border-bottom: 1px solid #e2e8f0;
-                    font-weight: 600;
-                    color: #000000ff;
-                    font-size: 0.75rem;
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                }
-
-                .header-cell {
-                    padding: 0 0.5rem;
-                    text-align: left;
-                }
-
-                .table-row {
-                    display: grid;
-                    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 0.5fr;
-                    padding: 1rem 1.5rem;
-                    border-bottom: 1px solid #f1f5f9;
-                    align-items: center;
-                    transition: background-color 0.2s ease;
-                }
-
-                .table-row:last-child {
-                    border-bottom: none;
-                }
-
-                .table-row:hover {
-                    background-color: #f8fafc;
-                }
-
-                .table-cell {
-                    padding: 0 0.5rem;
-                }
-
-                .email-cell {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.75rem;
-                    cursor: pointer;
-                }
-
-                .avatar {
-                    width: 2.5rem;
-                    height: 2.5rem;
-                    border-radius: 50%;
-                    background-color: #6366f1;
-                    color: white;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-weight: 500;
-                    flex-shrink: 0;
-                }
-
-                .email-info {
-                    display: flex;
-                    flex-direction: column;
-                }
-
-                .email-name {
-                    font-weight: 500;
-                    color: #1e293b;
-                    margin-bottom: 0.25rem;
-                }
-
-                .email-address {
-                    font-size: 0.75rem;
-                    color: #64748b;
-                }
-
-                .status-badge {
-                    display: inline-flex;
-                    align-items: center;
-                    padding: 0.25rem 0.75rem;
-                    border-radius: 9999px;
-                    font-size: 0.75rem;
-                    font-weight: 500;
-                    text-transform: capitalize;
-                    transition: all 0.2s ease;
-                }
-
-                .status-active {
-                    background-color: #dcfce7;
-                    color: #166534;
-                }
-
-                .status-paused {
-                    background-color: #fee2e2;
-                    color: #991b1b;
-                }
-
-                .status-inactive {
-                    background-color: #fee2e2;
-                    color: #991b1b;
-                }
-
-                .status-unknown {
-                    background-color: #e2e8f0;
-                    color: #475569;
-                }
-
-                .mode-cell {
-                    color: #475569;
-                }
-
-                .count-cell {
-                    font-weight: 500;
-                    color: #1e293b;
-                }
-
-                .deliverability-container {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                }
-
-                .deliverability-bar {
-                    flex-grow: 1;
-                    height: 1.5rem;
-                    background-color: #f1f5f9;
-                    border-radius: 9999px;
-                    overflow: hidden;
-                }
-
-                .deliverability-fill {
-                    height: 100%;
-                    background-color: #6366f1;
-                    border-radius: 9999px;
-                    transition: width 0.3s ease;
-                    position: relative;
-                }
-
-                .deliverability-value {
-                    position: absolute;
-                    left: 50%;
-                    top: 50%;
-                    transform: translate(-50%, -50%);
-                    font-size: 0.6875rem;
-                    font-weight: 600;
-                    color: white;
-                }
-
-                .actions-cell {
-                    display: flex;
-                    justify-content: flex-end;
-                    gap: 0.5rem;
-                }
-
-                .toggle-switch {
-                    position: relative;
-                    display: inline-block;
-                    width: 40px;
-                    height: 24px;
-                }
-
-                .toggle-input {
-                    opacity: 0;
-                    width: 0;
-                    height: 0;
-                }
-
-                .toggle-slider {
-                    position: absolute;
-                    cursor: pointer;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background-color: #cbd5e1;
-                    transition: .4s;
-                    border-radius: 34px;
-                }
-
-                .toggle-slider:before {
-                    position: absolute;
-                    content: "";
-                    height: 16px;
-                    width: 16px;
-                    left: 4px;
-                    bottom: 4px;
-                    background-color: white;
-                    transition: .4s;
-                    border-radius: 50%;
-                }
-
-                .toggle-input:checked + .toggle-slider {
-                    background-color: #4f46e5;
-                }
-
-                .toggle-input:checked + .toggle-slider:before {
-                    transform: translateX(20px);
-                }
-
-                .toggle-spinner {
-                    display: inline-block;
-                    width: 12px;
-                    height: 12px;
-                    border: 2px solid rgba(255,255,255,0.3);
-                    border-radius: 50%;
-                    border-top-color: #fff;
-                    animation: spin 1s ease-in-out infinite;
-                    position: absolute;
-                    top: 50%;
-                    left: 50%;
-                    transform: translate(-50%, -50%);
-                }
-
-                @keyframes spin {
-                    to { transform: translate(-50%, -50%) rotate(360deg); }
-                }
-
-                .toggle-input:disabled + .toggle-slider {
-                    opacity: 0.7;
-                    cursor: not-allowed;
-                }
-
-                .action-btn {
-                    background: none;
-                    border: none;
-                    color: #94a3b8;
-                    cursor: pointer;
-                    padding: 0.25rem;
-                    border-radius: 0.25rem;
-                    transition: all 0.2s ease;
-                }
-
-                .action-btn:hover {
-                    color: #6366f1;
-                    background-color: #f1f5f9;
-                }
-
-                .action-btn:disabled {
-                    opacity: 0.5;
-                    cursor: not-allowed;
-                }
-
-                .loading-state, .empty-state {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 3rem;
-                    grid-column: 1 / -1;
-                    color: #64748b;
-                    min-height: 200px;
-                }
-
-                .spinner {
-                    width: 2rem;
-                    height: 2rem;
-                    border: 3px solid #e2e8f0;
-                    border-top-color: #6366f1;
-                    border-radius: 50%;
-                    animation: spin 1s linear infinite;
-                    margin-bottom: 1rem;
-                }
-
-                @keyframes spin {
-                    to { transform: rotate(360deg); }
-                }
-
-                .modal-overlay {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background-color: rgba(0, 0, 0, 0.5);
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    z-index: 50;
-                }
-
-                .provider-modal {
-                    background-color: white;
-                    border-radius: 0.75rem;
-                    width: 100%;
-                    max-width: 32rem;
-                    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
-                    overflow: hidden;
-                }
-
-                .modal-header {
-                    padding: 1.5rem;
-                    border-bottom: 1px solid #0e08c0ff;
-                }
-
-                .modal-title {
-                    font-size: 1.25rem;
-                    font-weight: 600;
-                    color: #1e293b;
-                    margin: 0;
-                }
-
-                .provider-list {
-                    padding: 0.5rem;
-                }
-
-                .provider-item {
-                    display: flex;
-                    align-items: center;
-                    padding: 1rem;
-                    border-radius: 0.5rem;
-                    cursor: pointer;
-                    transition: background-color 0.2s ease;
-                    margin-bottom: 0.25rem;
-                }
-
-                .provider-item:hover {
-                    background-color: #f8fafc;
-                }
-
-                .provider-icon {
-                    width: 2.5rem;
-                    height: 2.5rem;
-                    border-radius: 50%;
-                    background-color: #6366f1;
-                    color: white;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-weight: bold;
-                    margin-right: 1rem;
-                    flex-shrink: 0;
-                }
-
-                .provider-details {
-                    flex-grow: 1;
-                }
-
-                .provider-name {
-                    font-weight: 500;
-                    color: #1e293b;
-                    margin-bottom: 0.25rem;
-                }
-
-                .provider-description {
-                    font-size: 0.875rem;
-                    color: #64748b;
-                }
-
-                .provider-arrow {
-                    color: #cbd5e1;
-                }
-
-                .modal-footer {
-                    padding: 1.5rem;
-                    border-top: 1px solid #e2e8f0;
-                    display: flex;
-                    justify-content: flex-end;
-                }
-
-                .btn-cancel {
-                    background-color: white;
-                    color: #64748b;
-                    border: 1px solid #e2e8f0;
-                    padding: 0.5rem 1rem;
-                    border-radius: 0.5rem;
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                }
-
-                .btn-cancel:hover {
-                    background-color: #f8fafc;
-                }
-
-                .settings-panel {
-                    position: fixed;
-                    top: 64px;
-                    right: 20px;
-                    width: 240px;
-                    background: white;
-                    border-radius: 8px;
-                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-                    z-index: 100;
-                    transform: translateX(${state.showSettingsPanel ? '0' : '100%'});
-                    transition: transform 0.3s ease;
-                    padding: 16px;
-                    overflow: hidden;
-                    border: 1px solid #e2e8f0;
-                }
-
-                .settings-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 12px;
-                    padding-bottom: 12px;
-                    border-bottom: 1px solid #f1f5f9;
-                }
-
-                .settings-title {
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: #1e293b;
-                }
-
-                .settings-close {
-                    background: none;
-                    border: none;
-                    color: #64748b;
-                    cursor: pointer;
-                    font-size: 16px;
-                    padding: 4px;
-                    border-radius: 4px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                }
-
-                .settings-close:hover {
-                    background-color: #f1f5f9;
-                }
-
-                .deliverability-display {
-                    text-align: center;
-                    margin-bottom: 16px;
-                    padding: 12px;
-                    background-color: #f8fafc;
-                    border-radius: 6px;
-                }
-
-                .deliverability-percentage {
-                    font-size: 24px;
-                    font-weight: 700;
-                    color: #f1f5f9;
-                    margin-bottom: 4px;
-                }
-
-                .deliverability-label {
-                    font-size: 10px;
-                    font-weight: 600;
-                    color: #64748b;
-                    text-transform: uppercase;
-                    letter-spacing: 0.05em;
-                }
-
-                .settings-menu {
-                    display: flex;
-                    flex-direction: column;
-                    gap: 4px;
-                }
-
-                .settings-item {
-                    display: flex;
-                    align-items: center;
-                    padding: 10px 12px;
-                    border-radius: 6px;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    font-size: 13px;
-                }
-
-                .settings-item:hover {
-                    background-color: #f8fafc;
-                }
-
-                .settings-icon {
-                    margin-right: 10px;
-                    color: #64748b;
-                    font-size: 14px;
-                }
-
-                .settings-label {
-                    flex-grow: 1;
-                    font-weight: 500;
-                    color: #334155;
-                }
-
-                .delete-item {
-                    color: #ef4444;
-                    margin-top: 8px;
-                    border-top: 1px solid #f1f5f9;
-                    padding-top: 12px;
-                }
-
-                .delete-item:hover {
-                    background-color: #fee2e2;
-                }
-
-                .stats-section {
-                    background-color: white;
-                    border-radius: 0.75rem;
-                    padding: 1.5rem;
-                    margin-bottom: 2rem;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                }
-
-                .stats-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 1rem;
-                }
-
-                .stats-title {
-                    font-size: 1.25rem;
-                    font-weight: 600;
-                    color: #1e293b;
-                }
-
-                .stats-grid {
-                    display: grid;
-                    grid-template-columns: repeat(4, 1fr);
-                    gap: 1rem;
-                }
-
-                .stat-card {
-                    background-color: #f8fafc;
-                    border-radius: 0.5rem;
-                    padding: 1rem;
-                    text-align: center;
-                }
-
-                .stat-value {
-                    font-size: 1.5rem;
-                    font-weight: 600;
-                    color: #1e293b;
-                    margin-bottom: 0.25rem;
-                }
-
-                .stat-label {
-                    font-size: 0.875rem;
-                    color: #64748b;
-                }
-
-                .account-stats {
-                    margin-top: 1.5rem;
-                }
-
-                .account-stats-title {
-                    font-size: 1rem;
-                    font-weight: 500;
-                    color: #1e293b;
-                    margin-bottom: 1rem;
-                }
-
-                .account-stats-list {
-                    display: grid;
-                    gap: 0.75rem;
-                }
-
-                .account-stat-item {
-                    display: flex;
-                    justify-content: space-between;
-                    padding: 0.5rem 0;
-                    border-bottom: 1px solid #f1f5f9;
-                }
-
-                .account-stat-email {
-                    font-weight: 500;
-                    color: #1e293b;
-                }
-
-                .account-stat-values {
-                    display: flex;
-                    gap: 1rem;
-                }
-
-                .account-stat-value {
-                    min-width: 40px;
-                    text-align: right;
-                }
-
-                /* Account Detail View */
-                .account-detail-view {
-                    background-color: white;
-                    border-radius: 0.75rem;
-                    padding: 2rem;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                }
-
-                .account-detail-header {
-                    display: flex;
-                    align-items: center;
-                    margin-bottom: 2rem;
-                }
-
-                .back-button {
-                    background: none;
-                    border: none;
-                    cursor: pointer;
-                    margin-right: 1rem;
-                    color: #64748b;
-                }
-
-                .account-detail-title {
-                    font-size: 1.5rem;
-                    font-weight: 600;
-                    color: #1e293b;
-                }
-
-                .account-detail-content {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 2rem;
-                }
-
-                .account-info-section {
-                    margin-bottom: 2rem;
-                }
-
-                .account-info-title {
-                    font-size: 1rem;
-                    font-weight: 600;
-                    color: #1e293b;
-                    margin-bottom: 1rem;
-                    padding-bottom: 0.5rem;
-                    border-bottom: 1px solid #f1f5f9;
-                }
-
-                .account-info-grid {
-                    display: grid;
-                    grid-template-columns: 1fr 1fr;
-                    gap: 1rem;
-                }
-
-                .account-info-item {
-                    margin-bottom: 1rem;
-                }
-
-                .account-info-label {
-                    font-size: 0.875rem;
-                    color: #64748b;
-                    margin-bottom: 0.25rem;
-                }
-
-                .account-info-value {
-                    font-weight: 500;
-                    color: #1e293b;
-                }
-
-                .account-stats-section {
-                    background-color: #f8fafc;
-                    border-radius: 0.5rem;
-                    padding: 1.5rem;
-                }
-
-                .account-stats-grid {
-                    display: grid;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: 1rem;
-                }
-
-                .account-stat-card {
-                    background-color: white;
-                    border-radius: 0.5rem;
-                    padding: 1rem;
-                    text-align: center;
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-                }
-
-                .account-stat-value {
-                    font-size: 1.25rem;
-                    font-weight: 600;
-                    color: #1e293b;
-                    margin-bottom: 0.25rem;
-                }
-
-                .account-stat-label {
-                    font-size: 0.875rem;
-                    color: #000000ff;
-                }
-
-                .deliverability-chart {
-                    height: 200px;
-                    background-color: #f8fafc;
-                    border-radius: 0.5rem;
-                    margin-top: 1.5rem;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: #64748b;
-                }
-
-                @media (max-width: 768px) {
-                    .dashboard {
-                        margin-left: 0;
-                        margin-right: 0;
-                        padding: 1rem;
-                        width: 100%;
-                    }
-
-                    .dashboard.sidebar-collapsed {
-                        margin-left: 0;
-                        margin-right: 0;
-                        width: 100%;
-                    }
-                        .emails-table {
-                         max-width: 100%; // Full width on mobile
-                    }
-
-                    .search-container {
-                        max-width: 100%;
-                    }
-
-                    .table-header, .table-row {
-                        grid-template-columns: 1.5fr 1fr 1fr 1fr 0.5fr;
-                    }
-
-                    .header-cell:nth-child(3),
-                    .table-cell:nth-child(3) {
-                        display: none;
-                    }
-
-                    .header-cell:nth-child(4),
-                    .table-cell:nth-child(4) {
-                        display: none;
-                    }
-
-                    .settings-panel {
-                        width: 100%;
-                    }
-
-                    .stats-grid {
-                        grid-template-columns: repeat(2, 1fr);
-                    }
-
-                    .account-detail-content {
-                        grid-template-columns: 1fr;
-                    }
-                }
-
-                @media (max-width: 640px) {
-                    .table-header, .table-row {
-                        grid-template-columns: 1fr 1fr 0.5fr;
-                    }
-
-                    .header-cell:nth-child(5),
-                    .table-cell:nth-child(5) {
-                        display: none;
-                    }
-
-                    .stats-grid {
-                        grid-template-columns: 1fr;
-                    }
-
-                    .account-info-grid {
-                        grid-template-columns: 1fr;
-                    }
-                    .refreshing-indicator {
-                     font-size: 0.8rem;
-                    color: #64748b;
-                     margin-left: 0.5rem;
-                    font-style: italic;
-                     }
-                    .account-stats-grid {
-                        grid-template-columns: repeat(2, 1fr);
-                    }
-                }
-            `}</style>
-
-            <div className="dashboard-header">
-                <div className="search-container">
-                    <FiSearch className="search-icon" />
-                    <input
-                        type="text"
-                        className="search-input"
-                        placeholder="Search emails"
-                        value={state.searchTerm}
-                        onChange={(e) => updateState({ searchTerm: e.target.value })}
-                    />
-                </div>
-                <div className="action-buttons">
-                    <button
-                        className="btn btn-primary"
-                        onClick={() => updateState({ showProviderModal: true })}
-                        disabled={state.loading}
-                    >
-                        <FiPlus /> Add Account
-                    </button>
-                </div>
-            </div>
-
-            {state.viewMode === 'detail' && state.accountDetails ? (
-                <div className="account-detail-view">
-                    <div className="account-detail-header">
-                        <button className="back-button" onClick={() => updateState({ viewMode: 'list' })}>
-                            <FiArrowLeft size={24} />
-                        </button>
-                        <h2 className="account-detail-title">{state.accountDetails.name}</h2>
+        <div className={`min-h-screen bg-slate-50 font-inter transition-all duration-300 ${isSidebarCollapsed ? 'ml-[380px] mr-[30px] w-[calc(100%-380px)]' : 'ml-[250px] mr-[40px]'
+            }`}>
+            {/* Main Content */}
+            <div className="p-8">
+                {/* Header */}
+                <div className="flex justify-between items-center mb-6 gap-4 flex-wrap">
+                    <div className="relative flex-grow max-w-[200px]">
+                        <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="text"
+                            className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-lg text-sm bg-white shadow-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
+                            placeholder="Search emails"
+                            value={state.searchTerm}
+                            onChange={(e) => updateState({ searchTerm: e.target.value })}
+                        />
                     </div>
+                    <div className="flex gap-3 items-center">
+                        <button
+                            className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-teal-600 to-cyan-800 text-white rounded-lg text-sm font-medium hover:opacity-90 transition-all disabled:opacity-60"
+                            onClick={() => updateState({ showProviderModal: true })}
+                            disabled={state.loading}
+                        >
+                            <FiPlus size={16} /> Add Account
+                        </button>
+                    </div>
+                </div>
 
-                    <div className="account-detail-content">
-                        <div>
-                            <div className="account-info-section">
-                                <h3 className="account-info-title">Account Information</h3>
-                                <div className="account-info-grid">
-                                    <div className="account-info-item">
-                                        <div className="account-info-label">Email Address</div>
-                                        <div className="account-info-value">{state.accountDetails.address}</div>
-                                    </div>
-                                    <div className="account-info-item">
-                                        <div className="account-info-label">Status</div>
-                                        <div className="account-info-value">
-                                            <span className={`status-badge ${state.accountDetails.status === 'active' ? 'status-active' :
-                                                state.accountDetails.status === 'paused' || state.accountDetails.status === 'inactive' ? 'status-paused' : 'status-unknown'}`}>
+                {/* Account Detail View */}
+                {state.viewMode === 'detail' && state.accountDetails ? (
+                    <div className="bg-white rounded-xl shadow-sm p-8">
+                        <div className="flex items-center mb-8">
+                            <button
+                                className="mr-4 text-slate-500 hover:text-slate-700 transition-colors"
+                                onClick={() => updateState({ viewMode: 'list' })}
+                            >
+                                <FiArrowLeft size={24} />
+                            </button>
+                            <h2 className="text-2xl font-semibold text-slate-800">{state.accountDetails.name}</h2>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            {/* Left Column - Account Info */}
+                            <div>
+                                <div className="mb-8">
+                                    <h3 className="text-lg font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-200">Account Information</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <div className="text-sm text-slate-500 mb-1">Email Address</div>
+                                            <div className="font-medium text-slate-800">{state.accountDetails.address}</div>
+                                        </div>
+                                        <div>
+                                            <div className="text-sm text-slate-500 mb-1">Status</div>
+                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${state.accountDetails.status === 'active'
+                                                    ? 'bg-green-100 text-green-800'
+                                                    : state.accountDetails.status === 'paused' || state.accountDetails.status === 'inactive'
+                                                        ? 'bg-red-100 text-red-800'
+                                                        : 'bg-slate-100 text-slate-800'
+                                                }`}>
                                                 {state.accountDetails.status.charAt(0).toUpperCase() + state.accountDetails.status.slice(1)}
                                             </span>
                                         </div>
-                                    </div>
-                                    <div className="account-info-item">
-                                        <div className="account-info-label">Created</div>
-                                        <div className="account-info-value">
-                                            {new Date(state.accountDetails.createdAt).toLocaleDateString()}
+                                        <div>
+                                            <div className="text-sm text-slate-500 mb-1">Created</div>
+                                            <div className="font-medium text-slate-800">
+                                                {new Date(state.accountDetails.createdAt).toLocaleDateString()}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-sm text-slate-500 mb-1">Last Active</div>
+                                            <div className="font-medium text-slate-800">{state.accountDetails.lastActive}</div>
                                         </div>
                                     </div>
-                                    <div className="account-info-item">
-                                        <div className="account-info-label">Last Active</div>
-                                        <div className="account-info-value">{state.accountDetails.lastActive}</div>
+                                </div>
+
+                                <div>
+                                    <h3 className="text-lg font-semibold text-slate-800 mb-4 pb-2 border-b border-slate-200">Connection</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        <div>
+                                            <div className="text-sm text-slate-500 mb-1">Provider</div>
+                                            <div className="font-medium text-slate-800">
+                                                {state.accountDetails.address.includes('gmail.com') ? 'Google' :
+                                                    state.accountDetails.address.includes('outlook.com') ? 'Microsoft' : 'SMTP'}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-sm text-slate-500 mb-1">Status</div>
+                                            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                Connected
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="account-info-section">
-                                <h3 className="account-info-title">Connection</h3>
-                                <div className="account-info-grid">
-                                    <div className="account-info-item">
-                                        <div className="account-info-label">Provider</div>
-                                        <div className="account-info-value">
-                                            {state.accountDetails.address.includes('gmail.com') ? 'Google' :
-                                                state.accountDetails.address.includes('outlook.com') ? 'Microsoft' : 'SMTP'}
+                            {/* Right Column - Performance Stats */}
+                            <div>
+                                <div className="bg-slate-50 rounded-lg p-6">
+                                    <h3 className="text-lg font-semibold text-slate-800 mb-4">Performance Stats</h3>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+                                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                                            <div className="text-xl font-semibold text-slate-800 mb-1">{state.accountDetails.sentTotal}</div>
+                                            <div className="text-sm text-slate-600">Total Sent</div>
+                                        </div>
+                                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                                            <div className="text-xl font-semibold text-slate-800 mb-1">{state.accountDetails.receivedTotal}</div>
+                                            <div className="text-sm text-slate-600">Total Received</div>
+                                        </div>
+                                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                                            <div className="text-xl font-semibold text-slate-800 mb-1">{state.accountDetails.deliverability}%</div>
+                                            <div className="text-sm text-slate-600">Deliverability</div>
+                                        </div>
+                                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                                            <div className="text-xl font-semibold text-slate-800 mb-1">{state.accountDetails.inboxRate}%</div>
+                                            <div className="text-sm text-slate-600">Inbox Rate</div>
+                                        </div>
+                                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                                            <div className="text-xl font-semibold text-slate-800 mb-1">{state.accountDetails.spamRate}%</div>
+                                            <div className="text-sm text-slate-600">Spam Rate</div>
+                                        </div>
+                                        <div className="bg-white rounded-lg p-4 text-center shadow-sm">
+                                            <div className="text-xl font-semibold text-slate-800 mb-1">{state.accountDetails.replyRate}%</div>
+                                            <div className="text-sm text-slate-600">Reply Rate</div>
                                         </div>
                                     </div>
-                                    <div className="account-info-item">
-                                        <div className="account-info-label">Status</div>
-                                        <div className="account-info-value">
-                                            <span className="status-badge status-active">Connected</span>
-                                        </div>
+
+                                    <div className="h-48 bg-slate-100 rounded-lg flex items-center justify-center text-slate-500">
+                                        Deliverability Chart (Last 30 Days)
+                                    </div>
+
+                                    <div className="mt-6 flex justify-end">
+                                        <button
+                                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
+                                            onClick={() => handleSettingsClick(state.accountDetails)}
+                                        >
+                                            <FiSettings /> Account Settings
+                                        </button>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <div className="account-stats-section">
-                                <h3 className="account-info-title">Performance Stats</h3>
-                                <div className="account-stats-grid">
-                                    <div className="account-stat-card">
-                                        <div className="account-stat-value">{state.accountDetails.sentTotal}</div>
-                                        <div className="account-stat-label">Total Sent</div>
-                                    </div>
-                                    <div className="account-stat-card">
-                                        <div className="account-stat-value">{state.accountDetails.receivedTotal}</div>
-                                        <div className="account-stat-label">Total Received</div>
-                                    </div>
-                                    <div className="account-stat-card">
-                                        <div className="account-stat-value">{state.accountDetails.deliverability}%</div>
-                                        <div className="account-stat-label">Deliverability</div>
-                                    </div>
-                                    <div className="account-stat-card">
-                                        <div className="account-stat-value">{state.accountDetails.inboxRate}%</div>
-                                        <div className="account-stat-label">Inbox Rate</div>
-                                    </div>
-                                    <div className="account-stat-card">
-                                        <div className="account-stat-value">{state.accountDetails.spamRate}%</div>
-                                        <div className="account-stat-label">Spam Rate</div>
-                                    </div>
-                                    <div className="account-stat-card">
-                                        <div className="account-stat-value">{state.accountDetails.replyRate}%</div>
-                                        <div className="account-stat-label">Reply Rate</div>
-                                    </div>
-                                </div>
-
-                                <div className="deliverability-chart">
-                                    Deliverability Chart (Last 30 Days)
-                                </div>
-                            </div>
-
-                            <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end' }}>
-                                <button
-                                    className="btn btn-primary"
-                                    onClick={() => handleSettingsClick(state.accountDetails)}
-                                >
-                                    <FiSettings /> Account Settings
-                                </button>
                             </div>
                         </div>
                     </div>
-                </div>
-            ) : (
-                <>
-                    <div className="emails-table">
-                        <div className="table-header">
-                            <div className="header-cell">Email Account</div>
-                            <div className="header-cell">Status</div>
-                            <div className="header-cell">Sent</div>
-                            <div className="header-cell">Received</div>
-                            <div className="header-cell">Deliverability</div>
-                            <div className="header-cell">Toggle</div>
+                ) : (
+                    /* Email Accounts Table */
+                    <div className="bg-white rounded-xl shadow-sm overflow-hidden max-w-[2400px] mx-auto">
+                        {/* Table Header */}
+                        <div className="grid grid-cols-[2fr,1fr,1fr,1fr,1.1fr,0.5fr] bg-gradient-to-r from-teal-600 to-cyan-800 px-6 py-4 border-b border-slate-200">
+                            <div className="text-xs font-semibold text-white uppercase tracking-wider">Email Account</div>
+                            <div className="text-xs font-semibold text-white uppercase tracking-wider">Status</div>
+                            <div className="text-xs font-semibold text-white uppercase tracking-wider">Sent</div>
+                            <div className="text-xs font-semibold text-white uppercase tracking-wider">Received</div>
+                            <div className="text-xs font-semibold text-white uppercase tracking-wider">Deliverability</div>
+                            <div className="text-xs font-semibold text-white uppercase tracking-wider text-right">Toggle</div>
                         </div>
 
+                        {/* Table Body */}
                         {state.loading ? (
-                            <div className="loading-state">
-                                <div className="spinner"></div>
+                            <div className="flex flex-col items-center justify-center py-12 col-span-full text-slate-500">
+                                <div className="w-8 h-8 border-3 border-slate-200 border-t-indigo-600 rounded-full animate-spin mb-3"></div>
                                 <p>Loading email accounts...</p>
                             </div>
                         ) : filteredEmails.length > 0 ? (
                             filteredEmails.map((email) => {
                                 const stats = getEmailStats(email.address);
                                 return (
-                                    <div className="table-row" key={email.id}>
-                                        <div className="table-cell email-cell" onClick={() => handleAccountClick(email)}>
-                                            <div className="avatar">{getInitials(email.name)}</div>
-                                            <div className="email-info">
-                                                <div className="email-name">{email.name}</div>
-                                                <div className="email-address">{email.address}</div>
+                                    <div key={email.id} className="grid grid-cols-[2fr,1fr,1fr,1fr,1fr,0.5fr] px-6 py-4 border-b border-slate-100 hover:bg-slate-50 transition-colors items-center">
+                                        {/* Email Account */}
+                                        <div className="flex items-center gap-3 cursor-pointer" onClick={() => handleAccountClick(email)}>
+                                            <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-medium flex-shrink-0">
+                                                {getInitials(email.name)}
+                                            </div>
+                                            <div>
+                                                <div className="font-medium text-slate-800 mb-1">{email.name}</div>
+                                                <div className="text-sm text-slate-500">{email.address}</div>
                                             </div>
                                         </div>
-                                        <div className="table-cell">
-                                            <span className={`status-badge ${email.warmupStatus === 'active' ? 'status-active' :
-                                                email.warmupStatus === 'paused' || email.warmupStatus === 'inactive' ? 'status-paused' : 'status-unknown'}`}>
+
+                                        {/* Status */}
+                                        <div>
+                                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${email.warmupStatus === 'active'
+                                                    ? 'bg-green-100 text-green-800'
+                                                    : email.warmupStatus === 'paused' || email.warmupStatus === 'inactive'
+                                                        ? 'bg-red-100 text-red-800'
+                                                        : 'bg-slate-100 text-slate-800'
+                                                }`}>
                                                 {email.warmupStatus?.charAt(0).toUpperCase() + email.warmupStatus?.slice(1)}
                                             </span>
                                         </div>
-                                        <div className="table-cell count-cell">
+
+                                        {/* Sent */}
+                                        <div className="font-medium text-slate-800">
                                             {Number(stats.sent || 0).toLocaleString()}
                                         </div>
-                                        <div className="table-cell count-cell">
+
+                                        {/* Received */}
+                                        <div className="font-medium text-slate-800">
                                             {Number(stats.replied || 0).toLocaleString()}
                                         </div>
-                                        <div className="table-cell">
-                                            <div className="deliverability-container">
-                                                <div className="deliverability-bar">
+
+                                        {/* Deliverability */}
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex-grow h-6 bg-slate-100 rounded-full overflow-hidden">
                                                     <div
-                                                        className="deliverability-fill"
+                                                        className="h-full bg-indigo-600 rounded-full relative transition-all duration-300"
                                                         style={{ width: `${stats.deliverability}%` }}
                                                     >
-                                                        <span className="deliverability-value">
+                                                        <span className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 text-xs font-semibold text-white">
                                                             {stats.deliverability}%
                                                         </span>
                                                     </div>
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="table-cell actions-cell">
-                                            <label className="toggle-switch">
+
+                                        {/* Toggle & Actions */}
+                                        <div className="flex justify-end items-center gap-2">
+                                            <label className="relative inline-flex items-center cursor-pointer">
                                                 <input
                                                     type="checkbox"
                                                     checked={email.warmupStatus === 'active'}
                                                     onChange={() => handleToggle(email.address, email.warmupStatus)}
-                                                    className="toggle-input"
+                                                    className="sr-only peer"
                                                     disabled={state.togglingEmails[email.address]}
                                                 />
-                                                <span className="toggle-slider">
+                                                <div className="w-10 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-4 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 relative">
                                                     {state.togglingEmails[email.address] && (
-                                                        <span className="toggle-spinner"></span>
+                                                        <div className="absolute inset-0 flex items-center justify-center">
+                                                            <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                                        </div>
                                                     )}
-                                                </span>
+                                                </div>
                                             </label>
                                             <button
-                                                className="action-btn"
+                                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
                                                 title="Settings"
                                                 onClick={() => handleSettingsClick(email)}
                                                 disabled={state.togglingEmails[email.id]}
                                             >
-                                                <FiSettings />
+                                                <FiSettings size={16} />
                                             </button>
                                         </div>
                                     </div>
                                 );
                             })
                         ) : (
-                            <div className="empty-state">
-                                <p>No email accounts found</p>
+                            <div className="flex flex-col items-center justify-center py-12 col-span-full text-slate-500">
+                                <p className="mb-4">No email accounts found</p>
                                 <button
-                                    className="btn btn-primary"
+                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
                                     onClick={() => updateState({ showProviderModal: true })}
                                 >
                                     <FiPlus /> Add Your First Account
@@ -1694,54 +841,62 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                             </div>
                         )}
                     </div>
-                </>
-            )}
+                )}
+            </div>
 
             {/* Settings Panel */}
-            <div className="settings-panel">
+            <div className={`fixed top-16 right-5 w-60 bg-white rounded-lg shadow-lg z-50 transform transition-transform ${state.showSettingsPanel ? 'translate-x-0' : 'translate-x-full'
+                } border border-slate-200`}>
                 {state.selectedEmail && (
                     <>
-                        <div className="settings-header">
-                            <h3 className="settings-title">Settings</h3>
-                            <button className="settings-close" onClick={closeSettingsPanel}>
-                                <FiX />
+                        <div className="flex justify-between items-center p-4 border-b border-slate-200">
+                            <h3 className="text-sm font-semibold text-slate-800">Settings</h3>
+                            <button
+                                className="p-1 text-slate-500 hover:text-slate-700 rounded transition-colors"
+                                onClick={closeSettingsPanel}
+                            >
+                                <FiX size={16} />
                             </button>
                         </div>
 
-                        <div className="settings-menu">
-                            <div className="settings-item" onClick={() => console.log('Disconnect Email')}>
-                                <FiPower className="settings-icon" />
-                                <span className="settings-label">Disconnect Email</span>
-                            </div>
-                            <div className="settings-item" onClick={() => {
-                                setWarmupSettingsEmail(state.selectedEmail);
-                                setShowWarmupSettings(true);
-                                closeSettingsPanel();
-                            }}>
-                                <FiSettings className="settings-icon" />
-                                <span className="settings-label">Warmup Settings</span>
-                            </div>
-                            <div className="settings-item" onClick={() => console.log('View Connection Settings')}>
-                                <FiLink className="settings-icon" />
-                                <span className="settings-label">View Connection Settings</span>
-                            </div>
-                            <div className="settings-item" onClick={() => console.log('Warmup Report')}>
-                                <FiBarChart2 className="settings-icon" />
-                                <span className="settings-label">Warmup Report</span>
-                            </div>
-                            <div
-                                className="settings-item delete-item"
-                                onClick={() => handleDeleteEmail(state.selectedEmail.id)}
-                            >
-                                <FiTrash2 className="settings-icon" />
-                                <span className="settings-label">Delete Email</span>
-                            </div>
-                            <div
-                                className="settings-item delete-item"
-                                onClick={() => handleDeleteEmail(state.selectedEmail.id)}
-                            >
-                                <FiTrash2 className="settings-icon" />
-                                <span className="settings-label">Delete All</span>
+                        <div className="p-2">
+                            <div className="flex flex-col gap-1">
+                                <button className="flex items-center gap-3 p-3 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors w-full text-left">
+                                    <FiPower className="text-slate-500" size={14} />
+                                    <span>Disconnect Email</span>
+                                </button>
+                                <button
+                                    className="flex items-center gap-3 p-3 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors w-full text-left"
+                                    onClick={() => {
+                                        setWarmupSettingsEmail(state.selectedEmail);
+                                        setShowWarmupSettings(true);
+                                        closeSettingsPanel();
+                                    }}
+                                >
+                                    <FiSettings className="text-slate-500" size={14} />
+                                    <span>Warmup Settings</span>
+                                </button>
+                                <button className="flex items-center gap-3 p-3 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors w-full text-left">
+                                    <FiLink className="text-slate-500" size={14} />
+                                    <span>View Connection Settings</span>
+                                </button>
+                                <button className="flex items-center gap-3 p-3 rounded-lg text-sm text-slate-700 hover:bg-slate-50 transition-colors w-full text-left">
+                                    <FiBarChart2 className="text-slate-500" size={14} />
+                                    <span>Warmup Report</span>
+                                </button>
+                                <div className="border-t border-slate-200 mt-2 pt-2">
+                                    <button
+                                        className="flex items-center gap-3 p-3 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors w-full text-left"
+                                        onClick={() => handleDeleteEmail(state.selectedEmail.id)}
+                                    >
+                                        <FiTrash2 className="text-red-500" size={14} />
+                                        <span>Delete Email</span>
+                                    </button>
+                                    <button className="flex items-center gap-3 p-3 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors w-full text-left">
+                                        <FiTrash2 className="text-red-500" size={14} />
+                                        <span>Delete All</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </>
@@ -1750,7 +905,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
 
             {/* Warmup Settings Panel */}
             {showWarmupSettings && (
-                <WarmupSettings
+                <WarmupSettingsPanel
                     email={warmupSettingsEmail}
                     onClose={() => setShowWarmupSettings(false)}
                     onSave={saveWarmupSettings}
@@ -1759,30 +914,32 @@ const Dashboard = ({ isSidebarCollapsed }) => {
 
             {/* Provider Selection Modal */}
             {state.showProviderModal && (
-                <div className="modal-overlay">
-                    <div className="provider-modal">
-                        <div className="modal-header">
-                            <h3 className="modal-title">Connect Email Account</h3>
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl w-full max-w-md shadow-xl">
+                        <div className="p-6 border-b border-slate-200">
+                            <h3 className="text-xl font-semibold text-slate-800">Connect Email Account</h3>
                         </div>
-                        <div className="provider-list">
+                        <div className="p-2">
                             {providers.map((provider) => (
                                 <div
                                     key={provider.id}
-                                    className="provider-item"
+                                    className="flex items-center p-4 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors mb-1"
                                     onClick={() => handleProviderSelect(provider)}
                                 >
-                                    <div className="provider-icon">{provider.icon}</div>
-                                    <div className="provider-details">
-                                        <div className="provider-name">{provider.name}</div>
-                                        <div className="provider-description">{provider.description}</div>
+                                    <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold mr-4 flex-shrink-0">
+                                        {provider.icon}
                                     </div>
-                                    <FiChevronRight className="provider-arrow" />
+                                    <div className="flex-grow">
+                                        <div className="font-medium text-slate-800 mb-1">{provider.name}</div>
+                                        <div className="text-sm text-slate-500">{provider.description}</div>
+                                    </div>
+                                    <FiChevronRight className="text-slate-400" />
                                 </div>
                             ))}
                         </div>
-                        <div className="modal-footer">
+                        <div className="p-6 border-t border-slate-200 flex justify-end">
                             <button
-                                className="btn btn-cancel"
+                                className="px-4 py-2 text-slate-600 bg-white border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
                                 onClick={() => updateState({ showProviderModal: false })}
                             >
                                 Cancel
