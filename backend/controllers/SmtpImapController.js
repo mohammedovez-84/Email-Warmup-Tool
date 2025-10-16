@@ -1,7 +1,10 @@
-const { SmtpAccount, HealthCheck, UserAlert } = require('../models');
+//  const { HealthCheck, UserAlert } = require('../models');
 const { ImapFlow } = require('imapflow');
 const nodemailer = require('nodemailer');
 const { runHealthCheckInternal } = require('../services/internalhealth');
+const SmtpAccount = require("../models/smtpAccounts")
+const HealthCheck = require("../models/HealthCheck")
+const UserAlert = require("../models/UserAlert")
 
 // Validate SMTP port ↔ encryption
 function validateSmtp(port, encryption) {
