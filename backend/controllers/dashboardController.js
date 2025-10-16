@@ -55,6 +55,7 @@
 
 const GoogleUser = require('../models/GoogleUser');
 const SmtpAccount = require('../models/smtpAccounts');
+const MicrosoftUser = require("../models/MicrosoftUser")
 // const WarmupLog = require('../models/WarmupLog');
 
 // ✅ Fetch dashboard data for logged-in user
@@ -71,10 +72,17 @@ exports.getDashboardData = async (req, res) => {
             where: { user_id: userId }
         });
 
+
+        const microsoftUsers = await MicrosoftUser.findAll({
+            where: { user_id: userId }
+        })
+
+
         console.log(`📥 Google Users Count for user ${userId}:`, googleUsers.length);
         console.log(`📥 SMTP Accounts Count for user ${userId}:`, smtpAccounts.length);
+        console.log(`📥 Microsoft Accounts Count for user ${userId}:`, microsoftUsers.length);
 
-        res.json({ googleUsers, smtpAccounts });
+        res.json({ googleUsers, smtpAccounts, microsoftUsers });
     } catch (error) {
         console.error('❌ Error fetching dashboard data:', error);
         res.status(500).json({ error: 'Internal server error' });
