@@ -19,8 +19,8 @@ const MainLayout = () => {
                 </header>
 
                 {/* Page Content */}
-                <main className="flex-1 overflow-auto  bg-gray-50">
-                    <div className="max-w-7xl mx-auto">
+                <main className="flex-1 overflow-auto  ">
+                    <div className="lg:max-w-[95%] mx-auto">
                         <Outlet />
                     </div>
                 </main>
