@@ -574,7 +574,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     </div>
                 </div>
                 <button
-                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-lg hover:from-teal-600 hover:to-teal-700 transition-all duration-200 shadow hover:shadow-md w-full lg:w-auto justify-center"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-teal-800 to-teal-600 text-white rounded-lg hover:from-teal-600 hover:to-teal-700 transition-all duration-200 shadow hover:shadow-md w-full lg:w-auto justify-center"
                     onClick={() => setShowProviderModal(true)}
                     disabled={loading}
                 >
@@ -586,7 +586,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             {/* Main Content - Fixed Table Layout */}
             <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
                 {/* Table Header */}
-                <div className="grid grid-cols-3 md:grid-cols-6 bg-gradient-to-r from-teal-900 to-teal-500 px-4 md:px-6 py-3 text-white text-xs font-semibold uppercase tracking-wide">
+                <div className="grid grid-cols-3 md:grid-cols-6 bg-gradient-to-r from-teal-900 to-teal-600 px-4 md:px-6 py-3 text-white text-xs font-semibold uppercase tracking-wide">
                     <div className="col-span-2 md:col-span-1">Email Account</div>
                     <div className="hidden md:block">Status</div>
                     <div>Sent</div>
