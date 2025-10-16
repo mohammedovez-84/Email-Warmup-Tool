@@ -1,4 +1,4 @@
-
+// workers/warmupConsumer.js
 require('dotenv').config({ path: '../.env' });
 
 const getChannel = require('../queues/rabbitConnection');
@@ -9,56 +9,56 @@ const SmtpAccount = require('../models/smtpAccounts');
 const Account = require('../models/Account');
 const { buildSenderConfig } = require('../utils/senderConfig');
 
-
 async function consumeWarmupJobs() {
   const channel = await getChannel();
   await channel.assertQueue('warmup_jobs', { durable: true });
 
-  channel.consume('warmup_jobs', async (msg) => {
-    if (!msg) return;
+  console.log('📬 Warmup consumer started and waiting for messages...');
 
-    const job = JSON.parse(msg.content.toString());
-    console.log('Processing warmup job:', job);
+  channel.consume(
+    'warmup_jobs',
+    async (msg) => {
+      if (!msg) return;
 
-    const senderEmail = job.senderEmail || job.email;
-    const senderType = job.senderType || job.type;
-    const receiverEmail = job.receiverEmail;
+      try {
+        const job = JSON.parse(msg.content.toString());
+        console.log('Processing warmup job:', job);
 
-    if (!senderEmail || !senderType || !receiverEmail) {
-      console.error('Missing required job fields:', { senderEmail, senderType, receiverEmail });
-      channel.ack(msg);
-      return;
-    }
+        const senderEmail = job.senderEmail || job.email;
+        const senderType = job.senderType || job.type;
+        const receiverEmail = job.receiverEmail;
 
-    let senderModel;
-    if (senderType === 'google') senderModel = GoogleUser;
-    else if (senderType === 'microsoft') senderModel = MicrosoftUser;
-    else senderModel = SmtpAccount;
+        if (!senderEmail || !senderType || !receiverEmail) {
+          console.error('Missing required job fields:', job);
+          return channel.ack(msg);
+        }
 
-    const sender = await senderModel.findOne({ where: { email: senderEmail } });
-    const receiver = await Account.findOne({ where: { email: receiverEmail } });
+        const senderModel =
+          senderType === 'google'
+            ? GoogleUser
+            : senderType === 'microsoft'
+              ? MicrosoftUser
+              : SmtpAccount;
 
-    if (!sender || !receiver) {
-      console.error('Sender or receiver not found:', senderEmail, receiverEmail);
-      channel.ack(msg);
-      return;
-    }
+        const sender = await senderModel.findOne({ where: { email: senderEmail } });
+        const receiver = await Account.findOne({ where: { email: receiverEmail } });
 
-    try {
-      const senderConfig = buildSenderConfig(sender, senderType);
+        if (!sender || !receiver) {
+          console.error('Sender or receiver not found:', { senderEmail, receiverEmail });
+          return channel.ack(msg);
+        }
 
-      // ✅ Pass io to warmupSingleEmail for live metrics updates
-      await warmupSingleEmail(senderConfig, receiver);
+        const senderConfig = buildSenderConfig(sender, senderType);
+        await warmupSingleEmail(senderConfig, receiver);
 
-    } catch (e) {
-      console.error('Error running warmupSingleEmail:', e);
-      channel.nack(msg, false, true);
-    }
-
-    channel.ack(msg);
-  }, { noAck: false });
+        channel.ack(msg);
+      } catch (e) {
+        console.error('❌ Error running warmupSingleEmail:', e);
+        channel.nack(msg, false, true);
+      }
+    },
+    { noAck: false }
+  );
 }
-
-consumeWarmupJobs().catch(console.error);
 
 module.exports = { consumeWarmupJobs };
