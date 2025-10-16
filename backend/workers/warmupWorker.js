@@ -1,4 +1,3 @@
-// workers/warmupConsumer.js
 require('dotenv').config({ path: '../.env' });
 
 const getChannel = require('../queues/rabbitConnection');
@@ -6,7 +5,6 @@ const { warmupSingleEmail } = require('../services/warmupWorkflow');
 const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
-const Account = require('../models/Account');
 const { buildSenderConfig } = require('../utils/senderConfig');
 
 async function consumeWarmupJobs() {
@@ -29,10 +27,11 @@ async function consumeWarmupJobs() {
         const receiverEmail = job.receiverEmail;
 
         if (!senderEmail || !senderType || !receiverEmail) {
-          console.error('Missing required job fields:', job);
+          console.error('❌ Missing required job fields:', job);
           return channel.ack(msg);
         }
 
+        // Get the correct sender model
         const senderModel =
           senderType === 'google'
             ? GoogleUser
@@ -40,20 +39,35 @@ async function consumeWarmupJobs() {
               ? MicrosoftUser
               : SmtpAccount;
 
+        // Fetch sender
         const sender = await senderModel.findOne({ where: { email: senderEmail } });
-        const receiver = await Account.findOne({ where: { email: receiverEmail } });
 
-        if (!sender || !receiver) {
-          console.error('Sender or receiver not found:', { senderEmail, receiverEmail });
+        // Fetch receiver from any of the three tables
+        const receiver =
+          (await GoogleUser.findOne({ where: { email: receiverEmail } })) ||
+          (await MicrosoftUser.findOne({ where: { email: receiverEmail } })) ||
+          (await SmtpAccount.findOne({ where: { email: receiverEmail } }));
+
+        if (!sender) {
+          console.error(`❌ Sender not found: ${senderEmail}`);
           return channel.ack(msg);
         }
 
+        if (!receiver) {
+          console.error(`❌ Receiver not found: ${receiverEmail}`);
+          return channel.ack(msg);
+        }
+
+        // Build config and run warmup
         const senderConfig = buildSenderConfig(sender, senderType);
         await warmupSingleEmail(senderConfig, receiver);
 
+        console.log(`✅ Warmup email sent: ${senderEmail} -> ${receiverEmail}`);
+
         channel.ack(msg);
-      } catch (e) {
-        console.error('❌ Error running warmupSingleEmail:', e);
+      } catch (err) {
+        console.error('❌ Error running warmupSingleEmail:', err);
+        // Retry the job in case of error
         channel.nack(msg, false, true);
       }
     },
