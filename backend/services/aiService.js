@@ -89,6 +89,9 @@ async function generateEmail(senderName, receiverName, industry) {
 
 
 async function generateReply(originalEmail) {
+
+    console.log("original email: ", originalEmail);
+
     const prompt = `
   Reply professionally to the following email:
   ${originalEmail.content}

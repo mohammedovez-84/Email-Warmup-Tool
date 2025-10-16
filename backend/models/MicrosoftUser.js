@@ -97,7 +97,6 @@ const MicrosoftUser = sequelize.define('microsoft_users', {
     email: {
         type: DataTypes.STRING,
         allowNull: true,
-        unique: true
     },
     microsoft_id: {
         type: DataTypes.STRING,
