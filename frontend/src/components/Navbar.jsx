@@ -5,15 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     FiMenu,
     FiX,
-    FiUser,
+    FiCreditCard,
+    FiZap,
     FiSettings,
     FiLogOut,
     FiHelpCircle,
-    FiBarChart2,
-    FiLayers,
-    FiPieChart,
-    FiZap,
-    FiCreditCard
+    FiDollarSign
 } from 'react-icons/fi';
 import { HiOutlineChevronDown } from 'react-icons/hi';
 
@@ -21,9 +18,11 @@ export default function Navbar() {
     const { user, logout } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
-    const [hoveredItem, setHoveredItem] = useState(null);
     const navigate = useNavigate();
+
     const profileRef = useRef(null);
+
+
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -44,135 +43,169 @@ export default function Navbar() {
         navigate('/login');
     };
 
+    // Common dropdown menu items
     const profileMenuItems = [
-        { icon: <FiUser className="w-4 h-4" />, label: 'Profile', path: '/profile' },
         { icon: <FiSettings className="w-4 h-4" />, label: 'Settings', path: '/settings' },
-        { icon: <FiHelpCircle className="w-4 h-4" />, label: 'Help', path: '/help' },
-        { icon: <FiLogOut className="w-4 h-4" />, label: 'Logout', action: handleLogout }
+        { icon: <FiDollarSign className="w-4 h-4" />, label: 'Payment History', path: '/payment-history' },
+        { icon: <FiHelpCircle className="w-4 h-4" />, label: 'Help Desk', path: '/help' },
+        { icon: <FiLogOut className="w-4 h-4" />, label: 'Sign Out', action: handleLogout }
     ];
 
+    // Buttons and small UI components
+    const BuyCreditsButton = ({ mobile = false, variant = 'primary' }) => (
+        <button
+            className={`flex items-center justify-center space-x-2 font-semibold transition-all duration-200 ${mobile ? 'w-full py-3 rounded-lg text-sm' : 'px-4 py-2 rounded-lg text-sm'
+                } ${variant === 'primary'
+                    ? 'bg-gradient-to-r from-teal-800 to-teal-600 text-white shadow-md hover:shadow-lg hover:from-teal-500 to-teal-300'
+                    : 'bg-gray-50 hover:bg-white text-gray-700 border border-gray-200 hover:border-gray-300'
+                }`}
+        >
+            <FiZap className="w-4 h-4" />
+            <span>Buy Credits</span>
+            {!mobile && variant === 'primary' && (
+                <div className="bg-teal px-1.5 py-0.5 rounded text-xs font-bold">50</div>
+            )}
+        </button>
+    );
+
+    const CreditsDisplay = ({ mobile = false }) => (
+        <div
+            className={`flex items-center space-x-2 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200 ${mobile ? 'p-3' : 'px-3 py-2'
+                }`}
+        >
+            <div className="p-1.5 bg-gradient-to-r from-teal-800 to-teal-600 rounded-md">
+                <FiCreditCard className="w-3 h-3 text-white" />
+            </div>
+            <span className="text-gray-900 font-bold text-sm">1,250</span>
+            <span className="text-blue-600 text-xs font-medium">credits</span>
+        </div>
+    );
+
+    // Single dropdown for both user and guest
+    const ProfileDropdown = () => {
+        const { currentUser } = useAuth()
+
+        return (
+            <motion.div
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                transition={{ duration: 0.2 }}
+                className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden z-50"
+            >
+                {/* Header Section */}
+                <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+                    <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-r from-teal-800 to-teal-600 flex items-center justify-center text-white font-bold">
+                            {currentUser?.name?.charAt(0)?.toUpperCase() || 'G'}
+                        </div>
+                        <div>
+                            <p className="text-teal-900 font-bold text-sm">
+                                {currentUser?.name || ''}
+
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Menu Items */}
+                <div className="p-3">
+                    <div className="space-y-1">
+                        {profileMenuItems.map((item, index) => (
+                            <div key={index}>
+                                {item.path ? (
+                                    <Link
+                                        to={item.path}
+                                        onClick={() => setProfileOpen(false)}
+                                        className="flex items-center space-x-3 w-full px-3 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-all duration-200 group border border-transparent hover:border-blue-100"
+                                    >
+                                        <div className="text-gray-500 group-hover:text-blue-600 transition-colors">
+                                            {item.icon}
+                                        </div>
+                                        <span className="font-medium">{item.label}</span>
+                                    </Link>
+                                ) : (
+                                    <button
+                                        onClick={() => {
+                                            item.action?.();
+                                            setProfileOpen(false);
+                                        }}
+                                        className="flex items-center space-x-3 w-full px-3 py-2.5 text-sm text-gray-700 hover:bg-red-50 hover:text-red-700 rounded-lg transition-all duration-200 group border border-transparent hover:border-red-100"
+                                    >
+                                        <div className="text-gray-500 group-hover:text-red-600 transition-colors">
+                                            {item.icon}
+                                        </div>
+                                        <span className="font-medium">{item.label}</span>
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </motion.div>
+        )
+    }
+
+
+
+    // Mobile Menu
+    const MobileMenuContent = () => (
+        <div className="space-y-4">
+            <CreditsDisplay mobile />
+            <div className="grid grid-cols-1 gap-3">
+                <BuyCreditsButton mobile />
+            </div>
+        </div>
+    );
+
+    const { currentUser } = useAuth()
 
     return (
         <>
-            <nav className="fixed top-0 left-64 right-0 h-16 bg-gradient-to-r from-slate-900 to-teal-600 shadow-lg border-b border-white/10 z-40 transition-all duration-300 hover:shadow-xl">
-                <div className="h-full px-8">
-                    <div className="flex items-center justify-between h-full">
-                        {/* Right Section - User Profile or Auth */}
-                        <div className="flex items-center space-x-4">
-                            {user ? (
-                                <div className="hidden md:flex items-center h-full" ref={profileRef}>
-                                    <div className="relative h-full flex items-center">
-                                        <button
-                                            onClick={() => setProfileOpen(!profileOpen)}
-                                            className="flex items-center space-x-2 px-3 py-2 rounded-full hover:bg-white/10 transition-all duration-200 group"
-                                        >
-                                            <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center text-white font-semibold group-hover:bg-white/30 transition-colors duration-200">
-                                                {user.name.charAt(0).toUpperCase()}
-                                            </div>
-                                            <span className="text-white font-medium text-sm">
-                                                {user.name.split(' ')[0]}
-                                            </span>
-                                            <HiOutlineChevronDown
-                                                className={`w-4 h-4 text-white/70 transition-transform duration-200 ${profileOpen ? 'rotate-180' : ''
-                                                    }`}
-                                            />
-                                        </button>
+            <nav className="fixed top-0 left-64 right-0 h-16 bg-white/80 backdrop-blur-md shadow-sm border-b border-gray-200/60 z-40">
+                <div className="h-full px-6">
+                    <div className="flex items-center justify-end h-full">
+                        <div className="flex items-center space-x-3" ref={profileRef}>
+                            <BuyCreditsButton />
+                            <CreditsDisplay />
 
-                                        <AnimatePresence>
-                                            {profileOpen && (
-                                                <motion.div
-                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                    transition={{ duration: 0.2 }}
-                                                    className="absolute right-0 top-full mt-2 w-64 bg-white/95 backdrop-blur-lg rounded-xl shadow-2xl border border-white/20 overflow-hidden"
-                                                >
-                                                    {/* Profile Header */}
-                                                    <div className="p-4 border-b border-gray-200/50 bg-gradient-to-r from-slate-900/95 to-teal-600/95">
-                                                        <p className="text-white font-semibold text-sm truncate">
-                                                            {user.name}
-                                                        </p>
-                                                        <p className="text-white/70 text-xs truncate mt-1">
-                                                            {user.email}
-                                                        </p>
-                                                    </div>
-
-                                                    {/* Menu Items */}
-                                                    <div className="p-2">
-                                                        {profileMenuItems.map((item, index) => (
-                                                            <motion.div
-                                                                key={index}
-                                                                initial={{ x: -10, opacity: 0 }}
-                                                                animate={{ x: 0, opacity: 1 }}
-                                                                transition={{ delay: index * 0.05 }}
-                                                            >
-                                                                {item.path ? (
-                                                                    <Link
-                                                                        to={item.path}
-                                                                        onClick={() => setProfileOpen(false)}
-                                                                        className="flex items-center space-x-3 w-full px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100/80 rounded-lg transition-all duration-200 group"
-                                                                    >
-                                                                        <div className="text-gray-600 group-hover:text-teal-600 transition-colors duration-200">
-                                                                            {item.icon}
-                                                                        </div>
-                                                                        <span className="font-medium">{item.label}</span>
-                                                                    </Link>
-                                                                ) : (
-                                                                    <button
-                                                                        onClick={item.action}
-                                                                        className="flex items-center space-x-3 w-full px-3 py-2.5 text-sm text-gray-700 hover:bg-gray-100/80 rounded-lg transition-all duration-200 group"
-                                                                    >
-                                                                        <div className="text-gray-600 group-hover:text-red-600 transition-colors duration-200">
-                                                                            {item.icon}
-                                                                        </div>
-                                                                        <span className="font-medium">{item.label}</span>
-                                                                    </button>
-                                                                )}
-                                                            </motion.div>
-                                                        ))}
-                                                    </div>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
+                            {/* Profile Button */}
+                            <div className="relative">
+                                <button
+                                    onClick={() => setProfileOpen(!profileOpen)}
+                                    className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:text-gray-900 font-medium text-sm hover:bg-gray-50 rounded-lg transition-all duration-200 "
+                                >
+                                    <div className="w-10 h-10 rounded-full bg-gradient-to-r from-teal-800 to-teal-600 flex items-center justify-center text-white font-bold">
+                                        {currentUser?.name?.charAt(0)?.toUpperCase() || 'G'}
                                     </div>
-                                </div>
-                            ) : (
-                                <div className="hidden md:flex items-center space-x-4">
-                                    {/* {publicMenuItems.map((item, index) => (
-                                        <Link
-                                            key={index}
-                                            to={item.path}
-                                            className="flex items-center space-x-1 text-white/90 hover:text-white transition-colors duration-200 text-sm font-medium px-3 py-2 rounded-lg hover:bg-white/10"
-                                        >
-                                            {item.icon}
-                                            <span>{item.label}</span>
-                                        </Link>
-                                    ))} */}
-                                    <Link
-                                        to="/login"
-                                        className="bg-white text-slate-900 hover:bg-gray-100 px-4 py-2 rounded-lg font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200"
-                                    >
-                                        Get Started
-                                    </Link>
-                                </div>
-                            )}
+                                    <HiOutlineChevronDown
+                                        className={`w-4 h-4 text-gray-500 transition-transform duration-200 ${profileOpen ? 'rotate-180' : ''
+                                            }`}
+                                    />
+                                </button>
+
+                                {/* Dropdown (Same for both guest and user) */}
+                                <AnimatePresence>
+                                    {profileOpen && <ProfileDropdown />}
+                                </AnimatePresence>
+                            </div>
 
                             {/* Mobile Menu Button */}
                             <button
                                 onClick={() => setIsOpen(!isOpen)}
-                                className="md:hidden p-2 rounded-lg hover:bg-white/10 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-white/50"
+                                className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 border border-gray-200"
                             >
                                 {isOpen ? (
-                                    <FiX className="w-6 h-6 text-white" />
+                                    <FiX className="w-5 h-5 text-gray-600" />
                                 ) : (
-                                    <FiMenu className="w-6 h-6 text-white" />
+                                    <FiMenu className="w-5 h-5 text-gray-600" />
                                 )}
                             </button>
                         </div>
                     </div>
                 </div>
 
-                {/* Mobile Menu */}
+                {/* Mobile Dropdown */}
                 <AnimatePresence>
                     {isOpen && (
                         <motion.div
@@ -180,93 +213,10 @@ export default function Navbar() {
                             animate={{ opacity: 1, height: 'auto' }}
                             exit={{ opacity: 0, height: 0 }}
                             transition={{ duration: 0.3, ease: 'easeInOut' }}
-                            className="md:hidden absolute top-16 left-0 right-0 bg-gradient-to-b from-slate-900 to-teal-700/95 backdrop-blur-lg border-b border-white/10 shadow-2xl"
+                            className="md:hidden absolute top-16 left-0 right-0 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-lg z-40"
                         >
-                            <div className="p-6 space-y-4">
-                                {user ? (
-                                    <>
-                                        {/* User Menu Items */}
-                                        <div className="space-y-2">
-                                            {userMenuItems.map((item, index) => (
-                                                <motion.div
-                                                    key={index}
-                                                    initial={{ x: 20, opacity: 0 }}
-                                                    animate={{ x: 0, opacity: 1 }}
-                                                    transition={{ delay: index * 0.1 }}
-                                                >
-                                                    <MobileNavLink
-                                                        to={item.path}
-                                                        icon={item.icon}
-                                                        label={item.label}
-                                                        setIsOpen={setIsOpen}
-                                                    />
-                                                </motion.div>
-                                            ))}
-                                        </div>
-
-                                        {/* User Profile Section */}
-                                        <motion.div
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            transition={{ delay: userMenuItems.length * 0.1 }}
-                                            className="pt-4 border-t border-white/20"
-                                        >
-                                            <div className="flex items-center space-x-3 p-3 bg-white/10 rounded-xl mb-3">
-                                                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white font-semibold">
-                                                    {user.name.charAt(0).toUpperCase()}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-white font-semibold text-sm truncate">
-                                                        {user.name}
-                                                    </p>
-                                                    <p className="text-white/70 text-xs truncate">
-                                                        {user.email}
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <div className="space-y-1">
-                                                {profileMenuItems.map((item, index) => (
-                                                    <motion.div
-                                                        key={index}
-                                                        initial={{ x: 20, opacity: 0 }}
-                                                        animate={{ x: 0, opacity: 1 }}
-                                                        transition={{ delay: (userMenuItems.length + index) * 0.1 }}
-                                                    >
-                                                        {item.path ? (
-                                                            <Link
-                                                                to={item.path}
-                                                                onClick={() => setIsOpen(false)}
-                                                                className="flex items-center space-x-3 w-full px-4 py-3 text-white/90 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 group"
-                                                            >
-                                                                <div className="text-white/70 group-hover:text-white transition-colors duration-200">
-                                                                    {item.icon}
-                                                                </div>
-                                                                <span className="font-medium">{item.label}</span>
-                                                            </Link>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => {
-                                                                    item.action();
-                                                                    setIsOpen(false);
-                                                                }}
-                                                                className="flex items-center space-x-3 w-full px-4 py-3 text-white/90 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 group"
-                                                            >
-                                                                <div className="text-white/70 group-hover:text-red-300 transition-colors duration-200">
-                                                                    {item.icon}
-                                                                </div>
-                                                                <span className="font-medium">{item.label}</span>
-                                                            </button>
-                                                        )}
-                                                    </motion.div>
-                                                ))}
-                                            </div>
-                                        </motion.div>
-                                    </>
-                                ) : (
-                                    <>
-                                    </>
-                                )}
+                            <div className="p-4">
+                                <MobileMenuContent />
                             </div>
                         </motion.div>
                     )}
@@ -276,54 +226,5 @@ export default function Navbar() {
             {/* Spacer for fixed navbar */}
             <div className="h-16"></div>
         </>
-    );
-}
-
-// Desktop NavLink Component
-function NavLink({ to, icon, label, isHovered, onMouseEnter, onMouseLeave }) {
-    return (
-        <Link
-            to={to}
-            className="relative flex items-center space-x-2 px-4 py-2 text-white/90 hover:text-white transition-colors duration-200 group"
-            onMouseEnter={onMouseEnter}
-            onMouseLeave={onMouseLeave}
-        >
-            <div className="flex items-center space-x-2">
-                <div className="text-white/70 group-hover:text-white transition-colors duration-200">
-                    {icon}
-                </div>
-                <span className="font-medium text-sm">{label}</span>
-            </div>
-
-            {/* Animated underline */}
-            <div className="absolute bottom-0 left-4 right-4 h-0.5 bg-transparent group-hover:bg-white/50 transition-all duration-300">
-                {isHovered && (
-                    <motion.div
-                        className="h-full bg-white"
-                        layoutId="navHover"
-                        initial={{ scaleX: 0 }}
-                        animate={{ scaleX: 1 }}
-                        exit={{ scaleX: 0 }}
-                        transition={{ duration: 0.3 }}
-                    />
-                )}
-            </div>
-        </Link>
-    );
-}
-
-// Mobile NavLink Component
-function MobileNavLink({ to, icon, label, setIsOpen }) {
-    return (
-        <Link
-            to={to}
-            onClick={() => setIsOpen(false)}
-            className="flex items-center space-x-3 w-full px-4 py-3 text-white/90 hover:text-white hover:bg-white/10 rounded-xl transition-all duration-200 group"
-        >
-            <div className="text-white/70 group-hover:text-white transition-colors duration-200">
-                {icon}
-            </div>
-            <span className="font-medium">{label}</span>
-        </Link>
     );
 }
