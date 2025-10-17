@@ -429,11 +429,17 @@
 
 
 import React, { useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 
 const MicrosoftConnectModal = ({ onClose }) => {
+    const { currentUser } = useAuth();
+
     useEffect(() => {
-        window.location.href = 'http://localhost:5000/auth/microsoft';
-    }, []);
+        if (currentUser?.id) {
+            // ✅ Redirect to your backend's Microsoft login endpoint
+            window.location.href = `http://localhost:5000/auth/microsoft?userId=${currentUser.id}`;
+        }
+    }, [currentUser]);
 
     return (
         <div className="modal">
@@ -444,3 +450,4 @@ const MicrosoftConnectModal = ({ onClose }) => {
 };
 
 export default MicrosoftConnectModal;
+
