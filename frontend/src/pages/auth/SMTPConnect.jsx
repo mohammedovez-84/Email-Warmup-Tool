@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { FiX } from 'react-icons/fi';
+import { FiX, FiMail, FiLock, FiUser, FiServer, FiShield, FiCheck, FiHelpCircle } from 'react-icons/fi';
 import axios from 'axios';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const SMTPConnect = ({ onSuccess, onClose }) => {
     const token = localStorage.getItem('token');
@@ -87,6 +87,11 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
     };
 
     const handleTestSmtp = async () => {
+        if (!formData.smtpHost || !formData.email || !formData.password) {
+            setError('Please fill in all required SMTP fields first');
+            return;
+        }
+
         try {
             const payload = {
                 smtp_host: formData.smtpHost,
@@ -108,6 +113,11 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
     };
 
     const handleTestImap = async () => {
+        if (!formData.imapHost || !formData.email) {
+            setError('Please fill in all required IMAP fields first');
+            return;
+        }
+
         try {
             const payload = {
                 imap_host: formData.imapHost,
@@ -130,810 +140,605 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
     };
 
     return (
-        <div className="smtp-connect-modal">
-            <div className="modal-overlay">
-                <div className="modal-content">
-                    <div className="modal-header">
-                        <motion.h2
-                            initial={{ scale: 1 }}
-                            whileHover={{
-                                scale: 1.05,
-                                rotate: [0, -2, 2, -2, 2, 0],
-                                transition: { duration: 0.6 }
-                            }}
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <motion.div
+                className="bg-white rounded-xl w-full max-w-4xl mx-auto shadow-2xl border border-gray-200 max-h-[90vh] overflow-hidden flex flex-col"
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                transition={{ type: "spring", damping: 25, stiffness: 300 }}
+            >
+                {/* Header */}
+                <div className="bg-gradient-to-r from-teal-800 to-teal-600 px-6 py-4 border-b border-teal-700">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h2 className="text-2xl font-bold text-white font-['Montserrat']">
+                                SMTP Configuration
+                            </h2>
+                            <p className="text-teal-100 text-sm mt-1 font-['Poppins']">
+                                Connect your email account for sending & receiving
+                            </p>
+                        </div>
+                        <motion.button
+                            className="bg-white/20 hover:bg-white/30 text-white p-2 rounded-lg flex items-center justify-center w-8 h-8 transition-all"
+                            onClick={onClose}
+                            whileHover={{ rotate: 90, scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
                         >
-                            SMTP Details - Sending Emails
-                        </motion.h2>
-                        <button className="close-btn" onClick={onClose}>
-                            <FiX />
-                        </button>
+                            <FiX className="text-sm" />
+                        </motion.button>
                     </div>
-
-                    <div className="tabs">
-                        <button
-                            className={`tab ${activeTab === 'smtp' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('smtp')}
-                        >
-                            <span>SMTP</span>
-                        </button>
-                        <button
-                            className={`tab ${activeTab === 'imap' ? 'active' : ''}`}
-                            onClick={() => setActiveTab('imap')}
-                        >
-                            <span>IMAP</span>
-                        </button>
-                    </div>
-
-                    {error && (
-                        <motion.div
-                            className="error-message"
-                            initial={{ opacity: 0, y: -10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                        >
-                            {error}
-                        </motion.div>
-                    )}
-
-                    {activeTab === 'smtp' ? (
-                        <form onSubmit={handleSubmit} className="smtp-form">
-                            <div className="form-section">
-                                <label>Sender Name</label>
-                                <input
-                                    type="text"
-                                    name="senderName"
-                                    placeholder="Enter Name"
-                                    value={formData.senderName}
-                                    onChange={handleChange}
-                                    required
-                                />
-                            </div>
-
-                            <div className="toggle-group">
-                                <label className="toggle-label">
-                                    Use different username
-                                    <div className="toggle-switch">
-                                        <input
-                                            type="checkbox"
-                                            id="useDifferentUsername"
-                                            name="useDifferentUsername"
-                                            checked={formData.useDifferentUsername}
-                                            onChange={toggleUsername}
-                                            className="toggle-input"
-                                        />
-                                        <span className="toggle-slider"></span>
-                                    </div>
-                                </label>
-                            </div>
-
-                            {formData.useDifferentUsername && (
-                                <div className="form-section">
-                                    <label>Username</label>
-                                    <input
-                                        type="text"
-                                        name="username"
-                                        placeholder="Enter username"
-                                        value={formData.username}
-                                        onChange={handleChange}
-                                    />
-                                </div>
-                            )}
-                            <div className="form-section">
-                                <label>Email Address</label>
-                                <input
-                                    type="email"
-                                    name="email"
-                                    placeholder="Enter Email"
-                                    value={formData.email}
-                                    onChange={handleChange}
-                                    required
-                                />
-                            </div>
-
-                            <div className="form-section">
-                                <label>Password</label>
-                                <input
-                                    type="password"
-                                    name="password"
-                                    placeholder="Enter Password"
-                                    value={formData.password}
-                                    onChange={handleChange}
-                                    required
-                                />
-                            </div>
-
-                            <div className="form-section">
-                                <label>SMTP Host</label>
-                                <input
-                                    type="text"
-                                    name="smtpHost"
-                                    placeholder="Enter SMTP Host"
-                                    value={formData.smtpHost}
-                                    onChange={handleChange}
-                                    required
-                                />
-                            </div>
-
-                            <div className="form-section">
-                                <label>SMTP Port</label>
-                                <input
-                                    type="text"
-                                    name="smtpPort"
-                                    placeholder="Enter SMTP Port"
-                                    value={formData.smtpPort}
-                                    onChange={handleChange}
-                                    required
-                                />
-                            </div>
-
-                            <div className="form-section">
-                                <label>Encryption</label>
-                                <div className="radio-group">
-                                    <label className="radio-label">
-                                        <input
-                                            type="radio"
-                                            name="encryption"
-                                            value="SSL"
-                                            checked={formData.encryption === 'SSL'}
-                                            onChange={handleChange}
-                                        />
-                                        <span className="radio-custom"></span>
-                                        SSL
-                                    </label>
-                                    <label className="radio-label">
-                                        <input
-                                            type="radio"
-                                            name="encryption"
-                                            value="TLS"
-                                            checked={formData.encryption === 'TLS'}
-                                            onChange={handleChange}
-                                        />
-                                        <span className="radio-custom"></span>
-                                        TLS
-                                    </label>
-                                    <label className="radio-label">
-                                        <input
-                                            type="radio"
-                                            name="encryption"
-                                            value="None"
-                                            checked={formData.encryption === 'None'}
-                                            onChange={handleChange}
-                                        />
-                                        <span className="radio-custom"></span>
-                                        None
-                                    </label>
-                                </div>
-                            </div>
-
-                            <div className="instructions">
-                                <h3>Instructions to connect your email account through the SMTP Method</h3>
-                                <ul>
-                                    <li>Make sure SMTP is enabled on your email account.</li>
-                                    <li>If you're using a regular password, ensure that any two-factor authentication is disabled on your email account.</li>
-                                    <li>If your ESP supports an app password, use that instead of a regular password.</li>
-                                    <li>Use correct SMTP details like host & port from your email provider.</li>
-                                </ul>
-                            </div>
-
-                            <div className="test-buttons">
-                                <motion.button
-                                    type="button"
-                                    className="btn-test"
-                                    onClick={handleTestSmtp}
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                >
-                                    Test SMTP
-                                </motion.button>
-                            </div>
-
-                            <div className="modal-actions">
-                                <motion.button
-                                    type="button"
-                                    className="btn-cancel"
-                                    onClick={onClose}
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                >
-                                    Cancel
-                                </motion.button>
-                                <motion.button
-                                    type="submit"
-                                    className="btn-confirm"
-                                    disabled={loading}
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                >
-                                    {loading ? 'Connecting...' : 'Connect & Save'}
-                                </motion.button>
-                            </div>
-                        </form>
-                    ) : (
-                        <form onSubmit={handleSubmit} className="imap-form">
-                            <div className="form-section">
-                                <label className="toggle-label">
-                                    Use the same username and password from SMTP
-                                    <div className="toggle-switch">
-                                        <input
-                                            type="checkbox"
-                                            name="useSmtpCredentialsForImap"
-                                            checked={formData.useSmtpCredentialsForImap}
-                                            onChange={toggleUseSmtpCredentialsForImap}
-                                            className="toggle-input"
-                                        />
-                                        <span className="toggle-slider"></span>
-                                    </div>
-                                </label>
-                            </div>
-
-                            <div className="form-section">
-                                <label>Email Address</label>
-                                <input
-                                    type="email"
-                                    name="imapEmail"
-                                    placeholder="Enter Email"
-                                    value={formData.useSmtpCredentialsForImap ? formData.email : formData.imapEmail}
-                                    onChange={handleChange}
-                                    disabled={formData.useSmtpCredentialsForImap}
-                                    required
-                                />
-                            </div>
-
-                            <div className="form-section">
-                                <label>Password</label>
-                                <input
-                                    type="password"
-                                    name="imapPassword"
-                                    placeholder="Enter Password"
-                                    value={formData.useSmtpCredentialsForImap ? formData.password : formData.imapPassword}
-                                    onChange={handleChange}
-                                    disabled={formData.useSmtpCredentialsForImap}
-                                    required
-                                />
-                            </div>
-
-                            <div className="form-section">
-                                <label>IMAP Host</label>
-                                <input
-                                    type="text"
-                                    name="imapHost"
-                                    placeholder="Enter IMAP Host"
-                                    value={formData.imapHost}
-                                    onChange={handleChange}
-                                    required
-                                />
-                            </div>
-                            <div className="form-section">
-                                <label>IMAP Port</label>
-                                <input
-                                    type="text"
-                                    name="imapPort"
-                                    placeholder="Enter IMAP Port"
-                                    value={formData.imapPort}
-                                    onChange={handleChange}
-                                    required
-                                />
-                            </div>
-
-                            <div className="form-section">
-                                <label>Encryption</label>
-                                <div className="radio-group">
-                                    <label className="radio-label">
-                                        <input
-                                            type="radio"
-                                            name="imapEncryption"
-                                            value="SSL"
-                                            checked={formData.imapEncryption === 'SSL'}
-                                            onChange={handleChange}
-                                        />
-                                        <span className="radio-custom"></span>
-                                        SSL
-                                    </label>
-                                    <label className="radio-label">
-                                        <input
-                                            type="radio"
-                                            name="imapEncryption"
-                                            value="TLS"
-                                            checked={formData.imapEncryption === 'TLS'}
-                                            onChange={handleChange}
-                                        />
-                                        <span className="radio-custom"></span>
-                                        TLS
-                                    </label>
-                                    <label className="radio-label">
-                                        <input
-                                            type="radio"
-                                            name="imapEncryption"
-                                            value="None"
-                                            checked={formData.imapEncryption === 'None'}
-                                            onChange={handleChange}
-                                        />
-                                        <span className="radio-custom"></span>
-                                        None
-                                    </label>
-                                </div>
-                            </div>
-
-                            <div className="test-buttons">
-                                <motion.button
-                                    type="button"
-                                    className="btn-test"
-                                    onClick={handleTestImap}
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                >
-                                    Test IMAP
-                                </motion.button>
-                            </div>
-
-                            <div className="modal-actions">
-                                <motion.button
-                                    type="button"
-                                    className="btn-cancel"
-                                    onClick={onClose}
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                >
-                                    Cancel
-                                </motion.button>
-                                <motion.button
-                                    type="submit"
-                                    className="btn-confirm"
-                                    disabled={loading}
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                >
-                                    {loading ? 'Connecting...' : 'Connect & Save'}
-                                </motion.button>
-                            </div>
-                        </form>
-                    )}
                 </div>
-            </div>
 
+                {/* Tabs */}
+                <div className="flex border-b border-gray-200 bg-gray-50">
+                    <button
+                        className={`flex items-center space-x-2 px-6 py-3 border-b-2 font-medium text-sm transition-all duration-200 ${activeTab === 'smtp'
+                            ? 'border-teal-600 text-teal-700 bg-white'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
+                        onClick={() => setActiveTab('smtp')}
+                    >
+                        <FiMail className="text-lg" />
+                        <span>SMTP Settings</span>
+                    </button>
+                    <button
+                        className={`flex items-center space-x-2 px-6 py-3 border-b-2 font-medium text-sm transition-all duration-200 ${activeTab === 'imap'
+                            ? 'border-teal-600 text-teal-700 bg-white'
+                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                            }`}
+                        onClick={() => setActiveTab('imap')}
+                    >
+                        <FiServer className="text-lg" />
+                        <span>IMAP Settings</span>
+                    </button>
+                </div>
+
+                {/* Content Area */}
+                <div className="flex-1 overflow-y-auto">
+                    <div className="p-6">
+                        {/* Error Message */}
+                        <AnimatePresence>
+                            {error && (
+                                <motion.div
+                                    className="bg-red-50 text-red-700 p-4 rounded-lg mb-6 text-sm border border-red-200 font-['Poppins'] flex items-start"
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                >
+                                    <div className="bg-red-100 p-1 rounded mr-3 mt-0.5">
+                                        <FiX className="text-red-600 text-sm" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <strong className="font-semibold">Error:</strong> {error}
+                                    </div>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+
+                        {activeTab === 'smtp' ? (
+                            <form onSubmit={handleSubmit} className="space-y-5">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Sender Name */}
+                                    <motion.div
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.1 }}
+                                    >
+                                        <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                            <FiUser className="mr-2 text-teal-600" />
+                                            Sender Name
+                                        </label>
+                                        <motion.input
+                                            type="text"
+                                            name="senderName"
+                                            placeholder="Enter your display name"
+                                            value={formData.senderName}
+                                            onChange={handleChange}
+                                            required
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white transition-all font-['Poppins'] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                            whileFocus={{
+                                                scale: 1.01,
+                                                transition: { duration: 0.2 }
+                                            }}
+                                        />
+                                    </motion.div>
+
+                                    {/* Email Address */}
+                                    <motion.div
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.2 }}
+                                    >
+                                        <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                            <FiMail className="mr-2 text-teal-600" />
+                                            Email Address
+                                        </label>
+                                        <motion.input
+                                            type="email"
+                                            name="email"
+                                            placeholder="your.email@example.com"
+                                            value={formData.email}
+                                            onChange={handleChange}
+                                            required
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white transition-all font-['Poppins'] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                            whileFocus={{
+                                                scale: 1.01,
+                                                transition: { duration: 0.2 }
+                                            }}
+                                        />
+                                    </motion.div>
+                                </div>
+
+                                {/* Username Toggle */}
+                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                    <label className="flex items-center space-x-2 text-gray-700 font-medium text-sm cursor-pointer">
+                                        <span>Use different username for SMTP</span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={toggleUsername}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${formData.useDifferentUsername ? 'bg-teal-600' : 'bg-gray-300'
+                                            }`}
+                                    >
+                                        <span
+                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${formData.useDifferentUsername ? 'translate-x-6' : 'translate-x-1'
+                                                }`}
+                                        />
+                                    </button>
+                                </div>
+
+                                {/* Username Field (Conditional) */}
+                                <AnimatePresence>
+                                    {formData.useDifferentUsername && (
+                                        <motion.div
+                                            initial={{ height: 0, opacity: 0 }}
+                                            animate={{ height: "auto", opacity: 1 }}
+                                            exit={{ height: 0, opacity: 0 }}
+                                            transition={{ duration: 0.3 }}
+                                        >
+                                            <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                                <FiUser className="mr-2 text-teal-600" />
+                                                SMTP Username
+                                            </label>
+                                            <motion.input
+                                                type="text"
+                                                name="username"
+                                                placeholder="Enter username"
+                                                value={formData.username}
+                                                onChange={handleChange}
+                                                className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white transition-all font-['Poppins'] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                                whileFocus={{
+                                                    scale: 1.01,
+                                                    transition: { duration: 0.2 }
+                                                }}
+                                            />
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* Password */}
+                                    <motion.div
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.3 }}
+                                    >
+                                        <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                            <FiLock className="mr-2 text-teal-600" />
+                                            Password
+                                        </label>
+                                        <motion.input
+                                            type="password"
+                                            name="password"
+                                            placeholder="Enter your password"
+                                            value={formData.password}
+                                            onChange={handleChange}
+                                            required
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white transition-all font-['Poppins'] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                            whileFocus={{
+                                                scale: 1.01,
+                                                transition: { duration: 0.2 }
+                                            }}
+                                        />
+                                    </motion.div>
+
+                                    {/* SMTP Host */}
+                                    <motion.div
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.4 }}
+                                    >
+                                        <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                            <FiServer className="mr-2 text-teal-600" />
+                                            SMTP Host
+                                        </label>
+                                        <motion.input
+                                            type="text"
+                                            name="smtpHost"
+                                            placeholder="smtp.example.com"
+                                            value={formData.smtpHost}
+                                            onChange={handleChange}
+                                            required
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white transition-all font-['Poppins'] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                            whileFocus={{
+                                                scale: 1.01,
+                                                transition: { duration: 0.2 }
+                                            }}
+                                        />
+                                    </motion.div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* SMTP Port */}
+                                    <motion.div
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.5 }}
+                                    >
+                                        <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                            <FiServer className="mr-2 text-teal-600" />
+                                            SMTP Port
+                                        </label>
+                                        <motion.input
+                                            type="number"
+                                            name="smtpPort"
+                                            placeholder="465"
+                                            value={formData.smtpPort}
+                                            onChange={handleChange}
+                                            required
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white transition-all font-['Poppins'] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                            whileFocus={{
+                                                scale: 1.01,
+                                                transition: { duration: 0.2 }
+                                            }}
+                                            min="1"
+                                            max="65535"
+                                        />
+                                    </motion.div>
+
+                                    {/* Encryption */}
+                                    <div>
+                                        <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                            <FiShield className="mr-2 text-teal-600" />
+                                            Encryption
+                                        </label>
+                                        <div className="flex space-x-4">
+                                            {['SSL', 'TLS', 'None'].map((type) => (
+                                                <label key={type} className="flex items-center space-x-2 cursor-pointer">
+                                                    <input
+                                                        type="radio"
+                                                        name="encryption"
+                                                        value={type}
+                                                        checked={formData.encryption === type}
+                                                        onChange={handleChange}
+                                                        className="text-teal-600 focus:ring-teal-500"
+                                                    />
+                                                    <span className="text-sm text-gray-700">{type}</span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Instructions Card */}
+                                <motion.div
+                                    className="p-4 bg-teal-50 rounded-lg border border-teal-200"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.6 }}
+                                >
+                                    <h3 className="text-teal-700 text-sm font-semibold mb-3 font-['Montserrat'] flex items-center">
+                                        <FiHelpCircle className="mr-2" />
+                                        SMTP Connection Guide
+                                    </h3>
+                                    <ul className="space-y-2 text-gray-600 text-xs">
+                                        <motion.li
+                                            className="flex items-start"
+                                            whileHover={{ x: 5 }}
+                                            transition={{ type: "spring", stiffness: 300 }}
+                                        >
+                                            <span className="text-teal-600 mr-2 mt-1">•</span>
+                                            <span>Ensure SMTP is enabled in your email provider settings</span>
+                                        </motion.li>
+                                        <motion.li
+                                            className="flex items-start"
+                                            whileHover={{ x: 5 }}
+                                            transition={{ type: "spring", stiffness: 300, delay: 0.1 }}
+                                        >
+                                            <span className="text-teal-600 mr-2 mt-1">•</span>
+                                            <span>Use app password if 2FA is enabled on your account</span>
+                                        </motion.li>
+                                        <motion.li
+                                            className="flex items-start"
+                                            whileHover={{ x: 5 }}
+                                            transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
+                                        >
+                                            <span className="text-teal-600 mr-2 mt-1">•</span>
+                                            <span>Common SMTP ports: 465 (SSL), 587 (TLS), 25 (None)</span>
+                                        </motion.li>
+                                    </ul>
+                                </motion.div>
+                            </form>
+                        ) : (
+                            <form onSubmit={handleSubmit} className="space-y-5">
+                                {/* IMAP Credentials Toggle */}
+                                {/* <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                    <label className="flex items-center space-x-2 text-gray-700 font-medium text-sm cursor-pointer">
+                                        <span>Use same credentials as SMTP</span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={toggleUseSmtpCredentialsForImap}
+                                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 ${formData.useSmtpCredentialsForImap ? 'bg-teal-600' : 'bg-gray-300'
+                                            }`}
+                                    >
+                                        <span
+                                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${formData.useSmtpCredentialsForImap ? 'translate-x-6' : 'translate-x-1'
+                                                }`}
+                                        />
+                                    </button>
+                                </div> */}
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* IMAP Email */}
+                                    <div>
+                                        <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                            <FiMail className="mr-2 text-teal-600" />
+                                            Email Address
+                                        </label>
+                                        <input
+                                            type="email"
+                                            name="imapEmail"
+                                            placeholder="your.email@example.com"
+                                            value={formData.useSmtpCredentialsForImap ? formData.email : formData.imapEmail}
+                                            onChange={handleChange}
+                                            disabled={formData.useSmtpCredentialsForImap}
+                                            required
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all font-['Poppins'] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                                        />
+                                    </div>
+
+                                    {/* IMAP Password */}
+                                    <div>
+                                        <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                            <FiLock className="mr-2 text-teal-600" />
+                                            Password
+                                        </label>
+                                        <input
+                                            type="password"
+                                            name="imapPassword"
+                                            placeholder="Enter your password"
+                                            value={formData.useSmtpCredentialsForImap ? formData.password : formData.imapPassword}
+                                            onChange={handleChange}
+                                            disabled={formData.useSmtpCredentialsForImap}
+                                            required
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all font-['Poppins'] disabled:bg-gray-50 disabled:cursor-not-allowed"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {/* IMAP Host */}
+                                    <motion.div
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.1 }}
+                                    >
+                                        <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                            <FiServer className="mr-2 text-teal-600" />
+                                            IMAP Host
+                                        </label>
+                                        <motion.input
+                                            type="text"
+                                            name="imapHost"
+                                            placeholder="imap.example.com"
+                                            value={formData.imapHost}
+                                            onChange={handleChange}
+                                            required
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white transition-all font-['Poppins'] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                            whileFocus={{
+                                                scale: 1.01,
+                                                transition: { duration: 0.2 }
+                                            }}
+                                        />
+                                    </motion.div>
+
+                                    {/* IMAP Port */}
+                                    <motion.div
+                                        initial={{ opacity: 0, x: -20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        transition={{ delay: 0.2 }}
+                                    >
+                                        <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                            <FiServer className="mr-2 text-teal-600" />
+                                            IMAP Port
+                                        </label>
+                                        <motion.input
+                                            type="number"
+                                            name="imapPort"
+                                            placeholder="993"
+                                            value={formData.imapPort}
+                                            onChange={handleChange}
+                                            required
+                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg text-sm bg-white transition-all font-['Poppins'] focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                            whileFocus={{
+                                                scale: 1.01,
+                                                transition: { duration: 0.2 }
+                                            }}
+                                            min="1"
+                                            max="65535"
+                                        />
+                                    </motion.div>
+                                </div>
+
+                                {/* IMAP Encryption */}
+                                <div>
+                                    <label className="block text-gray-700 mb-2 font-medium text-sm font-['Poppins'] flex items-center">
+                                        <FiShield className="mr-2 text-teal-600" />
+                                        Encryption
+                                    </label>
+                                    <div className="flex space-x-4">
+                                        {['SSL', 'TLS', 'None'].map((type) => (
+                                            <label key={type} className="flex items-center space-x-2 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="imapEncryption"
+                                                    value={type}
+                                                    checked={formData.imapEncryption === type}
+                                                    onChange={handleChange}
+                                                    className="text-teal-600 focus:ring-teal-500"
+                                                />
+                                                <span className="text-sm text-gray-700">{type}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* IMAP Instructions Card */}
+                                <motion.div
+                                    className="p-4 bg-teal-50 rounded-lg border border-teal-200"
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: 0.3 }}
+                                >
+                                    <h3 className="text-teal-700 text-sm font-semibold mb-3 font-['Montserrat'] flex items-center">
+                                        <FiHelpCircle className="mr-2" />
+                                        IMAP Connection Guide
+                                    </h3>
+                                    <ul className="space-y-2 text-gray-600 text-xs">
+                                        <motion.li
+                                            className="flex items-start"
+                                            whileHover={{ x: 5 }}
+                                            transition={{ type: "spring", stiffness: 300 }}
+                                        >
+                                            <span className="text-teal-600 mr-2 mt-1">•</span>
+                                            <span>Ensure IMAP is enabled in your email provider settings</span>
+                                        </motion.li>
+                                        <motion.li
+                                            className="flex items-start"
+                                            whileHover={{ x: 5 }}
+                                            transition={{ type: "spring", stiffness: 300, delay: 0.1 }}
+                                        >
+                                            <span className="text-teal-600 mr-2 mt-1">•</span>
+                                            <span>Use same password as SMTP if using same credentials</span>
+                                        </motion.li>
+                                        <motion.li
+                                            className="flex items-start"
+                                            whileHover={{ x: 5 }}
+                                            transition={{ type: "spring", stiffness: 300, delay: 0.2 }}
+                                        >
+                                            <span className="text-teal-600 mr-2 mt-1">•</span>
+                                            <span>Common IMAP ports: 993 (SSL), 143 (TLS), 110 (None)</span>
+                                        </motion.li>
+                                    </ul>
+                                </motion.div>
+                            </form>
+                        )}
+
+                        {/* Test Buttons */}
+                        <motion.div
+                            className="grid grid-cols-2 gap-3 mt-6"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.7 }}
+                        >
+                            <motion.button
+                                type="button"
+                                className="bg-white border border-teal-200 text-teal-700 py-3 rounded-lg font-semibold text-sm hover:bg-teal-50 hover:border-teal-300 transition-all font-['Poppins'] flex items-center justify-center"
+                                onClick={activeTab === 'smtp' ? handleTestSmtp : handleTestImap}
+                                whileHover={{ scale: 1.02, y: -1 }}
+                                whileTap={{ scale: 0.98 }}
+                                disabled={
+                                    activeTab === 'smtp'
+                                        ? !formData.smtpHost || !formData.email || !formData.password
+                                        : !formData.imapHost || !formData.email
+                                }
+                            >
+                                <FiMail className="mr-2" />
+                                Test {activeTab.toUpperCase()}
+                            </motion.button>
+                            <motion.button
+                                type="button"
+                                className="bg-white border border-teal-200 text-teal-700 py-3 rounded-lg font-semibold text-sm hover:bg-teal-50 hover:border-teal-300 transition-all font-['Poppins'] flex items-center justify-center"
+                                onClick={activeTab === 'smtp' ? handleTestSmtp : handleTestImap}
+                                whileHover={{ scale: 1.02, y: -1 }}
+                                whileTap={{ scale: 0.98 }}
+                                disabled={
+                                    activeTab === 'smtp'
+                                        ? !formData.smtpHost || !formData.email || !formData.password
+                                        : !formData.imapHost || !formData.email
+                                }
+                            >
+                                <FiServer className="mr-2" />
+                                Test Connection
+                            </motion.button>
+                        </motion.div>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="border-t border-gray-200 bg-gray-50 px-6 py-4">
+                    <div className="flex justify-between items-center">
+                        <motion.button
+                            type="button"
+                            className="px-6 py-2.5 bg-white text-gray-700 border border-gray-300 rounded-lg font-semibold text-sm hover:bg-gray-50 hover:border-gray-400 transition-all font-['Poppins']"
+                            onClick={onClose}
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                        >
+                            Cancel
+                        </motion.button>
+                        <motion.button
+                            type="submit"
+                            onClick={handleSubmit}
+                            disabled={loading}
+                            className="px-8 py-2.5 bg-gradient-to-r from-teal-800 to-teal-600 text-white rounded-lg font-semibold text-sm shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none transition-all font-['Poppins'] flex items-center"
+                            whileHover={{ scale: 1.02 }}
+                            whileTap={{ scale: 0.98 }}
+                        >
+                            {loading ? (
+                                <span className="inline-flex items-center">
+                                    <motion.span
+                                        className="w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"
+                                        animate={{ rotate: 360 }}
+                                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                                    />
+                                    Connecting...
+                                </span>
+                            ) : (
+                                'Save Configuration'
+                            )}
+                        </motion.button>
+                    </div>
+                </div>
+            </motion.div>
+
+            {/* Global Styles */}
             <style jsx global>{`
                 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@400;500;600;700&display=swap');
-            `}</style>
-
-            <style jsx>{`
-                .smtp-connect-modal {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    z-index: 1000;
+                
+                body {
                     font-family: 'Poppins', sans-serif;
                 }
-
-                .modal-overlay {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background-color: rgba(0, 0, 0, 0.7);
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    z-index: 1000;
+                
+                /* Custom scrollbar for the modal */
+                .overflow-y-auto::-webkit-scrollbar {
+                    width: 6px;
                 }
-
-                .modal-content {
-                    background: linear-gradient(145deg, #ffffff, #f8f9fa);
-                    border-radius: 16px;
-                    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-                    width: 850px;
-                    max-width: 90%;
-                    max-height: 90vh;
-                    overflow-y: auto;
-                    padding: 30px;
-                    border: 1px solid rgba(255, 255, 255, 0.3);
-                    backdrop-filter: blur(10px);
+                
+                .overflow-y-auto::-webkit-scrollbar-track {
+                    background: rgba(0, 0, 0, 0.05);
+                    border-radius: 10px;
                 }
-
-                .modal-header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: center;
-                    margin-bottom: 25px;
-                    position: relative;
+                
+                .overflow-y-auto::-webkit-scrollbar-thumb {
+                    background: rgba(0, 0, 0, 0.2);
+                    border-radius: 10px;
                 }
-
-                .modal-header h2 {
-                    margin: 0;
-                    font-size: 26px;
-                    color: #4f46e5;
-                    font-weight: 700;
-                    font-family: 'Montserrat', sans-serif;
-                    background: linear-gradient(135deg, #4be03dff 0%, #3d51d7ff 70%);
-                    -webkit-background-clip: text;
-                    -webkit-text-fill-color: transparent;
-                    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-                    letter-spacing: 0.5px;
-                }
-
-                .close-btn {
-                    background: #ff4757;
-                    border: none;
-                    font-size: 20px;
-                    cursor: pointer;
-                    color: white;
-                    padding: 8px;
-                    border-radius: 50%;
-                    transition: all 0.3s;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    width: 36px;
-                    height: 36px;
-                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-                }
-
-                .close-btn:hover {
-                    background: #ff6b81;
-                    transform: rotate(90deg);
-                }
-
-                .tabs {
-                    display: flex;
-                    border-bottom: 2px solid #a7b3dbff;
-                    margin-bottom: 25px;
-                }
-
-                .tab {
-                    padding: 12px 25px;
-                    background: none;
-                    border: none;
-                    border-bottom: 3px solid transparent;
-                    cursor: pointer;
-                    font-weight: 600;
-                    color: #6b7280;
-                    transition: all 0.3s;
-                    font-size: 15px;
-                    position: relative;
-                    font-family: 'Montserrat', sans-serif;
-                    letter-spacing: 0.5px;
-                }
-
-                .tab span {
-                    position: relative;
-                    z-index: 1;
-                }
-
-                .tab:hover {
-                    color: #4f46e5;
-                }
-
-                .tab.active {
-                    color: #4f46e5;
-                    border-bottom-color: #4f46e5;
-                }
-
-                .form-section {
-                    margin-bottom: 20px;
-                }
-
-                .form-section label {
-                    display: block;
-                    margin-bottom: 10px;
-                    font-weight: 500;
-                    color: #4b5563;
-                    font-size: 15px;
-                    font-family: 'Poppins', sans-serif;
-                }
-
-                .form-section input[type="text"],
-                .form-section input[type="email"],
-                .form-section input[type="password"] {
-                    width: 100%;
-                    padding: 12px 15px;
-                    border: 2px solid #e0e7ff;
-                    border-radius: 8px;
-                    font-size: 15px;
-                    transition: all 0.3s;
-                    background-color: #f8fafc;
-                    font-family: 'Poppins', sans-serif;
-                }
-
-                .form-section input[type="text"]:focus,
-                .form-section input[type="email"]:focus,
-                .form-section input[type="password"]:focus {
-                    outline: none;
-                    border-color: #4f46e5;
-                    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2);
-                    background-color: white;
-                }
-
-                .form-section input:disabled {
-                    background-color: #f1f5f9;
-                    cursor: not-allowed;
-                }
-
-                .toggle-group {
-                    margin: 20px 0;
-                }
-
-                .toggle-label {
-                    display: flex;
-                    align-items: center;
-                    justify-content: space-between;
-                    cursor: pointer;
-                    font-weight: 500;
-                    color: #4b5563;
-                    font-size: 15px;
-                    font-family: 'Poppins', sans-serif;
-                }
-
-                .toggle-switch {
-                    position: relative;
-                    display: inline-block;
-                    width: 50px;
-                    height: 26px;
-                    margin-left: 15px;
-                }
-
-                .toggle-input {
-                    opacity: 0;
-                    width: 0;
-                    height: 0;
-                }
-
-                .toggle-slider {
-                    position: absolute;
-                    cursor: pointer;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background-color: #cbd5e1;
-                    transition: .4s;
-                    border-radius: 34px;
-                }
-
-                .toggle-slider:before {
-                    position: absolute;
-                    content: "";
-                    height: 20px;
-                    width: 20px;
-                    left: 3px;
-                    bottom: 3px;
-                    background-color: white;
-                    transition: .4s;
-                    border-radius: 50%;
-                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-                }
-
-                .toggle-input:checked + .toggle-slider {
-                    background: linear-gradient(135deg, #4be03dff 0%, #3d51d7ff 70%);
-                }
-
-                .toggle-input:checked + .toggle-slider:before {
-                    transform: translateX(24px);
-                }
-
-                .radio-group {
-                    display: flex;
-                    align-items: center;
-                    gap: 20px;
-                    margin: 15px 0;
-                }
-
-                .radio-label {
-                    display: flex;
-                    align-items: center;
-                    cursor: pointer;
-                    font-size: 15px;
-                    color: #4b5563;
-                    font-family: 'Poppins', sans-serif;
-                    position: relative;
-                    padding-left: 30px;
-                    margin-bottom: 0;
-                }
-
-                .radio-label input[type="radio"] {
-                    position: absolute;
-                    opacity: 0;
-                    cursor: pointer;
-                    height: 0;
-                    width: 0;
-                }
-
-                .radio-custom {
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    height: 20px;
-                    width: 20px;
-                    background-color: #f8fafc;
-                    border-radius: 50%;
-                    border: 2px solid #cbd5e1;
-                    transition: all 0.3s;
-                }
-
-                .radio-label:hover input ~ .radio-custom {
-                    border-color: #4f46e5;
-                }
-
-                .radio-label input:checked ~ .radio-custom {
-                    background-color: #4f46e5;
-                    border-color: #4f46e5;
-                    box-shadow: inset 0 0 0 4px white;
-                }
-
-                .instructions {
-                    margin: 30px 0;
-                    padding: 25px;
-                    background: linear-gradient(145deg, #f0f4ff, #e0e7ff);
-                    border-radius: 12px;
-                    border-left: 5px solid #4f46e5;
-                }
-
-                .instructions h3 {
-                    margin-top: 0;
-                    font-size: 17px;
-                    color: #4f46e5;
-                    margin-bottom: 15px;
-                    font-weight: 600;
-                    font-family: 'Montserrat', sans-serif;
-                }
-
-                .instructions ul {
-                    padding-left: 25px;
-                    margin-bottom: 0;
-                    font-size: 15px;
-                    color: #4b5563;
-                    line-height: 1.7;
-                    list-style-type: none;
-                }
-
-                .instructions li {
-                    margin-bottom: 10px;
-                    position: relative;
-                    padding-left: 20px;
-                }
-
-                .instructions li:before {
-                    content: "•";
-                    color: #4f46e5;
-                    font-weight: bold;
-                    position: absolute;
-                    left: 0;
-                }
-
-                .test-buttons {
-                    margin: 25px 0;
-                }
-
-                .btn-test {
-                    padding: 12px 24px;
-                    background: linear-gradient(90deg, #4f46e5, #672bceff);
-                    color: white;
-                    border: none;
-                    border-radius: 8px;
-                    font-weight: 600;
-                    cursor: pointer;
-                    font-size: 15px;
-                    transition: all 0.3s;
-                    font-family: 'Poppins', sans-serif;
-                    box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2);
-                    letter-spacing: 0.5px;
-                }
-
-                .btn-test:hover {
-                    background: linear-gradient(90deg, #4338ca, #6d28d9);
-                    box-shadow: 0 6px 8px rgba(79, 70, 229, 0.3);
-                    transform: translateY(-2px);
-                }
-
-                .error-message {
-                    color: #dc2626;
-                    background-color: #fee2e2;
-                    padding: 15px;
-                    border-radius: 8px;
-                    margin-bottom: 25px;
-                    font-size: 15px;
-                    border-left: 4px solid #dc2626;
-                    font-family: 'Poppins', sans-serif;
-                }
-
-                .modal-actions {
-                    display: flex;
-                    justify-content: flex-end;
-                    gap: 15px;
-                    margin-top: 30px;
-                    padding-top: 20px;
-                    border-top: 2px solid #e0e7ff;
-                }
-
-                .btn-cancel, .btn-confirm {
-                    padding: 12px 25px;
-                    border-radius: 8px;
-                    font-weight: 600;
-                    cursor: pointer;
-                    transition: all 0.3s;
-                    font-size: 15px;
-                    font-family: 'Poppins', sans-serif;
-                    letter-spacing: 0.5px;
-                }
-
-                .btn-cancel {
-                    background: white;
-                    color: #4b5563;
-                    border: 2px solid #e0e7ff;
-                    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-                }
-
-                .btn-cancel:hover {
-                    background: #f3f4f6;
-                    border-color: #cbd5e1;
-                    color: #1e293b;
-                }
-
-                .btn-confirm {
-                    background: linear-gradient(90deg, #4f46e5, #7c3aed);
-                    color: white;
-                    border: 2px solid transparent;
-                    box-shadow: 0 4px 6px rgba(79, 70, 229, 0.2);
-                }
-
-                .btn-confirm:hover {
-                    background: linear-gradient(90deg, #4338ca, #6d28d9);
-                    box-shadow: 0 6px 8px rgba(79, 70, 229, 0.3);
-                }
-
-                .btn-confirm:disabled {
-                    background: #c7d2fe;
-                    cursor: not-allowed;
-                    box-shadow: none;
-                }
-
-                @media (max-width: 768px) {
-                    .modal-content {
-                        width: 95%;
-                        padding: 20px;
-                    }
-
-                    .modal-header h2 {
-                        font-size: 22px;
-                    }
-
-                    .radio-group {
-                        flex-direction: column;
-                        align-items: flex-start;
-                        gap: 12px;
-                    }
-
-                    .modal-actions {
-                        flex-direction: column;
-                        gap: 12px;
-                    }
-
-                    .btn-cancel, .btn-confirm {
-                        width: 100%;
-                        text-align: center;
-                    }
-
-                    .tabs {
-                        justify-content: center;
-                    }
-
-                    .tab {
-                        padding: 10px 15px;
-                        font-size: 14px;
-                    }
-                }
-
-                @keyframes shake {
-                    0%, 100% { transform: translateX(0); }
-                    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
-                    20%, 40%, 60%, 80% { transform: translateX(5px); }
-                }
-
-                .shake-on-hover:hover {
-                    animation: shake 0.5s ease-in-out;
+                
+                .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+                    background: rgba(0, 0, 0, 0.3);
                 }
             `}</style>
         </div>
