@@ -117,7 +117,7 @@ export default function Navbar() {
                                     <Link
                                         to={item.path}
                                         onClick={() => setProfileOpen(false)}
-                                        className="flex items-center space-x-3 w-full px-3 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-700 rounded-lg transition-all duration-200 group border border-transparent hover:border-blue-100"
+                                        className="flex items-center space-x-3 w-full px-3 py-2.5 text-sm text-gray-700 hover:bg-teal-50 hover:text-teal-700 rounded-lg transition-all duration-200 group border border-transparent hover:border-blue-100"
                                     >
                                         <div className="text-gray-500 group-hover:text-blue-600 transition-colors">
                                             {item.icon}
@@ -173,7 +173,7 @@ export default function Navbar() {
                             <div className="relative">
                                 <button
                                     onClick={() => setProfileOpen(!profileOpen)}
-                                    className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:text-gray-900 font-medium text-sm hover:bg-gray-50 rounded-lg transition-all duration-200 "
+                                    className="flex items-center space-x-2 px-4 py-2 text-gray-700 hover:text-gray-900 font-medium text-sm hover:bg-gray-50  rounded-lg transition-all duration-200 "
                                 >
                                     <div className="w-10 h-10 rounded-full bg-gradient-to-r from-teal-800 to-teal-600 flex items-center justify-center text-white font-bold">
                                         {currentUser?.name?.charAt(0)?.toUpperCase() || 'G'}
@@ -184,7 +184,6 @@ export default function Navbar() {
                                     />
                                 </button>
 
-                                {/* Dropdown (Same for both guest and user) */}
                                 <AnimatePresence>
                                     {profileOpen && <ProfileDropdown />}
                                 </AnimatePresence>
