@@ -7,6 +7,10 @@ import {
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import googleLogo from "../../assets/google-icon-svgrepo-com.svg";
+import MicrosoftLogo from "../../assets/microsoft.svg";
+import SmtpLogo from "../../assets/smtp.svg";
+
 
 // Components
 import GoogleConnect from './GoogleConnect';
@@ -247,7 +251,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             id: 'google',
             name: "Google",
             description: "Gmail & Google Workspace",
-            icon: "G",
+            icon: <img src={googleLogo} alt="Google" className="w-'auto' h-9" />,
             color: "from-red-500 to-red-600",
             iconColor: "text-red-600",
             bgColor: "bg-red-50",
@@ -259,7 +263,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             id: 'microsoft',
             name: "Microsoft",
             description: "Exchange, O365, Outlook & Hotmail",
-            icon: "M",
+            icon: <img src={MicrosoftLogo} alt="Microsoft" className="w-'auto' h-7" />,
             color: "from-blue-500 to-blue-600",
             iconColor: "text-blue-600",
             bgColor: "bg-blue-50",
@@ -271,7 +275,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             id: 'smtp',
             name: "SMTP/IMAP",
             description: "Any other Email Service provider account",
-            icon: "S",
+            icon: <img src={SmtpLogo} alt="Smtp/Imap" className="w-'auto' h-9" />,
             color: "from-green-500 to-green-600",
             iconColor: "text-green-600",
             bgColor: "bg-green-50",
@@ -351,7 +355,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                         <FiShield className="w-3 h-3 text-green-500 mr-1" />
                                         Secure
                                     </div>
-                                    <div className="flex items-center text-indigo-600 text-sm font-medium group-hover:text-indigo-700 transition-colors">
+                                    <div className="flex items-center text-indigo-600 text-sm font-medium group-hover:text-teal-700 transition-colors">
                                         Connect
                                         <FiChevronRight className="ml-1 w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
                                     </div>

@@ -443,8 +443,8 @@ const MicrosoftConnectModal = ({ onClose }) => {
 
     return (
         <div className="modal">
-            <p>Redirecting to Microsoft login...</p>
-            <button onClick={onClose}>Cancel</button>
+            {/* <p>Redirecting to Microsoft login...</p>
+            <button onClick={onClose}>Cancel</button> */}
         </div>
     );
 };
