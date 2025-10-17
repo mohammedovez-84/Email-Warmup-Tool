@@ -7,9 +7,13 @@
 const axios = require('axios');
 require('dotenv').config();
 const MicrosoftUser = require('../models/MicrosoftUser'); // Your Sequelize model
+const { Op } = require('sequelize');
+
 
 // Save or update Microsoft user in the DB using Sequelize
-async function saveMicrosoftUser(profile, refreshToken, accessToken, expiresIn) {
+async function saveMicrosoftUser(profile, refreshToken, accessToken, expiresIn, userId) {
+    console.log("profile: ", profile);
+
     const email = profile.emails?.[0]?.value || null;
     const name = profile.displayName || null;
     const microsoftId = profile.id;
@@ -17,7 +21,7 @@ async function saveMicrosoftUser(profile, refreshToken, accessToken, expiresIn) 
 
     const existingUser = await MicrosoftUser.findOne({
         where: {
-            [MicrosoftUser.sequelize.Op.or]: [
+            [Op.or]: [
                 { microsoft_id: microsoftId },
                 { email: email }
             ]
@@ -39,7 +43,7 @@ async function saveMicrosoftUser(profile, refreshToken, accessToken, expiresIn) 
             refresh_token: refreshToken,
             access_token: accessToken,
             expires_at: expiresAt,
-            user_id, // static for now, set dynamically if needed
+            user_id: userId, // static for now, set dynamically if needed
             warmupStatus: 'active'
         });
     }
