@@ -40,7 +40,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // Routes
-app.use('/auth/microsoft', microsoftAuthRoutes);
+app.use('/auth/microsoft2', microsoftAuthRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api', googleRoutes);
 app.use('/auth', microsoftRoutes);
