@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
-import { FiPieChart, FiBarChart2, FiInfo, FiExternalLink, FiSettings, FiRefreshCw } from 'react-icons/fi';
+import { FiPieChart, FiBarChart2, FiInfo, FiExternalLink, FiRefreshCw } from 'react-icons/fi';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
 
@@ -50,11 +50,15 @@ const SpamAnalytics = ({ selectedAccount }) => {
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#A4DE6C', '#D0ED57'];
 
   return (
-    <div className="spam-analysis">
-      <div className="spam-triggers">
-        <h3><FiPieChart size={18} style={{ marginRight: '8px' }} /> Spam Triggers Analysis</h3>
-        <div className="spam-chart-container">
-          <ResponsiveContainer width="100%" height={300}>
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {/* Spam Triggers */}
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <h3 className="flex items-center text-lg font-semibold text-gray-800 mb-5">
+          <FiPieChart size={18} className="mr-2" />
+          Spam Triggers Analysis
+        </h3>
+        <div className="h-80">
+          <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
                 data={spamTriggersData}
@@ -76,10 +80,14 @@ const SpamAnalytics = ({ selectedAccount }) => {
         </div>
       </div>
 
-      <div className="reputation-factors">
-        <h3><FiBarChart2 size={18} style={{ marginRight: '8px' }} /> Reputation Factors</h3>
-        <div className="radar-chart-container">
-          <ResponsiveContainer width="100%" height={300}>
+      {/* Reputation Factors */}
+      <div className="bg-white rounded-xl shadow-sm p-6">
+        <h3 className="flex items-center text-lg font-semibold text-gray-800 mb-5">
+          <FiBarChart2 size={18} className="mr-2" />
+          Reputation Factors
+        </h3>
+        <div className="h-80">
+          <ResponsiveContainer width="100%" height="100%">
             <RadarChart cx="50%" cy="50%" outerRadius="80%" data={reputationFactors}>
               <PolarGrid />
               <PolarAngleAxis dataKey="subject" />
@@ -105,32 +113,48 @@ const SpamAnalytics = ({ selectedAccount }) => {
         </div>
       </div>
 
-      <div className="spam-tips">
-        <h3>Improvement Recommendations</h3>
-        <ul>
-          <li>
-            <FiInfo className="tip-icon" />
-            <strong>Content Optimization:</strong> Reduce use of spam trigger words like "free", "guarantee", etc.
-            <a href="#" className="learn-more">Learn more <FiExternalLink size={12} /></a>
+      {/* Improvement Recommendations */}
+      <div className="lg:col-span-2 bg-white rounded-xl shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-gray-800 mb-4">Improvement Recommendations</h3>
+        <ul className="space-y-3">
+          <li className="flex items-start pb-3 border-b border-gray-100">
+            <FiInfo className="text-blue-600 mt-1 mr-3 flex-shrink-0" />
+            <div className="flex-1">
+              <strong>Content Optimization:</strong> Reduce use of spam trigger words like "free", "guarantee", etc.
+              <a href="#" className="text-blue-600 text-sm ml-2 inline-flex items-center">
+                Learn more <FiExternalLink size={12} className="ml-1" />
+              </a>
+            </div>
           </li>
-          <li>
-            <FiInfo className="tip-icon" />
-            <strong>Formatting:</strong> Maintain a healthy text-to-image ratio (at least 60:40).
+          <li className="flex items-start pb-3 border-b border-gray-100">
+            <FiInfo className="text-blue-600 mt-1 mr-3 flex-shrink-0" />
+            <div className="flex-1">
+              <strong>Formatting:</strong> Maintain a healthy text-to-image ratio (at least 60:40).
+            </div>
           </li>
-          <li>
-            <FiInfo className="tip-icon" />
-            <strong>Authentication:</strong> Implement DMARC for {selectedAccount?.domain || 'your domain'}.
-            {selectedAccount?.authentication?.includes('DMARC') &&
-              <span className="implemented"> (Implemented)</span>}
+          <li className="flex items-start pb-3 border-b border-gray-100">
+            <FiInfo className="text-blue-600 mt-1 mr-3 flex-shrink-0" />
+            <div className="flex-1">
+              <strong>Authentication:</strong> Implement DMARC for {selectedAccount?.domain || 'your domain'}.
+              {selectedAccount?.authentication?.includes('DMARC') && (
+                <span className="text-green-600 font-medium ml-2">(Implemented)</span>
+              )}
+            </div>
           </li>
-          <li>
-            <FiInfo className="tip-icon" />
-            <strong>List Hygiene:</strong> Clean your email list regularly to remove inactive addresses.
-            <a href="#" className="learn-more">Run cleanup now <FiExternalLink size={12} /></a>
+          <li className="flex items-start pb-3 border-b border-gray-100">
+            <FiInfo className="text-blue-600 mt-1 mr-3 flex-shrink-0" />
+            <div className="flex-1">
+              <strong>List Hygiene:</strong> Clean your email list regularly to remove inactive addresses.
+              <a href="#" className="text-blue-600 text-sm ml-2 inline-flex items-center">
+                Run cleanup now <FiExternalLink size={12} className="ml-1" />
+              </a>
+            </div>
           </li>
-          <li>
-            <FiInfo className="tip-icon" />
-            <strong>Engagement:</strong> Segment your list to send more targeted content.
+          <li className="flex items-start">
+            <FiInfo className="text-blue-600 mt-1 mr-3 flex-shrink-0" />
+            <div className="flex-1">
+              <strong>Engagement:</strong> Segment your list to send more targeted content.
+            </div>
           </li>
         </ul>
       </div>
@@ -162,129 +186,104 @@ const ScoreGauge = ({ value, max = 100 }) => {
 };
 
 // Account Analytics Component
-const AccountAnalytics = ({ selectedAccount, accountScores, getDeliverabilityData, engagementData }) => {
+const AccountAnalytics = ({ selectedAccount, accountScores, getDeliverabilityData }) => {
   return (
-    <div className="account-details-section">
+    <div className="bg-white rounded-xl shadow-sm p-6">
       {selectedAccount && (
         <>
-          <div className="account-header">
-            <h2>{selectedAccount.name}</h2>
-            <div className="account-actions">
-              <button className="action-btn">
-                <FiSettings /> Settings
-              </button>
-              <button className="action-btn primary">
-                <FiRefreshCw /> Refresh Data
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+            <h2 className="text-2xl font-bold text-gray-900">{selectedAccount.name}</h2>
+            <div className="flex gap-3">
+              <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
+                <FiRefreshCw size={16} />
+                Refresh Data
               </button>
             </div>
           </div>
 
-          <div className="account-stats-grid">
-            <div className="stat-card">
-              <h4>Reputation Score</h4>
-              <div className="stat-value-large">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            {/* Reputation Score */}
+            <div className="bg-gray-50 rounded-lg p-4 text-center">
+              <h4 className="text-sm font-medium text-gray-600 mb-3">Reputation Score</h4>
+              <div className="flex justify-center mb-3">
                 <ScoreGauge value={accountScores[selectedAccount.id]?.score || 0} />
               </div>
-              <div className="stat-description">
-                {accountScores[selectedAccount.id]?.reputation === 'excellent' ?
-                  'Excellent sender reputation' :
-                  accountScores[selectedAccount.id]?.reputation === 'good' ?
-                    'Good sender reputation' :
-                    'Needs improvement'}
+              <div className="text-sm text-gray-600">
+                {accountScores[selectedAccount.id]?.reputation === 'excellent'
+                  ? 'Excellent sender reputation'
+                  : accountScores[selectedAccount.id]?.reputation === 'good'
+                  ? 'Good sender reputation'
+                  : 'Needs improvement'}
               </div>
             </div>
 
-            <div className="stat-card">
-              <h4>Authentication</h4>
-              <div className="auth-badges">
+            {/* Authentication */}
+            <div className="bg-gray-50 rounded-lg p-4 text-center">
+              <h4 className="text-sm font-medium text-gray-600 mb-3">Authentication</h4>
+              <div className="flex flex-wrap justify-center gap-2 mb-3">
                 {selectedAccount.authentication.map((auth, index) => (
-                  <span key={index} className="auth-badge">{auth}</span>
+                  <span key={index} className="px-3 py-1 bg-green-500 text-white text-xs font-medium rounded-full">
+                    {auth}
+                  </span>
                 ))}
                 {selectedAccount.authentication.length < 3 && (
-                  <span className="auth-badge missing">+{3 - selectedAccount.authentication.length} more needed</span>
+                  <span className="px-3 py-1 bg-yellow-500 text-white text-xs font-medium rounded-full">
+                    +{3 - selectedAccount.authentication.length} more needed
+                  </span>
                 )}
               </div>
-              <div className="stat-description">
-                {selectedAccount.authentication.length === 3 ?
-                  'Full authentication configured' :
-                  'Configure DMARC for better deliverability'}
+              <div className="text-sm text-gray-600">
+                {selectedAccount.authentication.length === 3
+                  ? 'Full authentication configured'
+                  : 'Configure DMARC for better deliverability'}
               </div>
             </div>
 
-            <div className="stat-card">
-              <h4>Recent Activity</h4>
-              <div className="stat-value">
+            {/* Recent Activity */}
+            <div className="bg-gray-50 rounded-lg p-4 text-center">
+              <h4 className="text-sm font-medium text-gray-600 mb-3">Recent Activity</h4>
+              <div className="text-xl font-bold text-gray-900 mb-2">
                 {new Date(selectedAccount.lastActive).toLocaleString()}
               </div>
-              <div className="stat-description">
+              <div className="text-sm text-gray-600">
                 Last email sent {Math.floor((new Date() - new Date(selectedAccount.lastActive)) / (1000 * 60 * 60))} hours ago
               </div>
             </div>
 
-            <div className="stat-card">
-              <h4>Issues Detected</h4>
-              <div className="stat-value">
+            {/* Issues Detected */}
+            <div className="bg-gray-50 rounded-lg p-4 text-center">
+              <h4 className="text-sm font-medium text-gray-600 mb-3">Issues Detected</h4>
+              <div className="text-xl font-bold text-gray-900 mb-2">
                 {selectedAccount.issues.length || 'None'}
               </div>
-              <div className="stat-description">
-                {selectedAccount.issues.length ?
-                  selectedAccount.issues.join(', ') :
-                  'No critical issues found'}
+              <div className="text-sm text-gray-600">
+                {selectedAccount.issues.length
+                  ? selectedAccount.issues.join(', ')
+                  : 'No critical issues found'}
               </div>
             </div>
           </div>
 
-          <div className="account-charts">
-            <div className="account-chart-card">
-              <h4>Daily Volume</h4>
-              <div className="chart-container">
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={getDeliverabilityData(selectedAccount.id)}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line
-                      type="monotone"
-                      dataKey="inbox"
-                      stroke="#10B981"
-                      strokeWidth={2}
-                      dot={{ r: 4 }}
-                      activeDot={{ r: 6 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="account-chart-card">
-              <h4>Engagement Trend</h4>
-              <div className="chart-container">
-                <ResponsiveContainer width="100%" height={250}>
-                  <LineChart data={engagementData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line
-                      type="monotone"
-                      dataKey="opens"
-                      stroke="#3B82F6"
-                      strokeWidth={2}
-                      dot={{ r: 4 }}
-                      activeDot={{ r: 6 }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="clicks"
-                      stroke="#10B981"
-                      strokeWidth={2}
-                      dot={{ r: 4 }}
-                      activeDot={{ r: 6 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+          {/* Daily Volume - Now Full Width */}
+          <div className="bg-gray-50 rounded-lg p-4">
+            <h4 className="text-lg font-semibold text-gray-800 mb-4">Daily Volume</h4>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={getDeliverabilityData(selectedAccount.id)}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="inbox"
+                    stroke="#10B981"
+                    strokeWidth={2}
+                    dot={{ r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </>
@@ -412,229 +411,247 @@ const AnalyticsDashboard = () => {
 
   if (loading) {
     return (
-      <div className="analytics-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading analytics data...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-gray-600">Loading analytics data...</p>
       </div>
     );
   }
 
   return (
-    <div className="analytics-dashboard">
-      {/* Header with title and info */}
-      <div className="dashboard-header">
-        <div className="header-left">
-          <h1>Email Analytics Dashboard</h1>
-          <div className="last-updated">
-            <span>Last updated: {currentTime}</span>
+    <div className="min-h-screen bg-gray-50 p-6">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Email Analytics Dashboard</h1>
+          <div className="text-sm text-gray-600 mt-1">
+            Last updated: {currentTime}
           </div>
         </div>
-        <div className="header-right">
-          <div className="header-actions">
-            <select className="time-filter">
-              <option>Last 7 days</option>
-              <option>Last 30 days</option>
-              <option>Last 90 days</option>
-            </select>
-            <button className="export-btn">Export Report</button>
-          </div>
+        <div className="flex gap-3">
+          <select className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+            <option>Last 7 days</option>
+            <option>Last 30 days</option>
+            <option>Last 90 days</option>
+          </select>
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors">
+            Export Report
+          </button>
         </div>
       </div>
 
       {/* Navigation Tabs */}
-      <div className="nav-tabs">
-        <div className="tabs-container">
+      <div className="border-b border-gray-200 mb-6">
+        <div className="flex items-center gap-2">
           <button
-            className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
+            className={`px-6 py-3 font-medium text-sm relative ${
+              activeTab === 'overview'
+                ? 'text-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
             onClick={() => setActiveTab('overview')}
           >
             Overview
+            {activeTab === 'overview' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+            )}
           </button>
           <button
-            className={`tab ${activeTab === 'spam' ? 'active' : ''}`}
+            className={`px-6 py-3 font-medium text-sm relative ${
+              activeTab === 'spam'
+                ? 'text-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
             onClick={() => setActiveTab('spam')}
           >
             Spam Analysis
+            {activeTab === 'spam' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+            )}
           </button>
           <button
-            className={`tab ${activeTab === 'account' ? 'active' : ''}`}
+            className={`px-6 py-3 font-medium text-sm relative ${
+              activeTab === 'account'
+                ? 'text-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
             onClick={() => setActiveTab('account')}
           >
             Account Details
+            {activeTab === 'account' && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600"></div>
+            )}
           </button>
-          <div className="tab-spacer"></div>
-          <button className="filter-btn">
-            <i className="fas fa-filter"></i>
-            Filters
-          </button>
+          <div className="flex-1"></div>
         </div>
       </div>
 
       {/* Content based on active tab */}
       {activeTab === 'overview' && (
-        <>
+        <div className="space-y-6">
           {/* Summary Cards */}
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-icon delivered">
-                <i className="fas fa-paper-plane"></i>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {/* Delivered */}
+            <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center mr-4">
+                <i className="fas fa-paper-plane text-white text-lg"></i>
               </div>
-              <div className="stat-info">
-                <h3>Delivered</h3>
-                <div className="stat-number">{emailStats.delivered}</div>
-                <div className="stat-rate">{deliveryRate}%</div>
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-icon opened">
-                <i className="fas fa-envelope-open"></i>
-              </div>
-              <div className="stat-info">
-                <h3>Opened</h3>
-                <div className="stat-number">{emailStats.opened}</div>
-                <div className="stat-rate">{openRate}%</div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-600">Delivered</h3>
+                <div className="text-2xl font-bold text-gray-900">{emailStats.delivered}</div>
+                <div className="text-sm font-semibold text-green-600">{deliveryRate}%</div>
               </div>
             </div>
 
-            <div className="stat-card">
-              <div className="stat-icon clicked">
-                <i className="fas fa-mouse-pointer"></i>
+            {/* Opened */}
+            <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center mr-4">
+                <i className="fas fa-envelope-open text-white text-lg"></i>
               </div>
-              <div className="stat-info">
-                <h3>Clicked</h3>
-                <div className="stat-number">{emailStats.clicked}</div>
-                <div className="stat-rate">{clickRate}%</div>
-              </div>
-            </div>
-
-            <div className="stat-card">
-              <div className="stat-icon replied">
-                <i className="fas fa-reply"></i>
-              </div>
-              <div className="stat-info">
-                <h3>Replied</h3>
-                <div className="stat-number">{emailStats.replied}</div>
-                <div className="stat-rate">{replyRate}%</div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-600">Opened</h3>
+                <div className="text-2xl font-bold text-gray-900">{emailStats.opened}</div>
+                <div className="text-sm font-semibold text-green-600">{openRate}%</div>
               </div>
             </div>
 
-            <div className="stat-card">
-              <div className="stat-icon bounced">
-                <i className="fas fa-exclamation-circle"></i>
+            {/* Clicked */}
+            <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center mr-4">
+                <i className="fas fa-mouse-pointer text-white text-lg"></i>
               </div>
-              <div className="stat-info">
-                <h3>Bounced</h3>
-                <div className="stat-number">{emailStats.bounced}</div>
-                <div className="stat-rate">{bounceRate}%</div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-600">Clicked</h3>
+                <div className="text-2xl font-bold text-gray-900">{emailStats.clicked}</div>
+                <div className="text-sm font-semibold text-green-600">{clickRate}%</div>
+              </div>
+            </div>
+
+            {/* Replied */}
+            <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mr-4">
+                <i className="fas fa-reply text-white text-lg"></i>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-600">Replied</h3>
+                <div className="text-2xl font-bold text-gray-900">{emailStats.replied}</div>
+                <div className="text-sm font-semibold text-green-600">{replyRate}%</div>
+              </div>
+            </div>
+
+            {/* Bounced */}
+            <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow">
+              <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center mr-4">
+                <i className="fas fa-exclamation-circle text-white text-lg"></i>
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-gray-600">Bounced</h3>
+                <div className="text-2xl font-bold text-gray-900">{emailStats.bounced}</div>
+                <div className="text-sm font-semibold text-red-600">{bounceRate}%</div>
               </div>
             </div>
           </div>
 
-          {/* Campaign Performance Bar Chart */}
-          <div className="chart-container">
-            <div className="chart-header">
-              <h2>Campaign Performance</h2>
-            </div>
-            <ResponsiveContainer width="100%" height={350}>
-              <BarChart
-                data={campaignPerformance}
-                margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="sent" fill={BAR_COLORS[0]} name="Emails Sent" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="opened" fill={BAR_COLORS[1]} name="Opened" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="clicked" fill={BAR_COLORS[2]} name="Clicked" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="replied" fill={BAR_COLORS[3]} name="Replied" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          <div className="charts-row">
-            {/* Engagement Over Time Line Chart */}
-            <div className="chart-container half-width">
-              <div className="chart-header">
-                <h2>Engagement Over Time</h2>
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart
-                  data={engagementData}
+          {/* Campaign Performance */}
+          <div className="bg-white rounded-xl shadow-sm p-6">
+            <h2 className="text-xl font-semibold text-gray-800 mb-6">Campaign Performance</h2>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={campaignPerformance}
                   margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="day" />
+                  <XAxis dataKey="name" />
                   <YAxis />
                   <Tooltip />
                   <Legend />
-                  <Area type="monotone" dataKey="opened" stroke={COLORS[0]} fill={`url(#colorOpened)`} strokeWidth={2} name="Opened" />
-                  <Area type="monotone" dataKey="clicked" stroke={COLORS[2]} fill={`url(#colorClicked)`} strokeWidth={2} name="Clicked" />
-                  <defs>
-                    <linearGradient id="colorOpened" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS[0]} stopOpacity={0.8} />
-                      <stop offset="95%" stopColor={COLORS[0]} stopOpacity={0.1} />
-                    </linearGradient>
-                    <linearGradient id="colorClicked" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORS[2]} stopOpacity={0.8} />
-                      <stop offset="95%" stopColor={COLORS[2]} stopOpacity={0.1} />
-                    </linearGradient>
-                  </defs>
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Device Distribution Pie Chart */}
-            <div className="chart-container half-width">
-              <div className="chart-header">
-                <h2>Device Distribution</h2>
-              </div>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={deviceData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  >
-                    {deviceData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
+                  <Bar dataKey="sent" fill={BAR_COLORS[0]} name="Emails Sent" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="opened" fill={BAR_COLORS[1]} name="Opened" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="clicked" fill={BAR_COLORS[2]} name="Clicked" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="replied" fill={BAR_COLORS[3]} name="Replied" radius={[4, 4, 0, 0]} />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
-        </>
+
+          {/* Charts Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Engagement Over Time */}
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-6">Engagement Over Time</h2>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={engagementData}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="day" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Area type="monotone" dataKey="opened" stroke={COLORS[0]} fill={`url(#colorOpened)`} strokeWidth={2} name="Opened" />
+                    <Area type="monotone" dataKey="clicked" stroke={COLORS[2]} fill={`url(#colorClicked)`} strokeWidth={2} name="Clicked" />
+                    <defs>
+                      <linearGradient id="colorOpened" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={COLORS[0]} stopOpacity={0.8} />
+                        <stop offset="95%" stopColor={COLORS[0]} stopOpacity={0.1} />
+                      </linearGradient>
+                      <linearGradient id="colorClicked" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={COLORS[2]} stopOpacity={0.8} />
+                        <stop offset="95%" stopColor={COLORS[2]} stopOpacity={0.1} />
+                      </linearGradient>
+                    </defs>
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Device Distribution */}
+            <div className="bg-white rounded-xl shadow-sm p-6">
+              <h2 className="text-xl font-semibold text-gray-800 mb-6">Device Distribution</h2>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={deviceData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    >
+                      {deviceData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {activeTab === 'spam' && (
-        <div className="tab-content">
-          <SpamAnalytics selectedAccount={selectedAccount} />
-        </div>
+        <SpamAnalytics selectedAccount={selectedAccount} />
       )}
 
       {activeTab === 'account' && (
-        <div className="tab-content">
-          <AccountAnalytics
-            selectedAccount={selectedAccount}
-            accountScores={accountScores}
-            getDeliverabilityData={getDeliverabilityData}
-            engagementData={engagementData}
-          />
-        </div>
+        <AccountAnalytics
+          selectedAccount={selectedAccount}
+          accountScores={accountScores}
+          getDeliverabilityData={getDeliverabilityData}
+        />
       )}
 
       {/* Footer */}
-      <div className="dashboard-footer">
-        <span>© Email Analytics Dashboard</span>
+      <div className="mt-8 pt-6 border-t border-gray-200 text-center text-gray-600 text-sm">
+        © Email Analytics Dashboard
       </div>
 
       {/* Inject Font Awesome for icons */}
@@ -642,573 +659,5 @@ const AnalyticsDashboard = () => {
     </div>
   );
 };
-
-// CSS Styles
-const styles = `
-.analytics-dashboard {
-  padding: 20px 30px;
-  font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f8fafc;
-  min-height: 100vh;
-  margin-left: 240px;
-  width: calc(100% - 240px);
-}
-
-/* Header Styles */
-.dashboard-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.header-left h1 {
-  color: #1e293b;
-  font-weight: 700;
-  font-size: 24px;
-  margin: 0 0 8px 0;
-}
-
-.last-updated {
-  font-size: 14px;
-  color: #64748b;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.time-filter {
-  padding: 8px 16px;
-  border-radius: 6px;
-  border: 1px solid #e2e8f0;
-  background: white;
-  color: #64748b;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.export-btn {
-  padding: 8px 16px;
-  background: #4F46E5;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.3s ease;
-}
-
-.export-btn:hover {
-  background: #4338CA;
-}
-
-/* Navigation Tabs */
-.nav-tabs {
-  margin-bottom: 24px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.tabs-container {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.tab {
-  padding: 12px 20px;
-  background: none;
-  border: none;
-  color: #64748b;
-  font-weight: 500;
-  cursor: pointer;
-  position: relative;
-  transition: color 0.3s ease;
-}
-
-.tab:hover {
-  color: #4F46E5;
-}
-
-.tab.active {
-  color: #4F46E5;
-}
-
-.tab.active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: #4F46E5;
-}
-
-.tab-spacer {
-  flex: 1;
-}
-
-.filter-btn {
-  padding: 8px 16px;
-  background: white;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.3s ease;
-}
-
-.filter-btn:hover {
-  background: #f1f5f9;
-}
-
-/* Stats Grid */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.stat-card {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  display: flex;
-  align-items: center;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.stat-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
-}
-
-.stat-icon {
-  width: 50px;
-  height: 50px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-right: 15px;
-  font-size: 20px;
-  color: white;
-}
-
-.stat-icon.delivered {
-  background: linear-gradient(135deg, #4F46E5 0%, #7C73E6 100%);
-}
-
-.stat-icon.opened {
-  background: linear-gradient(135deg, #10B981 0%, #34D399 100%);
-}
-
-.stat-icon.clicked {
-  background: linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%);
-}
-
-.stat-icon.replied {
-  background: linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%);
-}
-
-.stat-icon.bounced {
-  background: linear-gradient(135deg, #EF4444 0%, #F87171 100%);
-}
-
-.stat-info h3 {
-  margin: 0 0 5px 0;
-  color: #64748b;
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.stat-number {
-  font-size: 24px;
-  font-weight: 700;
-  color: #1e293b;
-  margin-bottom: 2px;
-}
-
-.stat-rate {
-  font-size: 14px;
-  color: #10b981;
-  font-weight: 600;
-}
-
-.stat-icon.bounced ~ .stat-info .stat-rate {
-  color: #EF4444;
-}
-
-/* Chart Containers */
-.chart-container {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.chart-header {
-  margin-bottom: 20px;
-}
-
-.chart-header h2 {
-  margin: 0;
-  color: #334155;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.charts-row {
-  display: flex;
-  gap: 24px;
-}
-
-.half-width {
-  flex: 1;
-}
-
-/* Footer */
-.dashboard-footer {
-  margin-top: 40px;
-  padding: 20px 0;
-  text-align: center;
-  color: #64748b;
-  font-size: 14px;
-  border-top: 1px solid #e2e8f0;
-}
-
-/* Loading State */
-.analytics-loading {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 60vh;
-}
-
-.loading-spinner {
-  border: 4px solid #f3f3f3;
-  border-top: 4px solid #4F46E5;
-  border-radius: 50%;
-  width: 50px;
-  height: 50px;
-  animation: spin 1s linear infinite;
-  margin-bottom: 20px;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Spam Analysis Styles */
-.spam-analysis {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
-
-.spam-triggers, .reputation-factors {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.spam-triggers h3, .reputation-factors h3 {
-  display: flex;
-  align-items: center;
-  margin: 0 0 20px 0;
-  color: #334155;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.spam-tips {
-  grid-column: 1 / -1;
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.spam-tips h3 {
-  margin: 0 0 16px 0;
-  color: #334155;
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.spam-tips ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.spam-tips li {
-  padding: 12px 0;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  align-items: flex-start;
-}
-
-.spam-tips li:last-child {
-  border-bottom: none;
-}
-
-.tip-icon {
-  margin-right: 12px;
-  color: #4F46E5;
-  flex-shrink: 0;
-  margin-top: 2px;
-}
-
-.learn-more {
-  margin-left: 8px;
-  color: #4F46E5;
-  font-size: 12px;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.implemented {
-  margin-left: 8px;
-  color: #10B981;
-  font-weight: 500;
-}
-
-/* Account Details Styles */
-.account-details-section {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.account-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-}
-
-.account-header h2 {
-  margin: 0;
-  color: #1e293b;
-  font-size: 24px;
-  font-weight: 700;
-}
-
-.account-actions {
-  display: flex;
-  gap: 12px;
-}
-
-.action-btn {
-  padding: 8px 16px;
-  background: white;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  font-weight: 500;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: all 0.3s ease;
-}
-
-.action-btn:hover {
-  background: #f1f5f9;
-}
-
-.action-btn.primary {
-  background: #4F46E5;
-  color: white;
-  border: none;
-}
-
-.action-btn.primary:hover {
-  background: #4338CA;
-}
-
-.account-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
-.account-stats-grid .stat-card {
-  flex-direction: column;
-  text-align: center;
-  padding: 20px;
-}
-
-.stat-value-large {
-  margin: 16px 0;
-  display: flex;
-  justify-content: center;
-}
-
-.auth-badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  margin: 16px 0;
-}
-
-.auth-badge {
-  padding: 4px 12px;
-  background: #10B981;
-  color: white;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.auth-badge.missing {
-  background: #F59E0B;
-}
-
-.stat-description {
-  font-size: 14px;
-  color: #64748b;
-  margin-top: 8px;
-}
-
-.account-charts {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-}
-
-.account-chart-card {
-  background: #f8fafc;
-  border-radius: 12px;
-  padding: 20px;
-}
-
-.account-chart-card h4 {
-  margin: 0 0 16px 0;
-  color: #334155;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-/* Responsive Design */
-@media (max-width: 1024px) {
-  .charts-row,
-  .spam-analysis,
-  .account-charts {
-    grid-template-columns: 1fr;
-  }
-  
-  .half-width {
-    flex: none;
-    width: 100%;
-  }
-}
-
-@media (max-width: 768px) {
-  .analytics-dashboard {
-    padding: 16px;
-    margin-left: 0;
-    width: 100%;
-  }
-  
-  .dashboard-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-  
-  .header-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-  
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .tabs-container {
-    overflow-x: auto;
-    padding-bottom: 8px;
-  }
-  
-  .time-filter, .export-btn {
-    width: 48%;
-  }
-  
-  .account-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-  
-  .account-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-}
-
-@media (max-width: 480px) {
-  .stat-card {
-    flex-direction: column;
-    text-align: center;
-  }
-  
-  .stat-icon {
-    margin-right: 0;
-    margin-bottom: 15px;
-  }
-  
-  .header-actions {
-    flex-direction: column;
-  }
-  
-  .time-filter, .export-btn {
-    width: 100%;
-  }
-  
-  .filter-btn {
-    width: 100%;
-    justify-content: center;
-  }
-  
-  .account-actions {
-    flex-direction: column;
-  }
-    
-  
-  .action-btn {
-    width: 100%;
-    justify-content: center;
-  }
-}
-`;
-
-// Inject styles
-const styleSheet = document.createElement('style');
-styleSheet.innerText = styles;
-document.head.appendChild(styleSheet);
 
 export default AnalyticsDashboard;
