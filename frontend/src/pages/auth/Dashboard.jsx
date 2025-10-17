@@ -67,10 +67,11 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            const { googleUsers = [], smtpAccounts = [] } = response.data;
+            const { googleUsers = [], smtpAccounts = [], microsoftUsers=[]} = response.data;
             const allEmails = [
                 ...googleUsers.map(user => formatEmailAccount(user)),
-                ...smtpAccounts.map(account => formatEmailAccount(account))
+                ...smtpAccounts.map(account => formatEmailAccount(account)),
+                ...microsoftUsers.map(a=>formatEmailAccount(a))
             ].filter(acc => acc.email);
 
             // Initialize email stats
