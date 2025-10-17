@@ -63,7 +63,7 @@ export default function Navbar() {
             <FiZap className="w-4 h-4" />
             <span>Buy Credits</span>
             {!mobile && variant === 'primary' && (
-                <div className="bg-teal px-1.5 py-0.5 rounded text-xs font-bold">50</div>
+                <div className="bg-teal px-1.5 py-0.5 rounded text-xs font-bold"></div>
             )}
         </button>
     );

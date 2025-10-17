@@ -18,7 +18,7 @@ import {
     FiChevronRight
 } from "react-icons/fi";
 import { motion } from "framer-motion";
-import logo from "../assets/image (2).png";
+import logo from "../assets/image.png";
 
 const Sidebar = ({ onToggle }) => {
     const { currentUser, logout } = useAuth();
