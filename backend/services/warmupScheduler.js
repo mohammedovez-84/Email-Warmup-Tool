@@ -12,22 +12,27 @@ async function startWarmupScheduler() {
 
     const runCycle = async () => {
       try {
-        // Senders = warmupStatus 'false' (paused)
+        // --- FETCH SENDERS ---
         const googleSenders = await GoogleUser.findAll({ where: { warmupStatus: 'paused' } });
-        const microsoftSenders = await MicrosoftUser.findAll({ where: { warmupStatus: 'paused' } });
         const smtpSenders = await SmtpAccount.findAll({ where: { warmupStatus: 'paused' } });
+        const microsoftSenders = await MicrosoftUser.findAll({ where: { warmupStatus: 'paused' } });
 
-        const totalSenders = googleSenders.length + microsoftSenders.length + smtpSenders.length;
-        console.log(`[${new Date().toISOString()}] Scheduler: ${totalSenders} active senders`);
+        console.log(`[${new Date().toISOString()}] Scheduler: ${googleSenders.length + smtpSenders.length} Google/SMTP, ${microsoftSenders.length} Microsoft senders ready`);
 
-        if (totalSenders === 0) {
-          console.warn('⚠️ No senders available. Skipping warmup cycle.');
-        } else {
-          // Enqueue jobs for each sender
-          for (const sender of googleSenders) await enqueueSenderJobs(channel, sender, 'google');
-          for (const sender of microsoftSenders) await enqueueSenderJobs(channel, sender, 'microsoft');
-          for (const sender of smtpSenders) await enqueueSenderJobs(channel, sender, 'custom');
+        let totalJobsEnqueued = 0;
+
+        // --- GOOGLE + SMTP SENDERS ---
+        const googleSmtpSenders = [...googleSenders, ...smtpSenders];
+        for (const sender of googleSmtpSenders) {
+          totalJobsEnqueued += await enqueueSenderJobs(channel, sender, 'google');
         }
+
+        // --- MICROSOFT SENDERS ---
+        for (const sender of microsoftSenders) {
+          totalJobsEnqueued += await enqueueSenderJobs(channel, sender, 'microsoft');
+        }
+
+        console.log(`[${new Date().toISOString()}] Total warmup jobs enqueued: ${totalJobsEnqueued}`);
 
         const nextRunDelay =
           process.env.NODE_ENV === 'production'
@@ -58,15 +63,17 @@ async function enqueueSenderJobs(channel, sender, senderType) {
 
   const usedReceivers = new Set();
   let attempts = 0;
+  let jobsCount = 0;
 
   while (usedReceivers.size < emailsToSend && attempts < emailsToSend * 3) {
     attempts++;
 
     let receiver;
     try {
-      receiver = await getNextReceiver(sender.email); // only picks warmupStatus='active' accounts
+      // --- Get receiver of the same category ---
+      receiver = await getNextReceiver(sender);
     } catch (err) {
-      console.warn(`⚠️ No receiver found for ${sender.email}, stopping further jobs.`);
+      console.warn(`⚠️ No active receiver found for ${sender.email}, stopping further jobs.`);
       break;
     }
 
@@ -80,12 +87,15 @@ async function enqueueSenderJobs(channel, sender, senderType) {
     };
 
     channel.sendToQueue('warmup_jobs', Buffer.from(JSON.stringify(jobPayload)), { persistent: true });
+    jobsCount++;
     console.log(`Enqueued warmup job: ${sender.email} -> ${receiver.email}`);
   }
 
-  // Increment warmup day count
   sender.warmupDayCount = (sender.warmupDayCount || 0) + 1;
+  sender.emailsSentToday = jobsCount; // Add this field to your model
   await sender.save();
+
+  return jobsCount;
 }
 
 module.exports = {
