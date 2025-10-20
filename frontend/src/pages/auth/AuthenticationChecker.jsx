@@ -1,26 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import {
-    FiCheckCircle,
-    FiAlertTriangle,
-    FiInfo,
-    FiCopy,
-    FiRefreshCw,
-    FiExternalLink,
-    FiChevronDown,
-    FiChevronUp,
-    FiLock,
-    FiMail,
-    FiGlobe,
-    FiShield,
-    FiX,
-    FiHelpCircle,
-    FiSettings,
-    FiDownload,
-    FiServer,
-    FiList,
-    FiArrowRight,
-    FiBarChart2,
-    FiActivity
+  FiCheckCircle,
+  FiAlertTriangle,
+  FiInfo,
+  FiCopy,
+  FiRefreshCw,
+  FiExternalLink,
+  FiChevronDown,
+  FiChevronUp,
+  FiLock,
+  FiMail,
+  FiGlobe,
+  FiShield,
+  FiX,
+  FiHelpCircle,
+  FiSettings,
+  FiDownload,
+  FiServer,
+  FiList,
+  FiArrowRight,
+  FiBarChart2,
+  FiActivity
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
@@ -31,1014 +31,1014 @@ import { useAuth } from '../../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const AuthenticationChecker = () => {
-    const { currentUser } = useAuth();
-    const navigate = useNavigate();
-
-    const [activeTab, setActiveTab] = useState('overview');
-    const [domain, setDomain] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [results, setResults] = useState(null);
-    const [copied, setCopied] = useState(false);
-    const [expandedSections, setExpandedSections] = useState({
-        spf: true,
-        dkim: true,
-        dmarc: true,
-        blacklist: true
-    });
-    const [history, setHistory] = useState([]);
-    const [showSettings, setShowSettings] = useState(false);
-    const [autoRefresh, setAutoRefresh] = useState(false);
-    const [darkMode, setDarkMode] = useState(false);
-
-    // Check authentication status on component mount
-    useEffect(() => {
-        if (!currentUser) {
-            navigate('/login');
-        }
-    }, [currentUser, navigate]);
-
-    // Load history from localStorage
-    useEffect(() => {
-        const savedHistory = localStorage.getItem('authCheckHistory');
-        if (savedHistory) {
-            setHistory(JSON.parse(savedHistory));
-        }
-    }, []);
-
-    // Save history to localStorage
-    useEffect(() => {
-        if (history.length > 0) {
-            localStorage.setItem('authCheckHistory', JSON.stringify(history));
-        }
-    }, [history]);
-
-    const toggleSection = (section) => {
-        setExpandedSections(prev => ({
-            ...prev,
-            [section]: !prev[section]
-        }));
-    };
-
-    // Simulate DNS record lookup
-    const lookupDnsRecord = async (type, domain) => {
-        // In a real application, you would make API calls to DNS servers
-        // This is a simulation of what the responses might look like
-
-        // Simulate different scenarios based on domain
-        const scenarios = {
-            'good.com': {
-                spf: `v=spf1 include:spf.${domain} include:_spf.google.com -all`,
-                dkim: `v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAujYxD04JSq3`,
-                dmarc: `v=DMARC1; p=reject; rua=mailto:dmarc@${domain}; ruf=mailto:dmarc-forensics@${domain}; fo=1`
-            },
-            'warning.com': {
-                spf: `v=spf1 include:spf.${domain} ~all`,
-                dkim: `v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAujYxD04JSq3`,
-                dmarc: `v=DMARC1; p=none; rua=mailto:dmarc@${domain}`
-            },
-            'error.com': {
-                spf: null,
-                dkim: null,
-                dmarc: null
-            }
-        };
-
-        // Default to good configuration if domain doesn't match scenarios
-        const scenario = Object.keys(scenarios).find(s => domain.includes(s)) || 'good.com';
-
-        return scenarios[scenario][type] || null;
-    };
-
-    // Simulate blacklist check
-    const checkBlacklists = async (domain) => {
-        // In a real application, you would check multiple blacklist databases
-        const blacklists = [
-            { name: 'Spamhaus', listed: false },
-            { name: 'Barracuda', listed: false },
-            { name: 'SORBS', listed: false },
-            { name: 'SpamCop', listed: false },
-            { name: 'URIBL', listed: false },
-            { name: 'PSBL', listed: false }
-        ];
-
-        // For error.com domain, simulate some blacklist issues
-        if (domain.includes('error.com')) {
-            blacklists[0].listed = true;
-            blacklists[3].listed = true;
-        }
-
-        return blacklists;
-    };
-
-    // Simulate BIMI check
-    const checkBimi = async (domain) => {
-        // Simulate different scenarios
-        if (domain.includes('good.com')) {
-            return {
-                exists: true,
-                record: `v=BIMI1; l=https://${domain}/logo.svg; a=https://${domain}/cert.pem`,
-                valid: true,
-                recommendation: 'BIMI is properly configured with a valid logo and certificate.'
-            };
-        }
-
-        return {
-            exists: false,
-            record: null,
-            valid: false,
-            recommendation: 'No BIMI record found. BIMI allows brands to display logos in supporting email clients.'
-        };
-    };
-
-    const handleDomainSubmit = async (e) => {
-        e.preventDefault();
-        if (!domain) return;
-
-        setIsLoading(true);
-
-        try {
-            // Simulate API calls with timeouts
-            const [spfRecord, dkimRecord, dmarcRecord, blacklistResults, bimiResults] = await Promise.all([
-                lookupDnsRecord('spf', domain),
-                lookupDnsRecord('dkim', domain),
-                lookupDnsRecord('dmarc', domain),
-                checkBlacklists(domain),
-                checkBimi(domain)
-            ]);
-
-            // Calculate scores based on results
-            const spfScore = spfRecord ? (spfRecord.includes('-all') ? 100 : 80) : 0;
-            const dkimScore = dkimRecord ? 100 : 0;
-            const dmarcScore = dmarcRecord ? (dmarcRecord.includes('p=reject') ? 100 :
-                dmarcRecord.includes('p=quarantine') ? 80 : 60) : 0;
-            const blacklistScore = blacklistResults.filter(b => b.listed).length === 0 ? 100 : 50;
-            const bimiScore = bimiResults.exists ? 100 : 0;
-
-            // Calculate overall score (weighted average)
-            const overallScore = Math.round(
-                (spfScore * 0.25) +
-                (dkimScore * 0.25) +
-                (dmarcScore * 0.25) +
-                (blacklistScore * 0.15) +
-                (bimiScore * 0.10)
-            );
-
-            // Generate issues list
-            const issues = [];
-
-            if (!spfRecord) {
-                issues.push({
-                    type: 'error',
-                    category: 'SPF',
-                    message: 'No SPF record found',
-                    description: 'This can lead to email delivery issues and spoofing.'
-                });
-            } else if (!spfRecord.includes('-all')) {
-                issues.push({
-                    type: 'warning',
-                    category: 'SPF',
-                    message: 'SPF uses softfail (~all) instead of hardfail (-all)',
-                    description: 'Consider changing ~all to -all for stricter enforcement.'
-                });
-            }
-
-            if (!dkimRecord) {
-                issues.push({
-                    type: 'error',
-                    category: 'DKIM',
-                    message: 'No DKIM record found',
-                    description: 'This prevents email authentication and can affect deliverability.'
-                });
-            }
-
-            if (!dmarcRecord) {
-                issues.push({
-                    type: 'error',
-                    category: 'DMARC',
-                    message: 'No DMARC record found',
-                    description: 'This leaves your domain vulnerable to spoofing and phishing attacks.'
-                });
-            } else if (dmarcRecord.includes('p=none')) {
-                issues.push({
-                    type: 'warning',
-                    category: 'DMARC',
-                    message: 'DMARC is in monitoring mode only (p=none)',
-                    description: 'Consider moving to p=quarantine or p=reject after monitoring reports.'
-                });
-            }
-
-            const listedBlacklists = blacklistResults.filter(b => b.listed);
-            if (listedBlacklists.length > 0) {
-                issues.push({
-                    type: 'error',
-                    category: 'Blacklist',
-                    message: `Domain listed on ${listedBlacklists.length} blacklist(s)`,
-                    description: `Listed on: ${listedBlacklists.map(b => b.name).join(', ')}. This may affect email deliverability.`
-                });
-            }
-
-            if (!bimiResults.exists) {
-                issues.push({
-                    type: 'info',
-                    category: 'BIMI',
-                    message: 'No BIMI record found',
-                    description: 'BIMI allows brands to display logos in supporting email clients.'
-                });
-            }
-
-            const newResults = {
-                domain,
-                spf: {
-                    exists: !!spfRecord,
-                    valid: !!spfRecord,
-                    record: spfRecord,
-                    mechanisms: spfRecord ? [
-                        { type: 'include', value: `spf.${domain}`, valid: true },
-                        { type: 'include', value: '_spf.google.com', valid: true },
-                        { type: 'all', value: spfRecord.includes('-all') ? '-all' : '~all', valid: true }
-                    ] : [],
-                    lookups: spfRecord ? 2 : 0,
-                    pass: !!spfRecord,
-                    recommendation: spfRecord ?
-                        (spfRecord.includes('-all') ?
-                            'Your SPF record is properly configured with strict enforcement.' :
-                            'Your SPF record is configured but uses softfail. Consider changing ~all to -all for stricter enforcement.') :
-                        'No SPF record found. This can lead to email delivery issues.'
-                },
-                dkim: {
-                    exists: !!dkimRecord,
-                    valid: !!dkimRecord,
-                    selector: 'default',
-                    record: dkimRecord,
-                    publicKeyValid: !!dkimRecord,
-                    keyLength: dkimRecord ? 2048 : 0,
-                    recommendation: dkimRecord ?
-                        'DKIM is properly configured. Ensure you rotate keys periodically.' :
-                        'No DKIM record found. This prevents email authentication and can affect deliverability.'
-                },
-                dmarc: {
-                    exists: !!dmarcRecord,
-                    valid: !!dmarcRecord,
-                    record: dmarcRecord,
-                    policy: dmarcRecord ? (dmarcRecord.includes('p=reject') ? 'reject' :
-                        dmarcRecord.includes('p=quarantine') ? 'quarantine' : 'none') : 'not set',
-                    subdomainPolicy: dmarcRecord && dmarcRecord.includes('sp=') ?
-                        dmarcRecord.match(/sp=(reject|quarantine|none)/)[1] : null,
-                    percentage: dmarcRecord && dmarcRecord.includes('pct=') ?
-                        parseInt(dmarcRecord.match(/pct=(\d+)/)[1]) : 100,
-                    aggregateReporting: dmarcRecord && dmarcRecord.includes('rua=') ?
-                        dmarcRecord.match(/rua=mailto:([^;]+)/)[1] : 'not set',
-                    forensicReporting: dmarcRecord && dmarcRecord.includes('ruf=') ?
-                        dmarcRecord.match(/ruf=mailto:([^;]+)/)[1] : 'not set',
-                    alignment: {
-                        spf: dmarcRecord && dmarcRecord.includes('aspf=') ?
-                            dmarcRecord.match(/aspf=([r|s])/)[1] === 'r' ? 'relaxed' : 'strict' : 'relaxed',
-                        dkim: dmarcRecord && dmarcRecord.includes('adkim=') ?
-                            dmarcRecord.match(/adkim=([r|s])/)[1] === 'r' ? 'relaxed' : 'strict' : 'relaxed'
-                    },
-                    recommendation: dmarcRecord ?
-                        (dmarcRecord.includes('p=reject') ?
-                            'Your DMARC policy is properly configured with strict enforcement.' :
-                            dmarcRecord.includes('p=quarantine') ?
-                                'Your DMARC policy is set to quarantine. Consider moving to p=reject for maximum protection.' :
-                                'Your DMARC policy is set to monitoring only. Consider moving to p=quarantine or p=reject after monitoring.') :
-                        'No DMARC record found. This leaves your domain vulnerable to spoofing and phishing attacks.'
-                },
-                blacklist: {
-                    checked: blacklistResults.length,
-                    listed: blacklistResults.filter(b => b.listed).length,
-                    details: blacklistResults,
-                    recommendation: blacklistResults.filter(b => b.listed).length === 0 ?
-                        'Your domain is not listed on any major blacklists.' :
-                        'Your domain is listed on one or more blacklists. This may affect email deliverability.'
-                },
-                bimi: bimiResults,
-                overallScore,
-                issues,
-                lastChecked: new Date().toISOString()
-            };
-
-            setResults(newResults);
-
-            // Add to history
-            setHistory(prev => {
-                const newHistory = [...prev];
-                // Remove if already exists
-                const filteredHistory = newHistory.filter(item => item.domain !== domain);
-                if (filteredHistory.length >= 10) filteredHistory.pop();
-                return [{ domain, date: new Date().toISOString(), score: overallScore }, ...filteredHistory];
-            });
-        } catch (error) {
-            console.error('Error checking domain:', error);
-            // Handle error state
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const getStatusIcon = (valid) => {
-        return valid ? (
-            <FiCheckCircle className="text-green-500 text-xl" />
-        ) : (
-            <FiAlertTriangle className="text-yellow-500 text-xl" />
-        );
-    };
-
-    const getScoreClass = (score) => {
-        if (score >= 90) return 'excellent';
-        if (score >= 70) return 'good';
-        if (score >= 50) return 'fair';
-        return 'poor';
-    };
-
-    const exportResults = () => {
-        const dataStr = JSON.stringify(results, null, 2);
-        const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
-        const exportFileDefaultName = `${domain}-authentication-results.json`;
-
-        const linkElement = document.createElement('a');
-        linkElement.setAttribute('href', dataUri);
-        linkElement.setAttribute('download', exportFileDefaultName);
-        linkElement.click();
-    };
-
-    const clearHistory = () => {
-        setHistory([]);
-        localStorage.removeItem('authCheckHistory');
-    };
-
-    const loadFromHistory = (domain) => {
-        setDomain(domain);
-        // In a real app, you would fetch the results for this domain
-    };
-
-    const renderTabContent = () => {
-        switch (activeTab) {
-            case 'overview':
-                return (
-                    <div className="overview-tab">
-                        {results && (
-                            <>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                                    <div className="stat-card">
-                                        <div className="stat-icon bg-blue-100 text-blue-600">
-                                            <FiMail />
-                                        </div>
-                                        <div className="stat-content">
-                                            <h4>SPF</h4>
-                                            <p className={results.spf.exists ? 'text-green-600' : 'text-red-600'}>
-                                                {results.spf.exists ? 'Configured' : 'Not Found'}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="stat-card">
-                                        <div className="stat-icon bg-purple-100 text-purple-600">
-                                            <FiLock />
-                                        </div>
-                                        <div className="stat-content">
-                                            <h4>DKIM</h4>
-                                            <p className={results.dkim.exists ? 'text-green-600' : 'text-red-600'}>
-                                                {results.dkim.exists ? 'Configured' : 'Not Found'}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="stat-card">
-                                        <div className="stat-icon bg-teal-100 text-teal-600">
-                                            <FiShield />
-                                        </div>
-                                        <div className="stat-content">
-                                            <h4>DMARC</h4>
-                                            <p className={results.dmarc.exists ? 'text-green-600' : 'text-red-600'}>
-                                                {results.dmarc.exists ? 'Configured' : 'Not Found'}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    <div className="stat-card">
-                                        <div className="stat-icon bg-orange-100 text-orange-600">
-                                            <FiList />
-                                        </div>
-                                        <div className="stat-content">
-                                            <h4>Blacklists</h4>
-                                            <p className={results.blacklist.listed === 0 ? 'text-green-600' : 'text-red-600'}>
-                                                {results.blacklist.listed === 0 ? 'Clean' : `${results.blacklist.listed} Listed`}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {results.issues && results.issues.length > 0 && (
-                                    <div className="issues-section mb-6">
-                                        <h3 className="text-xl font-bold mb-4 flex items-center">
-                                            <FiAlertTriangle className="mr-2 text-orange-500" />
-                                            Domain Health Issues
-                                        </h3>
-                                        <div className="issues-grid">
-                                            {results.issues.map((issue, index) => (
-                                                <div key={index} className={`issue-item ${issue.type}`}>
-                                                    <div className="issue-icon">
-                                                        {issue.type === 'error' && <FiAlertTriangle className="text-red-500" />}
-                                                        {issue.type === 'warning' && <FiAlertTriangle className="text-yellow-500" />}
-                                                        {issue.type === 'info' && <FiInfo className="text-blue-500" />}
-                                                    </div>
-                                                    <div className="issue-content">
-                                                        <h4 className="font-semibold">{issue.category}: {issue.message}</h4>
-                                                        <p>{issue.description}</p>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
-                                <div className="recommendations-section">
-                                    <h3 className="text-xl font-bold mb-4 flex items-center">
-                                        <FiCheckCircle className="mr-2 text-green-500" />
-                                        Recommendations
-                                    </h3>
-                                    <div className="recommendations-grid">
-                                        {results.spf.recommendation && (
-                                            <div className="recommendation-item">
-                                                <div className="flex items-start">
-                                                    <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
-                                                    <p>{results.spf.recommendation}</p>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {results.dkim.recommendation && (
-                                            <div className="recommendation-item">
-                                                <div className="flex items-start">
-                                                    <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
-                                                    <p>{results.dkim.recommendation}</p>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {results.dmarc.recommendation && (
-                                            <div className="recommendation-item">
-                                                <div className="flex items-start">
-                                                    <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
-                                                    <p>{results.dmarc.recommendation}</p>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {results.blacklist.recommendation && (
-                                            <div className="recommendation-item">
-                                                <div className="flex items-start">
-                                                    <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
-                                                    <p>{results.blacklist.recommendation}</p>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {results.bimi.recommendation && (
-                                            <div className="recommendation-item">
-                                                <div className="flex items-start">
-                                                    <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
-                                                    <p>{results.bimi.recommendation}</p>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            </>
-                        )}
-                    </div>
-                );
-
-            case 'spf':
-                return (
-                    <div className="checker-section">
-                        <div className="section-header" onClick={() => toggleSection('spf')}>
-                            <h3>
-                                <FiMail className="inline mr-2" />
-                                SPF (Sender Policy Framework)
-                                {results?.spf && getStatusIcon(results.spf.valid)}
-                            </h3>
-                            {expandedSections.spf ? <FiChevronUp /> : <FiChevronDown />}
-                        </div>
-
-                        {expandedSections.spf && (
-                            <div className="section-content">
-                                {results ? (
-                                    <>
-                                        <div className={`result-card ${results.spf.valid ? 'valid' : 'invalid'}`}>
-                                            <div className="result-summary">
-                                                <p>{results.spf.exists ? 'SPF record found' : 'No SPF record found'}</p>
-                                                <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
-                                            </div>
-
-                                            {results.spf.exists && (
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                                                    <div className="details-card">
-                                                        <h4>Record Details</h4>
-                                                        <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md">
-                                                            {results.spf.record}
-                                                        </SyntaxHighlighter>
-                                                        <CopyToClipboard text={results.spf.record} onCopy={() => setCopied(true)}>
-                                                            <button className="copy-btn">
-                                                                <FiCopy /> Copy Record
-                                                            </button>
-                                                        </CopyToClipboard>
-                                                    </div>
-
-                                                    <div className="details-card">
-                                                        <h4>Mechanisms</h4>
-                                                        <ul className="mechanisms-list">
-                                                            {results.spf.mechanisms.map((mechanism, idx) => (
-                                                                <li key={idx} className={mechanism.valid ? 'valid' : 'invalid'}>
-                                                                    <span className="mechanism-type">{mechanism.type}</span>
-                                                                    <span className="mechanism-value">{mechanism.value}</span>
-                                                                    {mechanism.valid ? (
-                                                                        <FiCheckCircle className="text-green-500" />
-                                                                    ) : (
-                                                                        <FiAlertTriangle className="text-yellow-500" />
-                                                                    )}
-                                                                </li>
-                                                            ))}
-                                                        </ul>
-                                                        <p className="text-sm mt-2">Total lookups: {results.spf.lookups}/10</p>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div className="recommendation-card">
-                                                <h4>Recommendation</h4>
-                                                <p>{results.spf.recommendation}</p>
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="info-card">
-                                        <h4>SPF Check</h4>
-                                        <p>SPF (Sender Policy Framework) is an email authentication method designed to detect forging sender addresses during the delivery of the email.</p>
-                                        <div className="deployment-instructions">
-                                            <h5>How it works:</h5>
-                                            <ul className="instruction-list">
-                                                <li>SPF allows receiving mail servers to check that incoming mail from a domain comes from a host authorized by that domain's administrators</li>
-                                                <li>It lists designated mail servers in a DNS TXT record</li>
-                                                <li>Receiving servers verify the sending server's IP against the published SPF record</li>
-                                                <li>If the check fails, the receiving server can reject or mark the email as suspicious</li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                );
-
-            case 'dkim':
-                return (
-                    <div className="checker-section">
-                        <div className="section-header" onClick={() => toggleSection('dkim')}>
-                            <h3>
-                                <FiLock className="inline mr-2" />
-                                DKIM (DomainKeys Identified Mail)
-                                {results?.dkim && getStatusIcon(results.dkim.valid)}
-                            </h3>
-                            {expandedSections.dkim ? <FiChevronUp /> : <FiChevronDown />}
-                        </div>
-
-                        {expandedSections.dkim && (
-                            <div className="section-content">
-                                {results ? (
-                                    <>
-                                        <div className={`result-card ${results.dkim.valid ? 'valid' : 'invalid'}`}>
-                                            <div className="result-summary">
-                                                <p>{results.dkim.exists ? `DKIM is properly configured for selector '${results.dkim.selector}'` : 'No DKIM record found'}</p>
-                                                <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
-                                            </div>
-
-                                            {results.dkim.exists && (
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                                                    <div className="details-card">
-                                                        <h4>Record Details</h4>
-                                                        <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md">
-                                                            {results.dkim.record}
-                                                        </SyntaxHighlighter>
-                                                        <CopyToClipboard text={results.dkim.record} onCopy={() => setCopied(true)}>
-                                                            <button className="copy-btn">
-                                                                <FiCopy /> Copy Record
-                                                            </button>
-                                                        </CopyToClipboard>
-                                                    </div>
-
-                                                    <div className="details-card">
-                                                        <h4>Key Information</h4>
-                                                        <ul className="key-details">
-                                                            <li>
-                                                                <span>Key Type:</span>
-                                                                <span>RSA</span>
-                                                            </li>
-                                                            <li>
-                                                                <span>Key Length:</span>
-                                                                <span>{results.dkim.keyLength} bits</span>
-                                                            </li>
-                                                            <li>
-                                                                <span>Public Key Valid:</span>
-                                                                <span>{results.dkim.publicKeyValid ? 'Yes' : 'No'}</span>
-                                                            </li>
-                                                        </ul>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div className="recommendation-card">
-                                                <h4>Recommendation</h4>
-                                                <p>{results.dkim.recommendation}</p>
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="info-card">
-                                        <h4>DKIM Check</h4>
-                                        <p>DKIM (DomainKeys Identified Mail) is an email authentication method that allows the receiver to check that an email was indeed sent and authorized by the owner of that domain.</p>
-                                        <div className="deployment-instructions">
-                                            <h5>How it works:</h5>
-                                            <ul className="instruction-list">
-                                                <li>DKIM uses cryptographic signatures to verify that message content hasn't been altered in transit</li>
-                                                <li>The sending server signs the email with a private key</li>
-                                                <li>The receiving server retrieves the public key from DNS records to verify the signature</li>
-                                                <li>If verification fails, the email may be rejected or marked as suspicious</li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                );
-
-            case 'dmarc':
-                return (
-                    <div className="checker-section">
-                        <div className="section-header" onClick={() => toggleSection('dmarc')}>
-                            <h3>
-                                <FiShield className="inline mr-2" />
-                                DMARC (Domain-based Message Authentication, Reporting & Conformance)
-                                {results?.dmarc && getStatusIcon(results.dmarc.valid)}
-                            </h3>
-                            {expandedSections.dmarc ? <FiChevronUp /> : <FiChevronDown />}
-                        </div>
-
-                        {expandedSections.dmarc && (
-                            <div className="section-content">
-                                {results ? (
-                                    <>
-                                        <div className={`result-card ${results.dmarc.valid ? 'valid' : 'invalid'}`}>
-                                            <div className="result-summary">
-                                                <p>{results.dmarc.exists ? 'DMARC record found' : 'No DMARC record found'}</p>
-                                                <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
-                                            </div>
-
-                                            {results.dmarc.exists && (
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                                                    <div className="details-card">
-                                                        <h4>Record Details</h4>
-                                                        <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md">
-                                                            {results.dmarc.record}
-                                                        </SyntaxHighlighter>
-                                                        <CopyToClipboard text={results.dmarc.record} onCopy={() => setCopied(true)}>
-                                                            <button className="copy-btn">
-                                                                <FiCopy /> Copy Record
-                                                            </button>
-                                                        </CopyToClipboard>
-                                                    </div>
-
-                                                    <div className="details-card">
-                                                        <h4>Policy Details</h4>
-                                                        <ul className="policy-details">
-                                                            <li>
-                                                                <span>Policy:</span>
-                                                                <span className="capitalize">{results.dmarc.policy}</span>
-                                                            </li>
-                                                            <li>
-                                                                <span>Subdomain Policy:</span>
-                                                                <span>{results.dmarc.subdomainPolicy || 'Inherits from parent'}</span>
-                                                            </li>
-                                                            <li>
-                                                                <span>Percentage:</span>
-                                                                <span>{results.dmarc.percentage}%</span>
-                                                            </li>
-                                                            <li>
-                                                                <span>Aggregate Reports:</span>
-                                                                <span>{results.dmarc.aggregateReporting}</span>
-                                                            </li>
-                                                            <li>
-                                                                <span>Forensic Reports:</span>
-                                                                <span>{results.dmarc.forensicReporting || 'Not configured'}</span>
-                                                            </li>
-                                                            <li>
-                                                                <span>SPF Alignment:</span>
-                                                                <span className="capitalize">{results.dmarc.alignment.spf}</span>
-                                                            </li>
-                                                            <li>
-                                                                <span>DKIM Alignment:</span>
-                                                                <span className="capitalize">{results.dmarc.alignment.dkim}</span>
-                                                            </li>
-                                                        </ul>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            <div className="recommendation-card">
-                                                <h4>Recommendation</h4>
-                                                <p>{results.dmarc.recommendation}</p>
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="info-card">
-                                        <h4>DMARC Check</h4>
-                                        <p>DMARC (Domain-based Message Authentication, Reporting & Conformance) is an email authentication protocol that builds on SPF and DKIM protocols.</p>
-                                        <div className="deployment-instructions">
-                                            <h5>How it works:</h5>
-                                            <ul className="instruction-list">
-                                                <li>DMARC allows domain owners to publish policies that specify how to handle emails that fail SPF and/or DKIM checks</li>
-                                                <li>It provides reporting mechanisms so domain owners can monitor authentication results</li>
-                                                <li>Receiving mail servers can reject or quarantine emails that fail DMARC checks</li>
-                                                <li>DMARC helps protect against phishing and spoofing attacks</li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                );
-
-            case 'blacklist':
-                return (
-                    <div className="checker-section">
-                        <div className="section-header" onClick={() => toggleSection('blacklist')}>
-                            <h3>
-                                <FiList className="inline mr-2" />
-                                Blacklist Check
-                                {results?.blacklist && getStatusIcon(results.blacklist.listed === 0)}
-                            </h3>
-                            {expandedSections.blacklist ? <FiChevronUp /> : <FiChevronDown />}
-                        </div>
-
-                        {expandedSections.blacklist && (
-                            <div className="section-content">
-                                {results ? (
-                                    <div className={`result-card ${results.blacklist.listed === 0 ? 'valid' : 'invalid'}`}>
-                                        <div className="result-summary">
-                                            <p>{results.blacklist.listed === 0 ?
-                                                'Your domain is not listed on any major blacklists' :
-                                                `Your domain is listed on ${results.blacklist.listed} blacklist(s)`}
-                                            </p>
-                                            <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
-                                        </div>
-
-                                        <div className="details-card">
-                                            <h4>Blacklist Results</h4>
-                                            <div className="blacklist-results">
-                                                {results.blacklist.details.map((blacklist, index) => (
-                                                    <div key={index} className="blacklist-item">
-                                                        <span className="blacklist-name">{blacklist.name}</span>
-                                                        <span className={`blacklist-status ${blacklist.listed ? 'listed' : 'not-listed'}`}>
-                                                            {blacklist.listed ? 'Listed' : 'Not Listed'}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        <div className="recommendation-card">
-                                            <h4>Recommendation</h4>
-                                            <p>{results.blacklist.recommendation}</p>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="info-card">
-                                        <h4>Blacklist Monitoring</h4>
-                                        <p>Check if your domain or IP address is listed on any major email blacklists that could affect email deliverability.</p>
-                                        <div className="deployment-instructions">
-                                            <h5>About Blacklists:</h5>
-                                            <ul className="instruction-list">
-                                                <li>Blacklists are databases of IP addresses or domains known for sending spam</li>
-                                                <li>Being listed can significantly impact your email deliverability</li>
-                                                <li>Regular monitoring helps identify and resolve issues quickly</li>
-                                                <li>Common blacklists include Spamhaus, Barracuda, SORBS, and others</li>
-                                            </ul>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                );
-
-            default:
-                return null;
-        }
-    };
-
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] = useState('overview');
+  const [domain, setDomain] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [results, setResults] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({
+    spf: true,
+    dkim: true,
+    dmarc: true,
+    blacklist: true
+  });
+  const [history, setHistory] = useState([]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
+
+  // Check authentication status on component mount
+  useEffect(() => {
     if (!currentUser) {
-        return null;
+      navigate('/login');
+    }
+  }, [currentUser, navigate]);
+
+  // Load history from localStorage
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('authCheckHistory');
+    if (savedHistory) {
+      setHistory(JSON.parse(savedHistory));
+    }
+  }, []);
+
+  // Save history to localStorage
+  useEffect(() => {
+    if (history.length > 0) {
+      localStorage.setItem('authCheckHistory', JSON.stringify(history));
+    }
+  }, [history]);
+
+  const toggleSection = (section) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
+
+  // Simulate DNS record lookup
+  const lookupDnsRecord = async (type, domain) => {
+    // In a real application, you would make API calls to DNS servers
+    // This is a simulation of what the responses might look like
+
+    // Simulate different scenarios based on domain
+    const scenarios = {
+      'good.com': {
+        spf: `v=spf1 include:spf.${domain} include:_spf.google.com -all`,
+        dkim: `v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAujYxD04JSq3`,
+        dmarc: `v=DMARC1; p=reject; rua=mailto:dmarc@${domain}; ruf=mailto:dmarc-forensics@${domain}; fo=1`
+      },
+      'warning.com': {
+        spf: `v=spf1 include:spf.${domain} ~all`,
+        dkim: `v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAujYxD04JSq3`,
+        dmarc: `v=DMARC1; p=none; rua=mailto:dmarc@${domain}`
+      },
+      'error.com': {
+        spf: null,
+        dkim: null,
+        dmarc: null
+      }
+    };
+
+    // Default to good configuration if domain doesn't match scenarios
+    const scenario = Object.keys(scenarios).find(s => domain.includes(s)) || 'good.com';
+
+    return scenarios[scenario][type] || null;
+  };
+
+  // Simulate blacklist check
+  const checkBlacklists = async (domain) => {
+    // In a real application, you would check multiple blacklist databases
+    const blacklists = [
+      { name: 'Spamhaus', listed: false },
+      { name: 'Barracuda', listed: false },
+      { name: 'SORBS', listed: false },
+      { name: 'SpamCop', listed: false },
+      { name: 'URIBL', listed: false },
+      { name: 'PSBL', listed: false }
+    ];
+
+    // For error.com domain, simulate some blacklist issues
+    if (domain.includes('error.com')) {
+      blacklists[0].listed = true;
+      blacklists[3].listed = true;
     }
 
-    return (
-        <div className={`authentication-checker ${darkMode ? 'dark-mode' : ''}`}>
-            <div className="checker-header">
-                <div className="header-top">
-                    <h2>Email Authentication Checker</h2>
-                    <div className="header-actions">
-                        <button className="action-btn" onClick={() => setShowSettings(!showSettings)}>
-                            <FiSettings />
-                        </button>
-                        {results && (
-                            <button className="action-btn" onClick={exportResults}>
-                                <FiDownload />
-                            </button>
-                        )}
-                    </div>
-                </div>
-                <p className="subtitle">
-                    Comprehensive tool for SPF, DKIM, and DMARC configuration, validation, and deployment
-                </p>
+    return blacklists;
+  };
 
-                <AnimatePresence>
-                    {showSettings && (
-                        <motion.div
-                            className="settings-panel"
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            exit={{ opacity: 0, height: 0 }}
-                        >
-                            <div className="settings-header">
-                                <h3>Settings</h3>
-                                <button onClick={() => setShowSettings(false)}>
-                                    <FiX />
-                                </button>
-                            </div>
-                            <div className="settings-content">
-                                <div className="setting-item">
-                                    <label>
-                                        <input
-                                            type="checkbox"
-                                            checked={autoRefresh}
-                                            onChange={(e) => setAutoRefresh(e.target.checked)}
-                                        />
-                                        Auto-refresh results
-                                    </label>
-                                </div>
-                                <div className="setting-item">
-                                    <label>
-                                        <input
-                                            type="checkbox"
-                                            checked={darkMode}
-                                            onChange={(e) => setDarkMode(e.target.checked)}
-                                        />
-                                        Dark mode
-                                    </label>
-                                </div>
-                            </div>
-                        </motion.div>
-                    )}
-                </AnimatePresence>
+  // Simulate BIMI check
+  const checkBimi = async (domain) => {
+    // Simulate different scenarios
+    if (domain.includes('good.com')) {
+      return {
+        exists: true,
+        record: `v=BIMI1; l=https://${domain}/logo.svg; a=https://${domain}/cert.pem`,
+        valid: true,
+        recommendation: 'BIMI is properly configured with a valid logo and certificate.'
+      };
+    }
 
-                <form onSubmit={handleDomainSubmit} className="domain-form">
-                    <div className="form-group">
-                        <label htmlFor="domain">Enter your domain (example.com):</label>
-                        <div className="input-with-button">
-                            <input
-                                type="text"
-                                id="domain"
-                                placeholder="example.com"
-                                value={domain}
-                                onChange={(e) => setDomain(e.target.value)}
-                            />
-                            <button type="submit" disabled={isLoading || !domain}>
-                                {isLoading ? (
-                                    <>
-                                        <FiRefreshCw className="animate-spin mr-2" />
-                                        Checking...
-                                    </>
-                                ) : (
-                                    'Check Authentication'
-                                )}
-                            </button>
-                        </div>
-                    </div>
-                </form>
-            </div>
+    return {
+      exists: false,
+      record: null,
+      valid: false,
+      recommendation: 'No BIMI record found. BIMI allows brands to display logos in supporting email clients.'
+    };
+  };
 
+  const handleDomainSubmit = async (e) => {
+    e.preventDefault();
+    if (!domain) return;
+
+    setIsLoading(true);
+
+    try {
+      // Simulate API calls with timeouts
+      const [spfRecord, dkimRecord, dmarcRecord, blacklistResults, bimiResults] = await Promise.all([
+        lookupDnsRecord('spf', domain),
+        lookupDnsRecord('dkim', domain),
+        lookupDnsRecord('dmarc', domain),
+        checkBlacklists(domain),
+        checkBimi(domain)
+      ]);
+
+      // Calculate scores based on results
+      const spfScore = spfRecord ? (spfRecord.includes('-all') ? 100 : 80) : 0;
+      const dkimScore = dkimRecord ? 100 : 0;
+      const dmarcScore = dmarcRecord ? (dmarcRecord.includes('p=reject') ? 100 :
+        dmarcRecord.includes('p=quarantine') ? 80 : 60) : 0;
+      const blacklistScore = blacklistResults.filter(b => b.listed).length === 0 ? 100 : 50;
+      const bimiScore = bimiResults.exists ? 100 : 0;
+
+      // Calculate overall score (weighted average)
+      const overallScore = Math.round(
+        (spfScore * 0.25) +
+        (dkimScore * 0.25) +
+        (dmarcScore * 0.25) +
+        (blacklistScore * 0.15) +
+        (bimiScore * 0.10)
+      );
+
+      // Generate issues list
+      const issues = [];
+
+      if (!spfRecord) {
+        issues.push({
+          type: 'error',
+          category: 'SPF',
+          message: 'No SPF record found',
+          description: 'This can lead to email delivery issues and spoofing.'
+        });
+      } else if (!spfRecord.includes('-all')) {
+        issues.push({
+          type: 'warning',
+          category: 'SPF',
+          message: 'SPF uses softfail (~all) instead of hardfail (-all)',
+          description: 'Consider changing ~all to -all for stricter enforcement.'
+        });
+      }
+
+      if (!dkimRecord) {
+        issues.push({
+          type: 'error',
+          category: 'DKIM',
+          message: 'No DKIM record found',
+          description: 'This prevents email authentication and can affect deliverability.'
+        });
+      }
+
+      if (!dmarcRecord) {
+        issues.push({
+          type: 'error',
+          category: 'DMARC',
+          message: 'No DMARC record found',
+          description: 'This leaves your domain vulnerable to spoofing and phishing attacks.'
+        });
+      } else if (dmarcRecord.includes('p=none')) {
+        issues.push({
+          type: 'warning',
+          category: 'DMARC',
+          message: 'DMARC is in monitoring mode only (p=none)',
+          description: 'Consider moving to p=quarantine or p=reject after monitoring reports.'
+        });
+      }
+
+      const listedBlacklists = blacklistResults.filter(b => b.listed);
+      if (listedBlacklists.length > 0) {
+        issues.push({
+          type: 'error',
+          category: 'Blacklist',
+          message: `Domain listed on ${listedBlacklists.length} blacklist(s)`,
+          description: `Listed on: ${listedBlacklists.map(b => b.name).join(', ')}. This may affect email deliverability.`
+        });
+      }
+
+      if (!bimiResults.exists) {
+        issues.push({
+          type: 'info',
+          category: 'BIMI',
+          message: 'No BIMI record found',
+          description: 'BIMI allows brands to display logos in supporting email clients.'
+        });
+      }
+
+      const newResults = {
+        domain,
+        spf: {
+          exists: !!spfRecord,
+          valid: !!spfRecord,
+          record: spfRecord,
+          mechanisms: spfRecord ? [
+            { type: 'include', value: `spf.${domain}`, valid: true },
+            { type: 'include', value: '_spf.google.com', valid: true },
+            { type: 'all', value: spfRecord.includes('-all') ? '-all' : '~all', valid: true }
+          ] : [],
+          lookups: spfRecord ? 2 : 0,
+          pass: !!spfRecord,
+          recommendation: spfRecord ?
+            (spfRecord.includes('-all') ?
+              'Your SPF record is properly configured with strict enforcement.' :
+              'Your SPF record is configured but uses softfail. Consider changing ~all to -all for stricter enforcement.') :
+            'No SPF record found. This can lead to email delivery issues.'
+        },
+        dkim: {
+          exists: !!dkimRecord,
+          valid: !!dkimRecord,
+          selector: 'default',
+          record: dkimRecord,
+          publicKeyValid: !!dkimRecord,
+          keyLength: dkimRecord ? 2048 : 0,
+          recommendation: dkimRecord ?
+            'DKIM is properly configured. Ensure you rotate keys periodically.' :
+            'No DKIM record found. This prevents email authentication and can affect deliverability.'
+        },
+        dmarc: {
+          exists: !!dmarcRecord,
+          valid: !!dmarcRecord,
+          record: dmarcRecord,
+          policy: dmarcRecord ? (dmarcRecord.includes('p=reject') ? 'reject' :
+            dmarcRecord.includes('p=quarantine') ? 'quarantine' : 'none') : 'not set',
+          subdomainPolicy: dmarcRecord && dmarcRecord.includes('sp=') ?
+            dmarcRecord.match(/sp=(reject|quarantine|none)/)[1] : null,
+          percentage: dmarcRecord && dmarcRecord.includes('pct=') ?
+            parseInt(dmarcRecord.match(/pct=(\d+)/)[1]) : 100,
+          aggregateReporting: dmarcRecord && dmarcRecord.includes('rua=') ?
+            dmarcRecord.match(/rua=mailto:([^;]+)/)[1] : 'not set',
+          forensicReporting: dmarcRecord && dmarcRecord.includes('ruf=') ?
+            dmarcRecord.match(/ruf=mailto:([^;]+)/)[1] : 'not set',
+          alignment: {
+            spf: dmarcRecord && dmarcRecord.includes('aspf=') ?
+              dmarcRecord.match(/aspf=([r|s])/)[1] === 'r' ? 'relaxed' : 'strict' : 'relaxed',
+            dkim: dmarcRecord && dmarcRecord.includes('adkim=') ?
+              dmarcRecord.match(/adkim=([r|s])/)[1] === 'r' ? 'relaxed' : 'strict' : 'relaxed'
+          },
+          recommendation: dmarcRecord ?
+            (dmarcRecord.includes('p=reject') ?
+              'Your DMARC policy is properly configured with strict enforcement.' :
+              dmarcRecord.includes('p=quarantine') ?
+                'Your DMARC policy is set to quarantine. Consider moving to p=reject for maximum protection.' :
+                'Your DMARC policy is set to monitoring only. Consider moving to p=quarantine or p=reject after monitoring.') :
+            'No DMARC record found. This leaves your domain vulnerable to spoofing and phishing attacks.'
+        },
+        blacklist: {
+          checked: blacklistResults.length,
+          listed: blacklistResults.filter(b => b.listed).length,
+          details: blacklistResults,
+          recommendation: blacklistResults.filter(b => b.listed).length === 0 ?
+            'Your domain is not listed on any major blacklists.' :
+            'Your domain is listed on one or more blacklists. This may affect email deliverability.'
+        },
+        bimi: bimiResults,
+        overallScore,
+        issues,
+        lastChecked: new Date().toISOString()
+      };
+
+      setResults(newResults);
+
+      // Add to history
+      setHistory(prev => {
+        const newHistory = [...prev];
+        // Remove if already exists
+        const filteredHistory = newHistory.filter(item => item.domain !== domain);
+        if (filteredHistory.length >= 10) filteredHistory.pop();
+        return [{ domain, date: new Date().toISOString(), score: overallScore }, ...filteredHistory];
+      });
+    } catch (error) {
+      console.error('Error checking domain:', error);
+      // Handle error state
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getStatusIcon = (valid) => {
+    return valid ? (
+      <FiCheckCircle className="text-green-500 text-xl" />
+    ) : (
+      <FiAlertTriangle className="text-yellow-500 text-xl" />
+    );
+  };
+
+  const getScoreClass = (score) => {
+    if (score >= 90) return 'excellent';
+    if (score >= 70) return 'good';
+    if (score >= 50) return 'fair';
+    return 'poor';
+  };
+
+  const exportResults = () => {
+    const dataStr = JSON.stringify(results, null, 2);
+    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+    const exportFileDefaultName = `${domain}-authentication-results.json`;
+
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+    localStorage.removeItem('authCheckHistory');
+  };
+
+  const loadFromHistory = (domain) => {
+    setDomain(domain);
+    // In a real app, you would fetch the results for this domain
+  };
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'overview':
+        return (
+          <div className="overview-tab">
             {results && (
-                <div className="overall-score">
-                    <div className="score-card">
-                        <h3>Domain Health Score</h3>
-                        <div className="score-circle">
-                            <svg viewBox="0 0 36 36" className="circular-chart">
-                                <path className="circle-bg"
-                                    d="M18 2.0845
-                  a 15.9155 15.9155 0 0 1 0 31.831
-                  a 15.9155 15.9155 0 0 1 0 -31.831"
-                                />
-                                <path className={`circle ${getScoreClass(results.overallScore)}`}
-                                    strokeDasharray={`${results.overallScore}, 100`}
-                                    d="M18 2.0845
-                  a 15.9155 15.9155 0 0 1 0 31.831
-                  a 15.9155 15.9155 0 0 1 0 -31.831"
-                                />
-                                <text x="18" y="20.35" className="percentage">{results.overallScore}%</text>
-                            </svg>
-                        </div>
-                        <p className={getScoreClass(results.overallScore)}>Your email authentication is {getScoreClass(results.overallScore)}</p>
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <div className="stat-card">
+                    <div className="stat-icon bg-blue-100 text-blue-600">
+                      <FiMail />
                     </div>
+                    <div className="stat-content">
+                      <h4>SPF</h4>
+                      <p className={results.spf.exists ? 'text-green-600' : 'text-red-600'}>
+                        {results.spf.exists ? 'Configured' : 'Not Found'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="stat-card">
+                    <div className="stat-icon bg-purple-100 text-purple-600">
+                      <FiLock />
+                    </div>
+                    <div className="stat-content">
+                      <h4>DKIM</h4>
+                      <p className={results.dkim.exists ? 'text-green-600' : 'text-red-600'}>
+                        {results.dkim.exists ? 'Configured' : 'Not Found'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="stat-card">
+                    <div className="stat-icon bg-teal-100 text-teal-600">
+                      <FiShield />
+                    </div>
+                    <div className="stat-content">
+                      <h4>DMARC</h4>
+                      <p className={results.dmarc.exists ? 'text-green-600' : 'text-red-600'}>
+                        {results.dmarc.exists ? 'Configured' : 'Not Found'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="stat-card">
+                    <div className="stat-icon bg-orange-100 text-orange-600">
+                      <FiList />
+                    </div>
+                    <div className="stat-content">
+                      <h4>Blacklists</h4>
+                      <p className={results.blacklist.listed === 0 ? 'text-green-600' : 'text-red-600'}>
+                        {results.blacklist.listed === 0 ? 'Clean' : `${results.blacklist.listed} Listed`}
+                      </p>
+                    </div>
+                  </div>
                 </div>
+
+                {results.issues && results.issues.length > 0 && (
+                  <div className="issues-section mb-6">
+                    <h3 className="text-xl font-bold mb-4 flex items-center">
+                      <FiAlertTriangle className="mr-2 text-orange-500" />
+                      Domain Health Issues
+                    </h3>
+                    <div className="issues-grid">
+                      {results.issues.map((issue, index) => (
+                        <div key={index} className={`issue-item ${issue.type}`}>
+                          <div className="issue-icon">
+                            {issue.type === 'error' && <FiAlertTriangle className="text-red-500" />}
+                            {issue.type === 'warning' && <FiAlertTriangle className="text-yellow-500" />}
+                            {issue.type === 'info' && <FiInfo className="text-blue-500" />}
+                          </div>
+                          <div className="issue-content">
+                            <h4 className="font-semibold">{issue.category}: {issue.message}</h4>
+                            <p>{issue.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="recommendations-section">
+                  <h3 className="text-xl font-bold mb-4 flex items-center">
+                    <FiCheckCircle className="mr-2 text-green-500" />
+                    Recommendations
+                  </h3>
+                  <div className="recommendations-grid">
+                    {results.spf.recommendation && (
+                      <div className="recommendation-item">
+                        <div className="flex items-start">
+                          <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+                          <p>{results.spf.recommendation}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {results.dkim.recommendation && (
+                      <div className="recommendation-item">
+                        <div className="flex items-start">
+                          <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+                          <p>{results.dkim.recommendation}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {results.dmarc.recommendation && (
+                      <div className="recommendation-item">
+                        <div className="flex items-start">
+                          <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+                          <p>{results.dmarc.recommendation}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {results.blacklist.recommendation && (
+                      <div className="recommendation-item">
+                        <div className="flex items-start">
+                          <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+                          <p>{results.blacklist.recommendation}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {results.bimi.recommendation && (
+                      <div className="recommendation-item">
+                        <div className="flex items-start">
+                          <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+                          <p>{results.bimi.recommendation}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
             )}
+          </div>
+        );
 
-            <div className="checker-tabs">
-                <div className="tabs-header">
-                    <button
-                        className={`tab-button ${activeTab === 'overview' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('overview')}
-                    >
-                        <FiGlobe className="tab-icon" />
-                        Overview
-                    </button>
-                    <button
-                        className={`tab-button ${activeTab === 'spf' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('spf')}
-                    >
-                        <FiMail className="tab-icon" />
-                        SPF
-                    </button>
-                    <button
-                        className={`tab-button ${activeTab === 'dkim' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('dkim')}
-                    >
-                        <FiLock className="tab-icon" />
-                        DKIM
-                    </button>
-                    <button
-                        className={`tab-button ${activeTab === 'dmarc' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('dmarc')}
-                    >
-                        <FiShield className="tab-icon" />
-                        DMARC
-                    </button>
-                    <button
-                        className={`tab-button ${activeTab === 'blacklist' ? 'active' : ''}`}
-                        onClick={() => setActiveTab('blacklist')}
-                    >
-                        <FiList className="tab-icon" />
-                        Blacklist
-                    </button>
-                </div>
-
-                <div className="tabs-content">
-                    {renderTabContent()}
-                </div>
+      case 'spf':
+        return (
+          <div className="checker-section">
+            <div className="section-header" onClick={() => toggleSection('spf')}>
+              <h3>
+                <FiMail className="inline mr-2" />
+                SPF (Sender Policy Framework)
+                {results?.spf && getStatusIcon(results.spf.valid)}
+              </h3>
+              {expandedSections.spf ? <FiChevronUp /> : <FiChevronDown />}
             </div>
 
-            {history.length > 0 && (
-                <div className="history-panel">
-                    <h4>Recent Checks</h4>
-                    <div className="history-list">
-                        {history.map((item, index) => (
-                            <div key={index} className="history-item" onClick={() => loadFromHistory(item.domain)}>
-                                <span className="history-domain">{item.domain}</span>
-                                <span className="history-date">{new Date(item.date).toLocaleDateString()}</span>
-                                <div className="history-score">
-                                    <div className="score-bar">
-                                        <div
-                                            className={`score-fill ${getScoreClass(item.score)}`}
-                                            style={{ width: `${item.score}%` }}
-                                        ></div>
-                                    </div>
-                                    <span>{item.score}%</span>
-                                </div>
-                            </div>
-                        ))}
+            {expandedSections.spf && (
+              <div className="section-content">
+                {results ? (
+                  <>
+                    <div className={`result-card ${results.spf.valid ? 'valid' : 'invalid'}`}>
+                      <div className="result-summary">
+                        <p>{results.spf.exists ? 'SPF record found' : 'No SPF record found'}</p>
+                        <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
+                      </div>
+
+                      {results.spf.exists && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                          <div className="details-card">
+                            <h4>Record Details</h4>
+                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md">
+                              {results.spf.record}
+                            </SyntaxHighlighter>
+                            <CopyToClipboard text={results.spf.record} onCopy={() => setCopied(true)}>
+                              <button className="copy-btn">
+                                <FiCopy /> Copy Record
+                              </button>
+                            </CopyToClipboard>
+                          </div>
+
+                          <div className="details-card">
+                            <h4>Mechanisms</h4>
+                            <ul className="mechanisms-list">
+                              {results.spf.mechanisms.map((mechanism, idx) => (
+                                <li key={idx} className={mechanism.valid ? 'valid' : 'invalid'}>
+                                  <span className="mechanism-type">{mechanism.type}</span>
+                                  <span className="mechanism-value">{mechanism.value}</span>
+                                  {mechanism.valid ? (
+                                    <FiCheckCircle className="text-green-500" />
+                                  ) : (
+                                    <FiAlertTriangle className="text-yellow-500" />
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                            <p className="text-sm mt-2">Total lookups: {results.spf.lookups}/10</p>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="recommendation-card">
+                        <h4>Recommendation</h4>
+                        <p>{results.spf.recommendation}</p>
+                      </div>
                     </div>
-                    <button className="clear-history" onClick={clearHistory}>
-                        Clear History
-                    </button>
+                  </>
+                ) : (
+                  <div className="info-card">
+                    <h4>SPF Check</h4>
+                    <p>SPF (Sender Policy Framework) is an email authentication method designed to detect forging sender addresses during the delivery of the email.</p>
+                    <div className="deployment-instructions">
+                      <h5>How it works:</h5>
+                      <ul className="instruction-list">
+                        <li>SPF allows receiving mail servers to check that incoming mail from a domain comes from a host authorized by that domain's administrators</li>
+                        <li>It lists designated mail servers in a DNS TXT record</li>
+                        <li>Receiving servers verify the sending server's IP against the published SPF record</li>
+                        <li>If the check fails, the receiving server can reject or mark the email as suspicious</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'dkim':
+        return (
+          <div className="checker-section">
+            <div className="section-header" onClick={() => toggleSection('dkim')}>
+              <h3>
+                <FiLock className="inline mr-2" />
+                DKIM (DomainKeys Identified Mail)
+                {results?.dkim && getStatusIcon(results.dkim.valid)}
+              </h3>
+              {expandedSections.dkim ? <FiChevronUp /> : <FiChevronDown />}
+            </div>
+
+            {expandedSections.dkim && (
+              <div className="section-content">
+                {results ? (
+                  <>
+                    <div className={`result-card ${results.dkim.valid ? 'valid' : 'invalid'}`}>
+                      <div className="result-summary">
+                        <p>{results.dkim.exists ? `DKIM is properly configured for selector '${results.dkim.selector}'` : 'No DKIM record found'}</p>
+                        <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
+                      </div>
+
+                      {results.dkim.exists && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                          <div className="details-card">
+                            <h4>Record Details</h4>
+                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md">
+                              {results.dkim.record}
+                            </SyntaxHighlighter>
+                            <CopyToClipboard text={results.dkim.record} onCopy={() => setCopied(true)}>
+                              <button className="copy-btn">
+                                <FiCopy /> Copy Record
+                              </button>
+                            </CopyToClipboard>
+                          </div>
+
+                          <div className="details-card">
+                            <h4>Key Information</h4>
+                            <ul className="key-details">
+                              <li>
+                                <span>Key Type:</span>
+                                <span>RSA</span>
+                              </li>
+                              <li>
+                                <span>Key Length:</span>
+                                <span>{results.dkim.keyLength} bits</span>
+                              </li>
+                              <li>
+                                <span>Public Key Valid:</span>
+                                <span>{results.dkim.publicKeyValid ? 'Yes' : 'No'}</span>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="recommendation-card">
+                        <h4>Recommendation</h4>
+                        <p>{results.dkim.recommendation}</p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="info-card">
+                    <h4>DKIM Check</h4>
+                    <p>DKIM (DomainKeys Identified Mail) is an email authentication method that allows the receiver to check that an email was indeed sent and authorized by the owner of that domain.</p>
+                    <div className="deployment-instructions">
+                      <h5>How it works:</h5>
+                      <ul className="instruction-list">
+                        <li>DKIM uses cryptographic signatures to verify that message content hasn't been altered in transit</li>
+                        <li>The sending server signs the email with a private key</li>
+                        <li>The receiving server retrieves the public key from DNS records to verify the signature</li>
+                        <li>If verification fails, the email may be rejected or marked as suspicious</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'dmarc':
+        return (
+          <div className="checker-section">
+            <div className="section-header" onClick={() => toggleSection('dmarc')}>
+              <h3>
+                <FiShield className="inline mr-2" />
+                DMARC (Domain-based Message Authentication, Reporting & Conformance)
+                {results?.dmarc && getStatusIcon(results.dmarc.valid)}
+              </h3>
+              {expandedSections.dmarc ? <FiChevronUp /> : <FiChevronDown />}
+            </div>
+
+            {expandedSections.dmarc && (
+              <div className="section-content">
+                {results ? (
+                  <>
+                    <div className={`result-card ${results.dmarc.valid ? 'valid' : 'invalid'}`}>
+                      <div className="result-summary">
+                        <p>{results.dmarc.exists ? 'DMARC record found' : 'No DMARC record found'}</p>
+                        <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
+                      </div>
+
+                      {results.dmarc.exists && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                          <div className="details-card">
+                            <h4>Record Details</h4>
+                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md">
+                              {results.dmarc.record}
+                            </SyntaxHighlighter>
+                            <CopyToClipboard text={results.dmarc.record} onCopy={() => setCopied(true)}>
+                              <button className="copy-btn">
+                                <FiCopy /> Copy Record
+                              </button>
+                            </CopyToClipboard>
+                          </div>
+
+                          <div className="details-card">
+                            <h4>Policy Details</h4>
+                            <ul className="policy-details">
+                              <li>
+                                <span>Policy:</span>
+                                <span className="capitalize">{results.dmarc.policy}</span>
+                              </li>
+                              <li>
+                                <span>Subdomain Policy:</span>
+                                <span>{results.dmarc.subdomainPolicy || 'Inherits from parent'}</span>
+                              </li>
+                              <li>
+                                <span>Percentage:</span>
+                                <span>{results.dmarc.percentage}%</span>
+                              </li>
+                              <li>
+                                <span>Aggregate Reports:</span>
+                                <span>{results.dmarc.aggregateReporting}</span>
+                              </li>
+                              <li>
+                                <span>Forensic Reports:</span>
+                                <span>{results.dmarc.forensicReporting || 'Not configured'}</span>
+                              </li>
+                              <li>
+                                <span>SPF Alignment:</span>
+                                <span className="capitalize">{results.dmarc.alignment.spf}</span>
+                              </li>
+                              <li>
+                                <span>DKIM Alignment:</span>
+                                <span className="capitalize">{results.dmarc.alignment.dkim}</span>
+                              </li>
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="recommendation-card">
+                        <h4>Recommendation</h4>
+                        <p>{results.dmarc.recommendation}</p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="info-card">
+                    <h4>DMARC Check</h4>
+                    <p>DMARC (Domain-based Message Authentication, Reporting & Conformance) is an email authentication protocol that builds on SPF and DKIM protocols.</p>
+                    <div className="deployment-instructions">
+                      <h5>How it works:</h5>
+                      <ul className="instruction-list">
+                        <li>DMARC allows domain owners to publish policies that specify how to handle emails that fail SPF and/or DKIM checks</li>
+                        <li>It provides reporting mechanisms so domain owners can monitor authentication results</li>
+                        <li>Receiving mail servers can reject or quarantine emails that fail DMARC checks</li>
+                        <li>DMARC helps protect against phishing and spoofing attacks</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+      case 'blacklist':
+        return (
+          <div className="checker-section">
+            <div className="section-header" onClick={() => toggleSection('blacklist')}>
+              <h3>
+                <FiList className="inline mr-2" />
+                Blacklist Check
+                {results?.blacklist && getStatusIcon(results.blacklist.listed === 0)}
+              </h3>
+              {expandedSections.blacklist ? <FiChevronUp /> : <FiChevronDown />}
+            </div>
+
+            {expandedSections.blacklist && (
+              <div className="section-content">
+                {results ? (
+                  <div className={`result-card ${results.blacklist.listed === 0 ? 'valid' : 'invalid'}`}>
+                    <div className="result-summary">
+                      <p>{results.blacklist.listed === 0 ?
+                        'Your domain is not listed on any major blacklists' :
+                        `Your domain is listed on ${results.blacklist.listed} blacklist(s)`}
+                      </p>
+                      <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
+                    </div>
+
+                    <div className="details-card">
+                      <h4>Blacklist Results</h4>
+                      <div className="blacklist-results">
+                        {results.blacklist.details.map((blacklist, index) => (
+                          <div key={index} className="blacklist-item">
+                            <span className="blacklist-name">{blacklist.name}</span>
+                            <span className={`blacklist-status ${blacklist.listed ? 'listed' : 'not-listed'}`}>
+                              {blacklist.listed ? 'Listed' : 'Not Listed'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="recommendation-card">
+                      <h4>Recommendation</h4>
+                      <p>{results.blacklist.recommendation}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="info-card">
+                    <h4>Blacklist Monitoring</h4>
+                    <p>Check if your domain or IP address is listed on any major email blacklists that could affect email deliverability.</p>
+                    <div className="deployment-instructions">
+                      <h5>About Blacklists:</h5>
+                      <ul className="instruction-list">
+                        <li>Blacklists are databases of IP addresses or domains known for sending spam</li>
+                        <li>Being listed can significantly impact your email deliverability</li>
+                        <li>Regular monitoring helps identify and resolve issues quickly</li>
+                        <li>Common blacklists include Spamhaus, Barracuda, SORBS, and others</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  if (!currentUser) {
+    return null;
+  }
+
+  return (
+    <div className={`authentication-checker ${darkMode ? 'dark-mode' : ''}`}>
+      <div className="checker-header">
+        <div className="header-top">
+          <h2>Email Authentication Checker</h2>
+          <div className="header-actions">
+            <button className="action-btn" onClick={() => setShowSettings(!showSettings)}>
+              <FiSettings />
+            </button>
+            {results && (
+              <button className="action-btn" onClick={exportResults}>
+                <FiDownload />
+              </button>
+            )}
+          </div>
+        </div>
+        <p className="subtitle">
+          Comprehensive tool for SPF, DKIM, and DMARC configuration, validation, and deployment
+        </p>
+
+        <AnimatePresence>
+          {showSettings && (
+            <motion.div
+              className="settings-panel"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+            >
+              <div className="settings-header">
+                <h3>Settings</h3>
+                <button onClick={() => setShowSettings(false)}>
+                  <FiX />
+                </button>
+              </div>
+              <div className="settings-content">
+                <div className="setting-item">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={autoRefresh}
+                      onChange={(e) => setAutoRefresh(e.target.checked)}
+                    />
+                    Auto-refresh results
+                  </label>
                 </div>
-            )}
+                <div className="setting-item">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={darkMode}
+                      onChange={(e) => setDarkMode(e.target.checked)}
+                    />
+                    Dark mode
+                  </label>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-            {copied && (
-                <motion.div
-                    className="copy-notification"
-                    initial={{ opacity: 0, y: 50 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 50 }}
-                >
-                    Record copied to clipboard!
-                </motion.div>
-            )}
+        <form onSubmit={handleDomainSubmit} className="domain-form">
+          <div className="form-group">
+            <label htmlFor="domain">Enter your domain (example.com):</label>
+            <div className="input-with-button">
+              <input
+                type="text"
+                id="domain"
+                placeholder="example.com"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+              />
+              <button type="submit" disabled={isLoading || !domain}>
+                {isLoading ? (
+                  <>
+                    <FiRefreshCw className="animate-spin mr-2" />
+                    Checking...
+                  </>
+                ) : (
+                  'Check Authentication'
+                )}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
 
-            <ReactTooltip id="copy-tooltip" place="top" effect="solid" />
+      {results && (
+        <div className="overall-score">
+          <div className="score-card">
+            <h3>Domain Health Score</h3>
+            <div className="score-circle">
+              <svg viewBox="0 0 36 36" className="circular-chart">
+                <path className="circle-bg"
+                  d="M18 2.0845
+                  a 15.9155 15.9155 0 0 1 0 31.831
+                  a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <path className={`circle ${getScoreClass(results.overallScore)}`}
+                  strokeDasharray={`${results.overallScore}, 100`}
+                  d="M18 2.0845
+                  a 15.9155 15.9155 0 0 1 0 31.831
+                  a 15.9155 15.9155 0 0 1 0 -31.831"
+                />
+                <text x="18" y="20.35" className="percentage">{results.overallScore}%</text>
+              </svg>
+            </div>
+            <p className={getScoreClass(results.overallScore)}>Your email authentication is {getScoreClass(results.overallScore)}</p>
+          </div>
+        </div>
+      )}
 
-            <style jsx>{`
+      <div className="checker-tabs">
+        <div className="tabs-header">
+          <button
+            className={`tab-button ${activeTab === 'overview' ? 'active' : ''}`}
+            onClick={() => setActiveTab('overview')}
+          >
+            <FiGlobe className="tab-icon" />
+            Overview
+          </button>
+          <button
+            className={`tab-button ${activeTab === 'spf' ? 'active' : ''}`}
+            onClick={() => setActiveTab('spf')}
+          >
+            <FiMail className="tab-icon" />
+            SPF
+          </button>
+          <button
+            className={`tab-button ${activeTab === 'dkim' ? 'active' : ''}`}
+            onClick={() => setActiveTab('dkim')}
+          >
+            <FiLock className="tab-icon" />
+            DKIM
+          </button>
+          <button
+            className={`tab-button ${activeTab === 'dmarc' ? 'active' : ''}`}
+            onClick={() => setActiveTab('dmarc')}
+          >
+            <FiShield className="tab-icon" />
+            DMARC
+          </button>
+          <button
+            className={`tab-button ${activeTab === 'blacklist' ? 'active' : ''}`}
+            onClick={() => setActiveTab('blacklist')}
+          >
+            <FiList className="tab-icon" />
+            Blacklist
+          </button>
+        </div>
+
+        <div className="tabs-content">
+          {renderTabContent()}
+        </div>
+      </div>
+
+      {history.length > 0 && (
+        <div className="history-panel">
+          <h4>Recent Checks</h4>
+          <div className="history-list">
+            {history.map((item, index) => (
+              <div key={index} className="history-item" onClick={() => loadFromHistory(item.domain)}>
+                <span className="history-domain">{item.domain}</span>
+                <span className="history-date">{new Date(item.date).toLocaleDateString()}</span>
+                <div className="history-score">
+                  <div className="score-bar">
+                    <div
+                      className={`score-fill ${getScoreClass(item.score)}`}
+                      style={{ width: `${item.score}%` }}
+                    ></div>
+                  </div>
+                  <span>{item.score}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="clear-history" onClick={clearHistory}>
+            Clear History
+          </button>
+        </div>
+      )}
+
+      {copied && (
+        <motion.div
+          className="copy-notification"
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 50 }}
+        >
+          Record copied to clipboard!
+        </motion.div>
+      )}
+
+      <ReactTooltip id="copy-tooltip" place="top" effect="solid" />
+
+      <style jsx>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
         
         .authentication-checker {
@@ -1534,7 +1534,7 @@ const AuthenticationChecker = () => {
         }
 
         .score-card {
-          background: white;
+          background: white;  
           border: 1px solid #e2e8f0;
           border-radius: 20px;
           padding: 2rem;
@@ -2091,8 +2091,8 @@ const AuthenticationChecker = () => {
           }
         }
       `}</style>
-        </div>
-    );
+    </div>
+  );
 };
 
 export default AuthenticationChecker;
