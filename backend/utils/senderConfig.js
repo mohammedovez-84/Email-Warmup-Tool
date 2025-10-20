@@ -1,6 +1,6 @@
-// utils/senderConfig.js
-
 function buildSenderConfig(sender, senderType) {
+    console.log(`🔧 Building sender config for ${sender.email} (${senderType})`);
+
     const base = {
         userId: sender.userId || sender.user_id,
         name: sender.name || sender.sender_name || sender.email,
@@ -11,16 +11,21 @@ function buildSenderConfig(sender, senderType) {
         maxEmailsPerDay: sender.maxEmailsPerDay,
         replyRate: sender.replyRate,
         warmupDayCount: sender.warmupDayCount,
+        industry: sender.industry
     };
 
     if (senderType === 'google') {
+        if (!sender.app_password) {
+            throw new Error(`App password required for Gmail account: ${sender.email}`);
+        }
+
         return {
             ...base,
             smtpHost: 'smtp.gmail.com',
-            smtpPort: 465,
+            smtpPort: 587,
             smtpUser: sender.email,
             smtpPass: sender.app_password,
-            smtpEncryption: 'SSL',
+            smtpEncryption: 'TLS',
             imapHost: 'imap.gmail.com',
             imapPort: 993,
             imapUser: sender.email,
@@ -30,17 +35,21 @@ function buildSenderConfig(sender, senderType) {
     }
 
     if (senderType === 'microsoft') {
+        if (!sender.access_token) {
+            throw new Error(`Access token required for Microsoft account: ${sender.email}`);
+        }
+
         return {
             ...base,
             smtpHost: 'smtp.office365.com',
             smtpPort: 587,
             smtpUser: sender.email,
-            smtpPass: null,
+            smtpPass: sender.access_token,
             smtpEncryption: 'STARTTLS',
             imapHost: 'outlook.office365.com',
             imapPort: 993,
             imapUser: sender.email,
-            imapPass: null,
+            imapPass: sender.access_token,
             imapEncryption: 'SSL',
             refreshToken: sender.refresh_token,
             accessToken: sender.access_token,
@@ -49,17 +58,21 @@ function buildSenderConfig(sender, senderType) {
     }
 
     // custom SMTP/IMAP
+    if (!sender.smtp_host || !sender.smtp_pass) {
+        throw new Error(`SMTP configuration required for custom account: ${sender.email}`);
+    }
+
     return {
         ...base,
         smtpHost: sender.smtp_host,
         smtpPort: sender.smtp_port,
-        smtpUser: sender.email,
+        smtpUser: sender.smtp_user || sender.email,
         smtpPass: sender.smtp_pass,
         smtpEncryption: sender.smtp_encryption,
         imapHost: sender.imap_host,
         imapPort: sender.imap_port,
-        imapUser: sender.imap_user,
-        imapPass: sender.imap_pass,
+        imapUser: sender.imap_user || sender.email,
+        imapPass: sender.imap_pass || sender.smtp_pass,
         imapEncryption: sender.imap_encryption,
     };
 }

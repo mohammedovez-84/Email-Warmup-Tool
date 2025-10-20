@@ -63,117 +63,132 @@ function getImapConfig(account) {
     };
 }
 
-/**
- * 🔹 Check email status in multiple folders
- */
-async function checkEmailStatus(account, messageId) {
+async function moveEmailToInbox(receiver, messageId, currentFolder) {
+    let connection;
+    let inboxConnection;
+
     try {
-        if (!messageId) throw new Error('Missing Message-ID');
+        const imaps = require('imap-simple');
+        const config = getImapConfig(receiver);
+        connection = await imaps.connect(config);
 
-        const config = getImapConfig(account);
-        const connection = await imaps.connect(config);
+        console.log(`📦 Attempting to move email from ${currentFolder} to INBOX`);
 
-        const folders = ['INBOX', '[Gmail]/Spam', 'Spam', '[Gmail]/All Mail'];
-        const cleanMessageId = messageId.replace(/[<>]/g, '');
+        // Open the current folder
+        await connection.openBox(currentFolder, false);
 
-        for (const folder of folders) {
+        const searchCriteria = [['HEADER', 'Message-ID', messageId]];
+        const results = await connection.search(searchCriteria, { bodies: [''], struct: true });
+
+        if (results.length === 0) {
+            console.log(`❌ Email not found in ${currentFolder}`);
+            return { success: false, error: 'Email not found in current folder' };
+        }
+
+        const uid = results[0].attributes.uid;
+
+        // Move email to INBOX
+        await connection.moveMessage(uid, 'INBOX');
+        console.log(`✅ Successfully moved message ${messageId} to INBOX`);
+
+        // Close the first connection
+        await connection.end();
+        connection = null;
+
+        // Reconnect to mark as seen and flagged in INBOX
+        inboxConnection = await imaps.connect(config);
+        await inboxConnection.openBox('INBOX', false);
+
+        const inboxSearch = [['HEADER', 'Message-ID', messageId]];
+        const inboxResults = await inboxConnection.search(inboxSearch, { bodies: [''], struct: true });
+
+        if (inboxResults.length > 0) {
+            const inboxUid = inboxResults[0].attributes.uid;
+            await inboxConnection.imap.addFlags(inboxUid, ['\\Seen', '\\Flagged']);
+            console.log('✅ Marked as Seen + Flagged in INBOX after moving');
+        } else {
+            console.log('⚠️ Email not found in INBOX after move (might need time to propagate)');
+        }
+
+        await inboxConnection.end();
+
+        return { success: true, message: 'Email moved to INBOX and marked as seen/flagged' };
+
+    } catch (err) {
+        console.error('❌ Error moving email to inbox:', err.message);
+
+        // Clean up connections
+        if (connection) {
             try {
-                await connection.openBox(folder, true);
-                const searchCriteria = [['HEADER', 'Message-ID', cleanMessageId]];
-                const fetchOptions = { bodies: ['HEADER.FIELDS (FROM TO SUBJECT MESSAGE-ID)'], struct: true };
-
-                let results = await connection.search(searchCriteria, fetchOptions);
-
-                // Fallback search by lastSubject
-                if (results.length === 0 && account.lastSubject) {
-                    results = await connection.search([['HEADER', 'Subject', account.lastSubject]], fetchOptions);
-                }
-
-                if (results.length > 0) {
-                    await connection.end();
-                    return { success: true, folder };
-                }
-            } catch (err) {
-                console.warn(`[IMAP] Failed folder check: ${folder} => ${err.message}`);
+                await connection.end();
+            } catch (e) {
+                console.error('Error closing connection:', e.message);
+            }
+        }
+        if (inboxConnection) {
+            try {
+                await inboxConnection.end();
+            } catch (e) {
+                console.error('Error closing inbox connection:', e.message);
             }
         }
 
-        await connection.end();
-        return { success: false, error: 'Message not found in any folder' };
-    } catch (err) {
-        console.error('IMAP check failed:', err.message);
         return { success: false, error: err.message };
     }
 }
 
-/**
- * 🔹 Move email from Spam to Inbox
- */
-async function moveEmailToInbox(account, messageId) {
-    const config = getImapConfig(account);
-    const connection = await imaps.connect(config);
+// Also update the checkEmailStatus function to be more robust
+async function checkEmailStatus(receiver, messageId) {
+    let connection;
 
     try {
-        await connection.openBox('Spam').catch(() => connection.openBox('[Gmail]/Spam'));
+        const imaps = require('imap-simple');
+        const config = getImapConfig(receiver);
+        connection = await imaps.connect(config);
 
-        const searchCriteria = [['HEADER', 'Message-ID', messageId]];
-        const results = await connection.search(searchCriteria, { bodies: [''], struct: true });
+        // Check common folders
+        const foldersToCheck = ['INBOX', '[Gmail]/Spam', 'Spam', 'Junk', 'Bulk'];
 
-        if (results.length > 0) {
-            const uid = results[0].attributes.uid;
-            await connection.moveMessage(uid, 'INBOX');
+        for (const folder of foldersToCheck) {
+            try {
+                await connection.openBox(folder, false);
+                const searchCriteria = [['HEADER', 'Message-ID', messageId]];
+                const results = await connection.search(searchCriteria, { bodies: [''], struct: true });
 
-            await connection.openBox('INBOX');
-            await new Promise((resolve, reject) => {
-                connection.imap.addFlags(uid, ['\\Seen', '\\Flagged'], (err) => (err ? reject(err) : resolve()));
-            });
-
-            console.log(`Moved and flagged message ${messageId} in INBOX`);
-        } else {
-            console.warn(`Message not found in Spam folders to move`);
+                if (results.length > 0) {
+                    await connection.end();
+                    return {
+                        success: true,
+                        folder: folder,
+                        found: true
+                    };
+                }
+            } catch (folderError) {
+                // Folder doesn't exist or can't be accessed, continue to next
+                continue;
+            }
         }
+
+        await connection.end();
+        return {
+            success: true,
+            folder: 'NOT_FOUND',
+            found: false
+        };
+
     } catch (err) {
-        console.error(`Error moving email: ${err.message}`);
-    }
-
-    await connection.end();
-}
-/**
- * Move message from Spam to INBOX
- */
-async function moveEmailToInbox(account, messageId) {
-    const config = getImapConfig(account);
-    const connection = await imaps.connect(config);
-
-    try {
-        await connection.openBox('Spam').catch(() => connection.openBox('[Gmail]/Spam'));
-
-        const searchCriteria = [['HEADER', 'Message-ID', messageId]];
-        const results = await connection.search(searchCriteria, { bodies: [''], struct: true });
-
-        if (results.length > 0) {
-            const uid = results[0].attributes.uid;
-            await connection.moveMessage(uid, 'INBOX');
-            console.log(`Moved message ${messageId} to INBOX`);
-
-            await connection.openBox('INBOX');
-            await new Promise((resolve, reject) => {
-                connection.imap.addFlags(uid, ['\\Seen', '\\Flagged'], (err) => {
-                    if (err) reject(err);
-                    else resolve();
-                });
-            });
-
-            console.log(`Marked as Seen + Flagged in INBOX after moving`);
-        } else {
-            console.warn(`Message not found in Spam folders to move`);
+        console.error('❌ Error checking email status:', err.message);
+        if (connection) {
+            try {
+                await connection.end();
+            } catch (e) {
+                console.error('Error closing connection:', e.message);
+            }
         }
-    } catch (err) {
-        console.error(`Error during moving email: ${err.message}`);
+        return { success: false, error: err.message };
     }
-
-    await connection.end();
 }
+
 
 /**
  * Reply to message via SMTP
