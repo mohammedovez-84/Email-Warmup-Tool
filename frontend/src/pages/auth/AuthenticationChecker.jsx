@@ -1,26 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import {
-  FiCheckCircle,
-  FiAlertTriangle,
-  FiInfo,
-  FiCopy,
-  FiRefreshCw,
-  FiExternalLink,
-  FiChevronDown,
-  FiChevronUp,
-  FiLock,
-  FiMail,
-  FiGlobe,
-  FiShield,
-  FiX,
-  FiHelpCircle,
-  FiSettings,
-  FiDownload,
-  FiServer,
-  FiList,
-  FiArrowRight,
-  FiBarChart2,
-  FiActivity
+    FiCheckCircle,
+    FiAlertTriangle,
+    FiInfo,
+    FiCopy,
+    FiRefreshCw,
+    FiExternalLink,
+    FiChevronDown,
+    FiChevronUp,
+    FiLock,
+    FiMail,
+    FiGlobe,
+    FiShield,
+    FiX,
+    FiHelpCircle,
+    FiSettings,
+    FiDownload,
+    FiServer,
+    FiList,
+    FiArrowRight,
+    FiBarChart2,
+    FiActivity
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { CopyToClipboard } from 'react-copy-to-clipboard';
@@ -376,53 +376,53 @@ const AuthenticationChecker = () => {
     switch (activeTab) {
       case 'overview':
         return (
-          <div className="overview-tab">
+          <div className="p-0 font-['Poppins']">
             {results && (
               <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                  <div className="stat-card">
-                    <div className="stat-icon bg-blue-100 text-blue-600">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-xl sm:text-2xl">
                       <FiMail />
                     </div>
-                    <div className="stat-content">
-                      <h4>SPF</h4>
-                      <p className={results.spf.exists ? 'text-green-600' : 'text-red-600'}>
+                    <div>
+                      <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">SPF</h4>
+                      <p className={results.spf.exists ? 'text-green-600 text-lg sm:text-xl font-bold' : 'text-red-600 text-lg sm:text-xl font-bold'}>
                         {results.spf.exists ? 'Configured' : 'Not Found'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="stat-card">
-                    <div className="stat-icon bg-purple-100 text-purple-600">
+                  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center text-xl sm:text-2xl">
                       <FiLock />
                     </div>
-                    <div className="stat-content">
-                      <h4>DKIM</h4>
-                      <p className={results.dkim.exists ? 'text-green-600' : 'text-red-600'}>
+                    <div>
+                      <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">DKIM</h4>
+                      <p className={results.dkim.exists ? 'text-green-600 text-lg sm:text-xl font-bold' : 'text-red-600 text-lg sm:text-xl font-bold'}>
                         {results.dkim.exists ? 'Configured' : 'Not Found'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="stat-card">
-                    <div className="stat-icon bg-teal-100 text-teal-600">
+                  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-teal-100 text-teal-600 rounded-2xl flex items-center justify-center text-xl sm:text-2xl">
                       <FiShield />
                     </div>
-                    <div className="stat-content">
-                      <h4>DMARC</h4>
-                      <p className={results.dmarc.exists ? 'text-green-600' : 'text-red-600'}>
+                    <div>
+                      <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">DMARC</h4>
+                      <p className={results.dmarc.exists ? 'text-green-600 text-lg sm:text-xl font-bold' : 'text-red-600 text-lg sm:text-xl font-bold'}>
                         {results.dmarc.exists ? 'Configured' : 'Not Found'}
                       </p>
                     </div>
                   </div>
 
-                  <div className="stat-card">
-                    <div className="stat-icon bg-orange-100 text-orange-600">
+                  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center text-xl sm:text-2xl">
                       <FiList />
                     </div>
-                    <div className="stat-content">
-                      <h4>Blacklists</h4>
-                      <p className={results.blacklist.listed === 0 ? 'text-green-600' : 'text-red-600'}>
+                    <div>
+                      <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">Blacklists</h4>
+                      <p className={results.blacklist.listed === 0 ? 'text-green-600 text-lg sm:text-xl font-bold' : 'text-red-600 text-lg sm:text-xl font-bold'}>
                         {results.blacklist.listed === 0 ? 'Clean' : `${results.blacklist.listed} Listed`}
                       </p>
                     </div>
@@ -430,22 +430,27 @@ const AuthenticationChecker = () => {
                 </div>
 
                 {results.issues && results.issues.length > 0 && (
-                  <div className="issues-section mb-6">
-                    <h3 className="text-xl font-bold mb-4 flex items-center">
+                  <div className="bg-white rounded-2xl p-4 sm:p-6 mb-6 shadow-sm font-['Poppins']">
+                    <h3 className="text-lg sm:text-xl font-bold mb-4 flex items-center">
                       <FiAlertTriangle className="mr-2 text-orange-500" />
                       Domain Health Issues
                     </h3>
-                    <div className="issues-grid">
+                    <div className="space-y-4">
                       {results.issues.map((issue, index) => (
-                        <div key={index} className={`issue-item ${issue.type}`}>
-                          <div className="issue-icon">
-                            {issue.type === 'error' && <FiAlertTriangle className="text-red-500" />}
-                            {issue.type === 'warning' && <FiAlertTriangle className="text-yellow-500" />}
-                            {issue.type === 'info' && <FiInfo className="text-blue-500" />}
+                        <div key={index} className={`flex items-start gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl ${issue.type === 'error'
+                            ? 'bg-red-50 border-l-4 border-red-500'
+                            : issue.type === 'warning'
+                              ? 'bg-yellow-50 border-l-4 border-yellow-500'
+                              : 'bg-blue-50 border-l-4 border-blue-500'
+                          }`}>
+                          <div className="flex-shrink-0 mt-1">
+                            {issue.type === 'error' && <FiAlertTriangle className="text-red-500 text-lg sm:text-xl" />}
+                            {issue.type === 'warning' && <FiAlertTriangle className="text-yellow-500 text-lg sm:text-xl" />}
+                            {issue.type === 'info' && <FiInfo className="text-blue-500 text-lg sm:text-xl" />}
                           </div>
-                          <div className="issue-content">
-                            <h4 className="font-semibold">{issue.category}: {issue.message}</h4>
-                            <p>{issue.description}</p>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-gray-900 text-sm sm:text-base">{issue.category}: {issue.message}</h4>
+                            <p className="text-gray-600 mt-1 text-xs sm:text-sm">{issue.description}</p>
                           </div>
                         </div>
                       ))}
@@ -453,53 +458,53 @@ const AuthenticationChecker = () => {
                   </div>
                 )}
 
-                <div className="recommendations-section">
-                  <h3 className="text-xl font-bold mb-4 flex items-center">
+                <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-sm font-['Poppins']">
+                  <h3 className="text-lg sm:text-xl font-bold mb-4 flex items-center">
                     <FiCheckCircle className="mr-2 text-green-500" />
                     Recommendations
                   </h3>
-                  <div className="recommendations-grid">
+                  <div className="space-y-3">
                     {results.spf.recommendation && (
-                      <div className="recommendation-item">
+                      <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
                         <div className="flex items-start">
                           <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
-                          <p>{results.spf.recommendation}</p>
+                          <p className="text-gray-700 text-sm sm:text-base">{results.spf.recommendation}</p>
                         </div>
                       </div>
                     )}
 
                     {results.dkim.recommendation && (
-                      <div className="recommendation-item">
+                      <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
                         <div className="flex items-start">
                           <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
-                          <p>{results.dkim.recommendation}</p>
+                          <p className="text-gray-700 text-sm sm:text-base">{results.dkim.recommendation}</p>
                         </div>
                       </div>
                     )}
 
                     {results.dmarc.recommendation && (
-                      <div className="recommendation-item">
+                      <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
                         <div className="flex items-start">
                           <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
-                          <p>{results.dmarc.recommendation}</p>
+                          <p className="text-gray-700 text-sm sm:text-base">{results.dmarc.recommendation}</p>
                         </div>
                       </div>
                     )}
 
                     {results.blacklist.recommendation && (
-                      <div className="recommendation-item">
+                      <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
                         <div className="flex items-start">
                           <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
-                          <p>{results.blacklist.recommendation}</p>
+                          <p className="text-gray-700 text-sm sm:text-base">{results.blacklist.recommendation}</p>
                         </div>
                       </div>
                     )}
 
                     {results.bimi.recommendation && (
-                      <div className="recommendation-item">
+                      <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
                         <div className="flex items-start">
                           <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
-                          <p>{results.bimi.recommendation}</p>
+                          <p className="text-gray-700 text-sm sm:text-base">{results.bimi.recommendation}</p>
                         </div>
                       </div>
                     )}
@@ -512,73 +517,83 @@ const AuthenticationChecker = () => {
 
       case 'spf':
         return (
-          <div className="checker-section">
-            <div className="section-header" onClick={() => toggleSection('spf')}>
-              <h3>
+          <div className="border border-gray-200 rounded-2xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-lg font-['Poppins']">
+            <div
+              className="bg-gray-50 border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
+              onClick={() => toggleSection('spf')}
+            >
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center">
                 <FiMail className="inline mr-2" />
                 SPF (Sender Policy Framework)
                 {results?.spf && getStatusIcon(results.spf.valid)}
               </h3>
-              {expandedSections.spf ? <FiChevronUp /> : <FiChevronDown />}
+              {expandedSections.spf ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
             </div>
 
             {expandedSections.spf && (
-              <div className="section-content">
+              <div className="bg-white p-4 sm:p-6 animate-fade-in">
                 {results ? (
                   <>
-                    <div className={`result-card ${results.spf.valid ? 'valid' : 'invalid'}`}>
-                      <div className="result-summary">
-                        <p>{results.spf.exists ? 'SPF record found' : 'No SPF record found'}</p>
+                    <div className={`rounded-xl p-4 sm:p-6 ${results.spf.valid
+                        ? 'bg-green-50 border-l-4 border-green-500'
+                        : 'bg-yellow-50 border-l-4 border-yellow-500'
+                      }`}>
+                      <div className="mb-4">
+                        <p className="font-semibold text-lg text-gray-900 mb-1">
+                          {results.spf.exists ? 'SPF record found' : 'No SPF record found'}
+                        </p>
                         <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
                       </div>
 
                       {results.spf.exists && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                          <div className="details-card">
-                            <h4>Record Details</h4>
-                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
+                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-xs sm:text-sm">
                               {results.spf.record}
                             </SyntaxHighlighter>
                             <CopyToClipboard text={results.spf.record} onCopy={() => setCopied(true)}>
-                              <button className="copy-btn">
+                              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-800 to-teal-600 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-sm font-medium cursor-pointer transition-all duration-200 hover:opacity-90 hover:-translate-y-0.5 shadow-md">
                                 <FiCopy /> Copy Record
                               </button>
                             </CopyToClipboard>
                           </div>
 
-                          <div className="details-card">
-                            <h4>Mechanisms</h4>
-                            <ul className="mechanisms-list">
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Mechanisms</h4>
+                            <ul className="space-y-2">
                               {results.spf.mechanisms.map((mechanism, idx) => (
-                                <li key={idx} className={mechanism.valid ? 'valid' : 'invalid'}>
-                                  <span className="mechanism-type">{mechanism.type}</span>
-                                  <span className="mechanism-value">{mechanism.value}</span>
+                                <li key={idx} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-b-0">
+                                  <div className="flex items-center gap-2 sm:gap-3">
+                                    <span className="font-medium text-gray-700 text-xs sm:text-sm w-16 sm:w-20">{mechanism.type}</span>
+                                    <span className="font-mono text-xs sm:text-sm text-gray-600 flex-1 truncate">{mechanism.value}</span>
+                                  </div>
                                   {mechanism.valid ? (
-                                    <FiCheckCircle className="text-green-500" />
+                                    <FiCheckCircle className="text-green-500 flex-shrink-0" />
                                   ) : (
-                                    <FiAlertTriangle className="text-yellow-500" />
+                                    <FiAlertTriangle className="text-yellow-500 flex-shrink-0" />
                                   )}
                                 </li>
                               ))}
                             </ul>
-                            <p className="text-sm mt-2">Total lookups: {results.spf.lookups}/10</p>
+                            <p className="text-sm text-gray-500 mt-3">Total lookups: {results.spf.lookups}/10</p>
                           </div>
                         </div>
                       )}
 
-                      <div className="recommendation-card">
-                        <h4>Recommendation</h4>
-                        <p>{results.spf.recommendation}</p>
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                        <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
+                        <p className="text-gray-700 text-sm sm:text-base">{results.spf.recommendation}</p>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <div className="info-card">
-                    <h4>SPF Check</h4>
-                    <p>SPF (Sender Policy Framework) is an email authentication method designed to detect forging sender addresses during the delivery of the email.</p>
-                    <div className="deployment-instructions">
-                      <h5>How it works:</h5>
-                      <ul className="instruction-list">
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+                    <h4 className="font-semibold text-gray-900 mb-3">SPF Check</h4>
+                    <p className="text-gray-600 mb-4 text-sm sm:text-base">SPF (Sender Policy Framework) is an email authentication method designed to detect forging sender addresses during the delivery of the email.</p>
+                    <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                      <h5 className="font-semibold text-gray-900 mb-2">How it works:</h5>
+                      <ul className="list-disc list-inside space-y-1 text-gray-600 text-sm sm:text-base">
                         <li>SPF allows receiving mail servers to check that incoming mail from a domain comes from a host authorized by that domain's administrators</li>
                         <li>It lists designated mail servers in a DNS TXT record</li>
                         <li>Receiving servers verify the sending server's IP against the published SPF record</li>
@@ -594,73 +609,81 @@ const AuthenticationChecker = () => {
 
       case 'dkim':
         return (
-          <div className="checker-section">
-            <div className="section-header" onClick={() => toggleSection('dkim')}>
-              <h3>
+          <div className="border border-gray-200 rounded-2xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-lg font-['Poppins']">
+            <div
+              className="bg-gray-50 border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
+              onClick={() => toggleSection('dkim')}
+            >
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center">
                 <FiLock className="inline mr-2" />
                 DKIM (DomainKeys Identified Mail)
                 {results?.dkim && getStatusIcon(results.dkim.valid)}
               </h3>
-              {expandedSections.dkim ? <FiChevronUp /> : <FiChevronDown />}
+              {expandedSections.dkim ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
             </div>
 
             {expandedSections.dkim && (
-              <div className="section-content">
+              <div className="bg-white p-4 sm:p-6 animate-fade-in">
                 {results ? (
                   <>
-                    <div className={`result-card ${results.dkim.valid ? 'valid' : 'invalid'}`}>
-                      <div className="result-summary">
-                        <p>{results.dkim.exists ? `DKIM is properly configured for selector '${results.dkim.selector}'` : 'No DKIM record found'}</p>
+                    <div className={`rounded-xl p-4 sm:p-6 ${results.dkim.valid
+                        ? 'bg-green-50 border-l-4 border-green-500'
+                        : 'bg-yellow-50 border-l-4 border-yellow-500'
+                      }`}>
+                      <div className="mb-4">
+                        <p className="font-semibold text-lg text-gray-900 mb-1">
+                          {results.dkim.exists ? `DKIM is properly configured for selector '${results.dkim.selector}'` : 'No DKIM record found'}
+                        </p>
                         <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
                       </div>
 
                       {results.dkim.exists && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                          <div className="details-card">
-                            <h4>Record Details</h4>
-                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
+                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-xs sm:text-sm">
                               {results.dkim.record}
                             </SyntaxHighlighter>
                             <CopyToClipboard text={results.dkim.record} onCopy={() => setCopied(true)}>
-                              <button className="copy-btn">
+                              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-800 to-teal-600 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-sm font-medium cursor-pointer transition-all duration-200 hover:opacity-90 hover:-translate-y-0.5 shadow-md">
                                 <FiCopy /> Copy Record
                               </button>
                             </CopyToClipboard>
                           </div>
 
-                          <div className="details-card">
-                            <h4>Key Information</h4>
-                            <ul className="key-details">
-                              <li>
-                                <span>Key Type:</span>
-                                <span>RSA</span>
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Key Information</h4>
+                            <ul className="space-y-2 sm:space-y-3">
+                              <li className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-gray-600 text-sm sm:text-base">Key Type:</span>
+                                <span className="font-medium text-gray-900 text-sm sm:text-base">RSA</span>
                               </li>
-                              <li>
-                                <span>Key Length:</span>
-                                <span>{results.dkim.keyLength} bits</span>
+                              <li className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-gray-600 text-sm sm:text-base">Key Length:</span>
+                                <span className="font-medium text-gray-900 text-sm sm:text-base">{results.dkim.keyLength} bits</span>
                               </li>
-                              <li>
-                                <span>Public Key Valid:</span>
-                                <span>{results.dkim.publicKeyValid ? 'Yes' : 'No'}</span>
+                              <li className="flex justify-between items-center py-2">
+                                <span className="text-gray-600 text-sm sm:text-base">Public Key Valid:</span>
+                                <span className="font-medium text-gray-900 text-sm sm:text-base">{results.dkim.publicKeyValid ? 'Yes' : 'No'}</span>
                               </li>
                             </ul>
                           </div>
                         </div>
                       )}
 
-                      <div className="recommendation-card">
-                        <h4>Recommendation</h4>
-                        <p>{results.dkim.recommendation}</p>
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                        <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
+                        <p className="text-gray-700 text-sm sm:text-base">{results.dkim.recommendation}</p>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <div className="info-card">
-                    <h4>DKIM Check</h4>
-                    <p>DKIM (DomainKeys Identified Mail) is an email authentication method that allows the receiver to check that an email was indeed sent and authorized by the owner of that domain.</p>
-                    <div className="deployment-instructions">
-                      <h5>How it works:</h5>
-                      <ul className="instruction-list">
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+                    <h4 className="font-semibold text-gray-900 mb-3">DKIM Check</h4>
+                    <p className="text-gray-600 mb-4 text-sm sm:text-base">DKIM (DomainKeys Identified Mail) is an email authentication method that allows the receiver to check that an email was indeed sent and authorized by the owner of that domain.</p>
+                    <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                      <h5 className="font-semibold text-gray-900 mb-2">How it works:</h5>
+                      <ul className="list-disc list-inside space-y-1 text-gray-600 text-sm sm:text-base">
                         <li>DKIM uses cryptographic signatures to verify that message content hasn't been altered in transit</li>
                         <li>The sending server signs the email with a private key</li>
                         <li>The receiving server retrieves the public key from DNS records to verify the signature</li>
@@ -676,89 +699,97 @@ const AuthenticationChecker = () => {
 
       case 'dmarc':
         return (
-          <div className="checker-section">
-            <div className="section-header" onClick={() => toggleSection('dmarc')}>
-              <h3>
+          <div className="border border-gray-200 rounded-2xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-lg font-['Poppins']">
+            <div
+              className="bg-gray-50 border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
+              onClick={() => toggleSection('dmarc')}
+            >
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center">
                 <FiShield className="inline mr-2" />
                 DMARC (Domain-based Message Authentication, Reporting & Conformance)
                 {results?.dmarc && getStatusIcon(results.dmarc.valid)}
               </h3>
-              {expandedSections.dmarc ? <FiChevronUp /> : <FiChevronDown />}
+              {expandedSections.dmarc ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
             </div>
 
             {expandedSections.dmarc && (
-              <div className="section-content">
+              <div className="bg-white p-4 sm:p-6 animate-fade-in">
                 {results ? (
                   <>
-                    <div className={`result-card ${results.dmarc.valid ? 'valid' : 'invalid'}`}>
-                      <div className="result-summary">
-                        <p>{results.dmarc.exists ? 'DMARC record found' : 'No DMARC record found'}</p>
+                    <div className={`rounded-xl p-4 sm:p-6 ${results.dmarc.valid
+                        ? 'bg-green-50 border-l-4 border-green-500'
+                        : 'bg-yellow-50 border-l-4 border-yellow-500'
+                      }`}>
+                      <div className="mb-4">
+                        <p className="font-semibold text-lg text-gray-900 mb-1">
+                          {results.dmarc.exists ? 'DMARC record found' : 'No DMARC record found'}
+                        </p>
                         <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
                       </div>
 
                       {results.dmarc.exists && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                          <div className="details-card">
-                            <h4>Record Details</h4>
-                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
+                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-xs sm:text-sm">
                               {results.dmarc.record}
                             </SyntaxHighlighter>
                             <CopyToClipboard text={results.dmarc.record} onCopy={() => setCopied(true)}>
-                              <button className="copy-btn">
+                              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-800 to-teal-600 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-sm font-medium cursor-pointer transition-all duration-200 hover:opacity-90 hover:-translate-y-0.5 shadow-md">
                                 <FiCopy /> Copy Record
                               </button>
                             </CopyToClipboard>
                           </div>
 
-                          <div className="details-card">
-                            <h4>Policy Details</h4>
-                            <ul className="policy-details">
-                              <li>
-                                <span>Policy:</span>
-                                <span className="capitalize">{results.dmarc.policy}</span>
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Policy Details</h4>
+                            <ul className="space-y-2">
+                              <li className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-gray-600 text-sm sm:text-base">Policy:</span>
+                                <span className="font-medium text-gray-900 text-sm sm:text-base capitalize">{results.dmarc.policy}</span>
                               </li>
-                              <li>
-                                <span>Subdomain Policy:</span>
-                                <span>{results.dmarc.subdomainPolicy || 'Inherits from parent'}</span>
+                              <li className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-gray-600 text-sm sm:text-base">Subdomain Policy:</span>
+                                <span className="font-medium text-gray-900 text-sm sm:text-base">{results.dmarc.subdomainPolicy || 'Inherits from parent'}</span>
                               </li>
-                              <li>
-                                <span>Percentage:</span>
-                                <span>{results.dmarc.percentage}%</span>
+                              <li className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-gray-600 text-sm sm:text-base">Percentage:</span>
+                                <span className="font-medium text-gray-900 text-sm sm:text-base">{results.dmarc.percentage}%</span>
                               </li>
-                              <li>
-                                <span>Aggregate Reports:</span>
-                                <span>{results.dmarc.aggregateReporting}</span>
+                              <li className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-gray-600 text-sm sm:text-base">Aggregate Reports:</span>
+                                <span className="font-medium text-gray-900 text-sm sm:text-base">{results.dmarc.aggregateReporting}</span>
                               </li>
-                              <li>
-                                <span>Forensic Reports:</span>
-                                <span>{results.dmarc.forensicReporting || 'Not configured'}</span>
+                              <li className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-gray-600 text-sm sm:text-base">Forensic Reports:</span>
+                                <span className="font-medium text-gray-900 text-sm sm:text-base">{results.dmarc.forensicReporting || 'Not configured'}</span>
                               </li>
-                              <li>
-                                <span>SPF Alignment:</span>
-                                <span className="capitalize">{results.dmarc.alignment.spf}</span>
+                              <li className="flex justify-between items-center py-2 border-b border-gray-100">
+                                <span className="text-gray-600 text-sm sm:text-base">SPF Alignment:</span>
+                                <span className="font-medium text-gray-900 text-sm sm:text-base capitalize">{results.dmarc.alignment.spf}</span>
                               </li>
-                              <li>
-                                <span>DKIM Alignment:</span>
-                                <span className="capitalize">{results.dmarc.alignment.dkim}</span>
+                              <li className="flex justify-between items-center py-2">
+                                <span className="text-gray-600 text-sm sm:text-base">DKIM Alignment:</span>
+                                <span className="font-medium text-gray-900 text-sm sm:text-base capitalize">{results.dmarc.alignment.dkim}</span>
                               </li>
                             </ul>
                           </div>
                         </div>
                       )}
 
-                      <div className="recommendation-card">
-                        <h4>Recommendation</h4>
-                        <p>{results.dmarc.recommendation}</p>
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                        <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
+                        <p className="text-gray-700 text-sm sm:text-base">{results.dmarc.recommendation}</p>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <div className="info-card">
-                    <h4>DMARC Check</h4>
-                    <p>DMARC (Domain-based Message Authentication, Reporting & Conformance) is an email authentication protocol that builds on SPF and DKIM protocols.</p>
-                    <div className="deployment-instructions">
-                      <h5>How it works:</h5>
-                      <ul className="instruction-list">
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+                    <h4 className="font-semibold text-gray-900 mb-3">DMARC Check</h4>
+                    <p className="text-gray-600 mb-4 text-sm sm:text-base">DMARC (Domain-based Message Authentication, Reporting & Conformance) is an email authentication protocol that builds on SPF and DKIM protocols.</p>
+                    <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                      <h5 className="font-semibold text-gray-900 mb-2">How it works:</h5>
+                      <ul className="list-disc list-inside space-y-1 text-gray-600 text-sm sm:text-base">
                         <li>DMARC allows domain owners to publish policies that specify how to handle emails that fail SPF and/or DKIM checks</li>
                         <li>It provides reporting mechanisms so domain owners can monitor authentication results</li>
                         <li>Receiving mail servers can reject or quarantine emails that fail DMARC checks</li>
@@ -774,35 +805,45 @@ const AuthenticationChecker = () => {
 
       case 'blacklist':
         return (
-          <div className="checker-section">
-            <div className="section-header" onClick={() => toggleSection('blacklist')}>
-              <h3>
+          <div className="border border-gray-200 rounded-2xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-lg font-['Poppins']">
+            <div
+              className="bg-gray-50 border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
+              onClick={() => toggleSection('blacklist')}
+            >
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center">
                 <FiList className="inline mr-2" />
                 Blacklist Check
                 {results?.blacklist && getStatusIcon(results.blacklist.listed === 0)}
               </h3>
-              {expandedSections.blacklist ? <FiChevronUp /> : <FiChevronDown />}
+              {expandedSections.blacklist ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
             </div>
 
             {expandedSections.blacklist && (
-              <div className="section-content">
+              <div className="bg-white p-4 sm:p-6 animate-fade-in">
                 {results ? (
-                  <div className={`result-card ${results.blacklist.listed === 0 ? 'valid' : 'invalid'}`}>
-                    <div className="result-summary">
-                      <p>{results.blacklist.listed === 0 ?
-                        'Your domain is not listed on any major blacklists' :
-                        `Your domain is listed on ${results.blacklist.listed} blacklist(s)`}
+                  <div className={`rounded-xl p-4 sm:p-6 ${results.blacklist.listed === 0
+                      ? 'bg-green-50 border-l-4 border-green-500'
+                      : 'bg-yellow-50 border-l-4 border-yellow-500'
+                    }`}>
+                    <div className="mb-4">
+                      <p className="font-semibold text-lg text-gray-900 mb-1">
+                        {results.blacklist.listed === 0 ?
+                          'Your domain is not listed on any major blacklists' :
+                          `Your domain is listed on ${results.blacklist.listed} blacklist(s)`}
                       </p>
                       <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
                     </div>
 
-                    <div className="details-card">
-                      <h4>Blacklist Results</h4>
-                      <div className="blacklist-results">
+                    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                      <h4 className="font-semibold text-gray-900 mb-3">Blacklist Results</h4>
+                      <div className="space-y-2">
                         {results.blacklist.details.map((blacklist, index) => (
-                          <div key={index} className="blacklist-item">
-                            <span className="blacklist-name">{blacklist.name}</span>
-                            <span className={`blacklist-status ${blacklist.listed ? 'listed' : 'not-listed'}`}>
+                          <div key={index} className="flex justify-between items-center py-2 px-3 bg-gray-50 rounded-lg">
+                            <span className="font-medium text-gray-900 text-sm sm:text-base">{blacklist.name}</span>
+                            <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${blacklist.listed
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-green-100 text-green-800'
+                              }`}>
                               {blacklist.listed ? 'Listed' : 'Not Listed'}
                             </span>
                           </div>
@@ -810,18 +851,18 @@ const AuthenticationChecker = () => {
                       </div>
                     </div>
 
-                    <div className="recommendation-card">
-                      <h4>Recommendation</h4>
-                      <p>{results.blacklist.recommendation}</p>
+                    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                      <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
+                      <p className="text-gray-700 text-sm sm:text-base">{results.blacklist.recommendation}</p>
                     </div>
                   </div>
                 ) : (
-                  <div className="info-card">
-                    <h4>Blacklist Monitoring</h4>
-                    <p>Check if your domain or IP address is listed on any major email blacklists that could affect email deliverability.</p>
-                    <div className="deployment-instructions">
-                      <h5>About Blacklists:</h5>
-                      <ul className="instruction-list">
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+                    <h4 className="font-semibold text-gray-900 mb-3">Blacklist Monitoring</h4>
+                    <p className="text-gray-600 mb-4 text-sm sm:text-base">Check if your domain or IP address is listed on any major email blacklists that could affect email deliverability.</p>
+                    <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                      <h5 className="font-semibold text-gray-900 mb-2">About Blacklists:</h5>
+                      <ul className="list-disc list-inside space-y-1 text-gray-600 text-sm sm:text-base">
                         <li>Blacklists are databases of IP addresses or domains known for sending spam</li>
                         <li>Being listed can significantly impact your email deliverability</li>
                         <li>Regular monitoring helps identify and resolve issues quickly</li>
@@ -845,1252 +886,294 @@ const AuthenticationChecker = () => {
   }
 
   return (
-    <div className={`authentication-checker ${darkMode ? 'dark-mode' : ''}`}>
-      <div className="checker-header">
-        <div className="header-top">
-          <h2>Email Authentication Checker</h2>
-          <div className="header-actions">
-            <button className="action-btn" onClick={() => setShowSettings(!showSettings)}>
-              <FiSettings />
-            </button>
-            {results && (
-              <button className="action-btn" onClick={exportResults}>
-                <FiDownload />
-              </button>
-            )}
+    <div className={`min-h-screen bg-gray-50 font-['Poppins',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_Roboto,_sans-serif] transition-colors duration-300 ${darkMode ? 'dark bg-gray-900' : ''}`}>
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        {/* Header */}
+        <div className="bg-white border-2 border-transparent bg-gradient-to-r from-teal-800 to-teal-600 bg-origin-border rounded-2xl p-4 sm:p-8 text-gray-900 mb-6 sm:mb-8 shadow-xl relative overflow-hidden">
+          <div className="bg-white rounded-xl p-4 sm:p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-teal-800 to-teal-600 bg-clip-text text-transparent">
+                Email Authentication Checker
+              </h2>
+              <div className="flex gap-2">
+                {/* Settings and Download buttons removed */}
+              </div>
+            </div>
+
+            <p className="text-gray-600 mb-4 sm:mb-6 text-base sm:text-lg">
+              Comprehensive tool for SPF, DKIM, and DMARC configuration, validation, and deployment
+            </p>
+
+            <AnimatePresence>
+              {showSettings && (
+                <motion.div
+                  className="bg-gray-50 border border-gray-200 rounded-xl mb-4 overflow-hidden"
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                >
+                  <div className="flex justify-between items-center p-4 border-b border-gray-200">
+                    <h3 className="text-gray-900 font-semibold">Settings</h3>
+                    <button
+                      onClick={() => setShowSettings(false)}
+                      className="text-gray-600 hover:text-gray-900"
+                    >
+                      <FiX />
+                    </button>
+                  </div>
+                  <div className="p-4 space-y-3">
+                    <div className="flex items-center">
+                      <label className="flex items-center gap-2 cursor-pointer text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={autoRefresh}
+                          onChange={(e) => setAutoRefresh(e.target.checked)}
+                          className="rounded border-gray-300 text-teal-800 focus:ring-teal-800"
+                        />
+                        Auto-refresh results
+                      </label>
+                    </div>
+                    <div className="flex items-center">
+                      <label className="flex items-center gap-2 cursor-pointer text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={darkMode}
+                          onChange={(e) => setDarkMode(e.target.checked)}
+                          className="rounded border-gray-300 text-teal-800 focus:ring-teal-800"
+                        />
+                        Dark mode
+                      </label>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <form onSubmit={handleDomainSubmit} className="max-w-2xl mx-auto">
+              <div className="flex flex-col">
+                <label className="text-gray-700 font-medium mb-2 text-left">
+                  Enter your domain (example.com):
+                </label>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    placeholder="example.com"
+                    value={domain}
+                    onChange={(e) => setDomain(e.target.value)}
+                    className="flex-1 px-4 sm:px-6 py-3 sm:py-4 border-2 border-gray-300 rounded-full text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:border-teal-800 focus:ring-2 focus:ring-teal-800 focus:ring-opacity-20 font-['Poppins'] transition-all duration-300"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isLoading || !domain}
+                    className="px-6 sm:px-8 bg-gradient-to-r from-teal-800 to-teal-600 text-white border-none rounded-full font-semibold cursor-pointer transition-all duration-300 hover:opacity-90 hover:-translate-y-1 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none font-['Poppins'] py-3 sm:py-4 text-sm sm:text-base"
+                  >
+                    {isLoading ? (
+                      <span className="flex items-center gap-2">
+                        <FiRefreshCw className="animate-spin" />
+                        Checking...
+                      </span>
+                    ) : (
+                      'Check Authentication'
+                    )}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
-        <p className="subtitle">
-          Comprehensive tool for SPF, DKIM, and DMARC configuration, validation, and deployment
-        </p>
 
-        <AnimatePresence>
-          {showSettings && (
-            <motion.div
-              className="settings-panel"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-            >
-              <div className="settings-header">
-                <h3>Settings</h3>
-                <button onClick={() => setShowSettings(false)}>
-                  <FiX />
-                </button>
-              </div>
-              <div className="settings-content">
-                <div className="setting-item">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={autoRefresh}
-                      onChange={(e) => setAutoRefresh(e.target.checked)}
+        {/* Overall Score */}
+        {results && (
+          <div className="flex justify-center mb-6 sm:mb-8">
+            <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 text-center shadow-xl animate-fade-in w-full max-w-xs sm:max-w-sm font-['Poppins']">
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6">Domain Health Score</h3>
+              <div className="mb-4 sm:mb-6 relative flex justify-center items-center">
+                <div className="relative w-24 h-24 sm:w-32 sm:h-32">
+                  <svg viewBox="0 0 36 36" className="w-full h-full">
+                    <path
+                      className="stroke-gray-200 fill-none stroke-[3.8]"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     />
-                    Auto-refresh results
-                  </label>
-                </div>
-                <div className="setting-item">
-                  <label>
-                    <input
-                      type="checkbox"
-                      checked={darkMode}
-                      onChange={(e) => setDarkMode(e.target.checked)}
+                    <path
+                      className={`fill-none stroke-[2.8] stroke-linecap-round transition-all duration-1000 ${getScoreClass(results.overallScore) === 'excellent' ? 'stroke-green-500' :
+                          getScoreClass(results.overallScore) === 'good' ? 'stroke-green-400' :
+                            getScoreClass(results.overallScore) === 'fair' ? 'stroke-yellow-500' : 'stroke-red-500'
+                        }`}
+                      strokeDasharray={`${results.overallScore}, 100`}
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                      transform="rotate(-90 18 18)"
                     />
-                    Dark mode
-                  </label>
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xl sm:text-2xl font-bold text-gray-900">
+                      {results.overallScore}%
+                    </span>
+                  </div>
                 </div>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <p className={`text-base sm:text-lg font-semibold ${getScoreClass(results.overallScore) === 'excellent' ? 'text-teal-600' :
+                  getScoreClass(results.overallScore) === 'good' ? 'text-teal-500' :
+                    getScoreClass(results.overallScore) === 'fair' ? 'text-teal-400' : 'text-teal-300'
+                }`}>
+                Your email authentication is {getScoreClass(results.overallScore)}
+              </p>
+            </div>
+          </div>
+        )}
 
-        <form onSubmit={handleDomainSubmit} className="domain-form">
-          <div className="form-group">
-            <label htmlFor="domain">Enter your domain (example.com):</label>
-            <div className="input-with-button">
-              <input
-                type="text"
-                id="domain"
-                placeholder="example.com"
-                value={domain}
-                onChange={(e) => setDomain(e.target.value)}
-              />
-              <button type="submit" disabled={isLoading || !domain}>
-                {isLoading ? (
-                  <>
-                    <FiRefreshCw className="animate-spin mr-2" />
-                    Checking...
-                  </>
-                ) : (
-                  'Check Authentication'
+        {/* Tabs */}
+        <div className="bg-white rounded-2xl shadow-xl overflow-hidden animate-slide-up font-['Poppins']">
+          <div className="bg-gradient-to-r from-teal-800 to-teal-600 overflow-x-auto">
+            <div className="flex min-w-max">
+              <button
+                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-white/80 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-white hover:bg-white/10 relative ${activeTab === 'overview' ? 'text-white font-semibold' : ''
+                  }`}
+                onClick={() => setActiveTab('overview')}
+              >
+                <FiGlobe className="text-base sm:text-lg" />
+                Overview
+                {activeTab === 'overview' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white animate-expand-line"></div>
+                )}
+              </button>
+              <button
+                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-white/80 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-white hover:bg-white/10 relative ${activeTab === 'spf' ? 'text-white font-semibold' : ''
+                  }`}
+                onClick={() => setActiveTab('spf')}
+              >
+                <FiMail className="text-base sm:text-lg" />
+                SPF
+                {activeTab === 'spf' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white animate-expand-line"></div>
+                )}
+              </button>
+              <button
+                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-white/80 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-white hover:bg-white/10 relative ${activeTab === 'dkim' ? 'text-white font-semibold' : ''
+                  }`}
+                onClick={() => setActiveTab('dkim')}
+              >
+                <FiLock className="text-base sm:text-lg" />
+                DKIM
+                {activeTab === 'dkim' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white animate-expand-line"></div>
+                )}
+              </button>
+              <button
+                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-white/80 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-white hover:bg-white/10 relative ${activeTab === 'dmarc' ? 'text-white font-semibold' : ''
+                  }`}
+                onClick={() => setActiveTab('dmarc')}
+              >
+                <FiShield className="text-base sm:text-lg" />
+                DMARC
+                {activeTab === 'dmarc' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white animate-expand-line"></div>
+                )}
+              </button>
+              <button
+                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-white/80 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-white hover:bg-white/10 relative ${activeTab === 'blacklist' ? 'text-white font-semibold' : ''
+                  }`}
+                onClick={() => setActiveTab('blacklist')}
+              >
+                <FiList className="text-base sm:text-lg" />
+                Blacklist
+                {activeTab === 'blacklist' && (
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white animate-expand-line"></div>
                 )}
               </button>
             </div>
           </div>
-        </form>
-      </div>
 
-      {results && (
-        <div className="overall-score">
-          <div className="score-card">
-            <h3>Domain Health Score</h3>
-            <div className="score-circle">
-              <svg viewBox="0 0 36 36" className="circular-chart">
-                <path className="circle-bg"
-                  d="M18 2.0845
-                  a 15.9155 15.9155 0 0 1 0 31.831
-                  a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-                <path className={`circle ${getScoreClass(results.overallScore)}`}
-                  strokeDasharray={`${results.overallScore}, 100`}
-                  d="M18 2.0845
-                  a 15.9155 15.9155 0 0 1 0 31.831
-                  a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-                <text x="18" y="20.35" className="percentage">{results.overallScore}%</text>
-              </svg>
-            </div>
-            <p className={getScoreClass(results.overallScore)}>Your email authentication is {getScoreClass(results.overallScore)}</p>
+          <div className="p-4 sm:p-8">
+            {renderTabContent()}
           </div>
         </div>
-      )}
 
-      <div className="checker-tabs">
-        <div className="tabs-header">
-          <button
-            className={`tab-button ${activeTab === 'overview' ? 'active' : ''}`}
-            onClick={() => setActiveTab('overview')}
-          >
-            <FiGlobe className="tab-icon" />
-            Overview
-          </button>
-          <button
-            className={`tab-button ${activeTab === 'spf' ? 'active' : ''}`}
-            onClick={() => setActiveTab('spf')}
-          >
-            <FiMail className="tab-icon" />
-            SPF
-          </button>
-          <button
-            className={`tab-button ${activeTab === 'dkim' ? 'active' : ''}`}
-            onClick={() => setActiveTab('dkim')}
-          >
-            <FiLock className="tab-icon" />
-            DKIM
-          </button>
-          <button
-            className={`tab-button ${activeTab === 'dmarc' ? 'active' : ''}`}
-            onClick={() => setActiveTab('dmarc')}
-          >
-            <FiShield className="tab-icon" />
-            DMARC
-          </button>
-          <button
-            className={`tab-button ${activeTab === 'blacklist' ? 'active' : ''}`}
-            onClick={() => setActiveTab('blacklist')}
-          >
-            <FiList className="tab-icon" />
-            Blacklist
-          </button>
-        </div>
-
-        <div className="tabs-content">
-          {renderTabContent()}
-        </div>
-      </div>
-
-      {history.length > 0 && (
-        <div className="history-panel">
-          <h4>Recent Checks</h4>
-          <div className="history-list">
-            {history.map((item, index) => (
-              <div key={index} className="history-item" onClick={() => loadFromHistory(item.domain)}>
-                <span className="history-domain">{item.domain}</span>
-                <span className="history-date">{new Date(item.date).toLocaleDateString()}</span>
-                <div className="history-score">
-                  <div className="score-bar">
-                    <div
-                      className={`score-fill ${getScoreClass(item.score)}`}
-                      style={{ width: `${item.score}%` }}
-                    ></div>
-                  </div>
-                  <span>{item.score}%</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <button className="clear-history" onClick={clearHistory}>
-            Clear History
-          </button>
-        </div>
-      )}
-
-      {copied && (
-        <motion.div
-          className="copy-notification"
-          initial={{ opacity: 0, y: 50 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 50 }}
-        >
-          Record copied to clipboard!
-        </motion.div>
-      )}
-
-      <ReactTooltip id="copy-tooltip" place="top" effect="solid" />
-
-      <style jsx>{`
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+        {/* History Panel */}
+{history.length > 0 && (
+    <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 mt-6 sm:mt-8 text-left shadow-sm font-['Poppins']">
+        <h4 className="text-lg font-semibold text-gray-900 mb-4">Recent Checks</h4>
         
-        .authentication-checker {
-          max-width: 1200px;
-          margin: 0 auto;
-          padding: 2rem;
-          font-family: 'Poppins', -apple-system, BlinkMacSystemFont, sans-serif;
-          transition: all 0.3s ease;
-          background-color: #f8fafc;
-        }
-
-        .authentication-checker.dark-mode {
-          background-color: #1a202c;
-          color: #e2e8f0;
-        }
-
-        .dark-mode .checker-tabs,
-        .dark-mode .checker-section,
-        .dark-mode .details-card,
-        .dark-mode .recommendation-card,
-        .dark-mode .generator-card,
-        .dark-mode .deployment-instructions,
-        .dark-mode .timeline-step,
-        .dark-mode .history-panel,
-        .dark-mode .settings-panel,
-        .dark-mode .score-card,
-        .dark-mode .stat-card,
-        .dark-mode .info-card {
-          background-color: #2d3748;
-          color: #e2e8f0;
-          border-color: #4a5568;
-        }
-
-        .dark-mode .section-header {
-          background-color: #2d3748;
-          border-color: #4a5568;
-        }
-
-        .dark-mode .input-with-button input,
-        .dark-mode .policy-selector select,
-        .dark-mode .input-group select,
-        .dark-mode .input-group input {
-          background-color: #2d3748;
-          color: #e2e8f0;
-          border-color: #4a5568;
-        }
-
-        .checker-header {
-          text-align: center;
-          margin-bottom: 2rem;
-          position: relative;
-          background: linear-gradient(to right, #0B1E3F 0%, #008080 100%);
-          padding: 2rem;
-          border-radius: 16px;
-          color: white;
-          box-shadow: 0 10px 30px rgba(11, 30, 63, 0.2);
-        }
-
-        .header-top {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1rem;
-        }
-
-        .header-actions {
-          display: flex;
-          gap: 0.5rem;
-        }
-
-        .action-btn {
-          background: rgba(255, 255, 255, 0.2);
-          border: none;
-          border-radius: 50%;
-          padding: 0.75rem;
-          cursor: pointer;
-          transition: all 0.2s;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          backdrop-filter: blur(10px);
-        }
-
-        .dark-mode .action-btn {
-          background: rgba(255, 255, 255, 0.1);
-          color: white;
-        }
-
-        .action-btn:hover {
-          background: rgba(255, 255, 255, 0.3);
-          transform: translateY(-2px);
-        }
-
-        .checker-header h2 {
-          font-size: 2.5rem;
-          font-weight: 700;
-          margin-bottom: 0.5rem;
-          background: linear-gradient(to right, #ffffff 0%, #e6f7ff 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        .subtitle {
-          color: rgba(255, 255, 255, 0.8);
-          margin-bottom: 2rem;
-          font-size: 1.1rem;
-          font-weight: 300;
-        }
-
-        .settings-panel {
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.2);
-          border-radius: 12px;
-          padding: 1rem;
-          margin-bottom: 1rem;
-          overflow: hidden;
-          backdrop-filter: blur(10px);
-        }
-
-        .settings-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 1rem;
-          color: white;
-        }
-
-        .settings-header h3 {
-          margin: 0;
-          font-size: 1.1rem;
-        }
-
-        .settings-content {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .setting-item {
-          display: flex;
-          align-items: center;
-        }
-
-        .setting-item label {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          cursor: pointer;
-          color: white;
-        }
-
-        .domain-form {
-          max-width: 600px;
-          margin: 0 auto;
-        }
-
-        .form-group {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .form-group label {
-          text-align: left;
-          margin-bottom: 0.5rem;
-          font-weight: 500;
-          color: rgba(255, 255, 255, 0.9);
-        }
-
-        .input-with-button {
-          display: flex;
-          gap: 0.5rem;
-        }
-
-        .input-with-button input {
-          flex: 1;
-          padding: 1rem 1.5rem;
-          border: 2px solid rgba(255, 255, 255, 0.2);
-          border-radius: 50px;
-          font-size: 1rem;
-          transition: all 0.3s ease;
-          background: rgba(255, 255, 255, 0.1);
-          color: white;
-          font-family: 'Poppins', sans-serif;
-        }
-
-        .input-with-button input::placeholder {
-          color: rgba(255, 255, 255, 0.6);
-        }
-
-        .input-with-button input:focus {
-          outline: none;
-          border-color: rgba(255, 255, 255, 0.5);
-          box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.1);
-        }
-
-        .input-with-button button {
-          padding: 0 2rem;
-          background: rgba(255, 255, 255, 0.9);
-          color: #0B1E3F;
-          border: none;
-          border-radius: 50px;
-          font-weight: 600;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          font-family: 'Poppins', sans-serif;
-          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .input-with-button button:hover:not(:disabled) {
-          background: white;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
-        }
-
-        .input-with-button button:disabled {
-          background: rgba(255, 255, 255, 0.5);
-          cursor: not-allowed;
-          transform: none;
-          box-shadow: none;
-        }
-
-        .overview-tab {
-          padding: 1rem 0;
-        }
-
-        .stat-card {
-          background: white;
-          border: 1px solid #e2e8f0;
-          border-radius: 16px;
-          padding: 1.5rem;
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }
-
-        .stat-card:hover {
-          transform: translateY(-5px);
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-        }
-
-        .stat-icon {
-          width: 54px;
-          height: 54px;
-          border-radius: 16px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 1.5rem;
-        }
-
-        .stat-content h4 {
-          margin: 0 0 0.25rem 0;
-          font-size: 0.875rem;
-          color: #718096;
-          font-weight: 500;
-        }
-
-        .stat-content p {
-          margin: 0;
-          font-weight: 700;
-          font-size: 1.35rem;
-        }
-
-        .issues-section {
-          background: white;
-          border-radius: 16px;
-          padding: 1.5rem;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }
-
-        .dark-mode .issues-section {
-          background: #2d3748;
-        }
-
-        .issues-grid {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-
-        .issue-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 1rem;
-          padding: 1rem;
-          border-radius: 12px;
-          background: #f8fafc;
-        }
-
-        .issue-item.error {
-          border-left: 4px solid #e53e3e;
-          background: #fef5f5;
-        }
-
-        .issue-item.warning {
-          border-left: 4px solid #dd6b20;
-          background: #fffaf0;
-        }
-
-        .issue-item.info {
-          border-left: 4px solid #3182ce;
-          background: #ebf8ff;
-        }
-
-        .dark-mode .issue-item {
-          background: #2d3748;
-        }
-
-        .dark-mode .issue-item.error {
-          background: #442727;
-        }
-
-        .dark-mode .issue-item.warning {
-          background: #443b25;
-        }
-
-        .dark-mode .issue-item.info {
-          background: #253443;
-        }
-
-        .issue-icon {
-          font-size: 1.5rem;
-          flex-shrink: 0;
-        }
-
-        .issue-content h4 {
-          margin: 0 0 0.5rem 0;
-          font-size: 1rem;
-        }
-
-        .issue-content p {
-          margin: 0;
-          font-size: 0.9rem;
-          opacity: 0.8;
-        }
-
-        .recommendations-section {
-          background: white;
-          border-radius: 16px;
-          padding: 1.5rem;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }
-
-        .dark-mode .recommendations-section {
-          background: #2d3748;
-        }
-
-        .recommendations-grid {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-
-        .recommendation-item {
-          background: #f0f9ff;
-          border-radius: 12px;
-          padding: 1rem;
-          border-left: 4px solid #0ea5e9;
-        }
-
-        .dark-mode .recommendation-item {
-          background: #253443;
-          border-left-color: #0ea5e9;
-        }
-
-        .recommendation-item p {
-          margin: 0;
-        }
-
-        .history-panel {
-          background: white;
-          border: 1px solid #e2e8f0;
-          border-radius: 16px;
-          padding: 1.5rem;
-          margin-top: 2rem;
-          text-align: left;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }
-
-        .history-panel h4 {
-          margin-top: 0;
-          margin-bottom: 1rem;
-          font-size: 1.1rem;
-          color: #2d3748;
-          font-weight: 600;
-        }
-
-        .dark-mode .history-panel h4 {
-          color: #e2e8f0;
-        }
-
-        .history-list {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-          margin-bottom: 1rem;
-        }
-
-        .history-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 0.75rem;
-          border-radius: 12px;
-          cursor: pointer;
-          transition: background-color 0.2s;
-        }
-
-        .history-item:hover {
-          background-color: #f7fafc;
-        }
-
-        .dark-mode .history-item:hover {
-          background-color: #4a5568;
-        }
-
-        .history-domain {
-          font-weight: 500;
-        }
-
-        .history-date {
-          font-size: 0.875rem;
-          color: #718096;
-        }
-
-        .history-score {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-        }
-
-        .score-bar {
-          width: 50px;
-          height: 6px;
-          background-color: #edf2f7;
-          border-radius: 3px;
-          overflow: hidden;
-        }
-
-        .dark-mode .score-bar {
-          background-color: #4a5568;
-        }
-
-        .score-fill {
-          height: 100%;
-          border-radius: 3px;
-          transition: width 0.5s ease;
-        }
-
-        .score-fill.excellent {
-          background: #38a169;
-        }
-
-        .score-fill.good {
-          background: #319795;
-        }
-
-        .score-fill.fair {
-          background: #d69e2e;
-        }
-
-        .score-fill.poor {
-          background: #e53e3e;
-        }
-
-        .clear-history {
-          background: linear-gradient(to right, #0B1E3F 0%, #008080 100%);
-          color: white;
-          border: none;
-          padding: 0.75rem 1.5rem;
-          border-radius: 50px;
-          cursor: pointer;
-          font-size: 0.875rem;
-          transition: all 0.3s ease;
-          font-weight: 500;
-          box-shadow: 0 4px 6px rgba(11, 30, 63, 0.2);
-        }
-
-        .clear-history:hover {
-          opacity: 0.9;
-          transform: translateY(-2px);
-          box-shadow: 0 6px 12px rgba(11, 30, 63, 0.3);
-        }
-
-        .overall-score {
-          display: flex;
-          justify-content: center;
-          margin-bottom: 2rem;
-        }
-
-        .score-card {
-          background: white;  
-          border: 1px solid #e2e8f0;
-          border-radius: 20px;
-          padding: 2rem;
-          text-align: center;
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-          animation: fadeIn 0.5s ease;
-          width: 300px;
-        }
-
-        .score-card h3 {
-          margin-top: 0;
-          margin-bottom: 1.5rem;
-          color: #2d3748;
-          font-weight: 600;
-          font-size: 1.25rem;
-        }
-
-        .dark-mode .score-card h3 {
-          color: #e2e8f0;
-        }
-
-        .score-circle {
-          margin: 0 auto 1.5rem;
-          width: 120px;
-        }
-
-        .circular-chart {
-          display: block;
-          margin: 10px auto;
-          max-width: 80%;
-          max-height: 120px;
-        }
-
-        .circle-bg {
-          fill: none;
-          stroke: #edf2f7;
-          stroke-width: 3.8;
-        }
-
-        .dark-mode .circle-bg {
-          stroke: #4a5568;
-        }
-
-        .circle {
-          fill: none;
-          stroke-width: 2.8;
-          stroke-linecap: round;
-          animation: progress 1s ease-out forwards;
-        }
-
-        .circle.excellent {
-          stroke: #38a169;
-        }
-
-        .circle.good {
-          stroke: #319795;
-        }
-
-        .circle.fair {
-          stroke: #d69e2e;
-        }
-
-        .circle.poor {
-          stroke: #e53e3e;
-        }
-
-        @keyframes progress {
-          0% {
-            stroke-dasharray: 0 100;
-          }
-        }
-
-        .percentage {
-          fill: #4a5568;
-          font-size: 0.6em;
-          text-anchor: middle;
-          font-weight: bold;
-          font-family: 'Poppins', sans-serif;
-        }
-
-        .dark-mode .percentage {
-          fill: #e2e8f0;
-        }
-
-        .score-card p {
-          margin: 0;
-          font-weight: 600;
-          font-size: 1.1rem;
-        }
-
-        .score-card p.excellent {
-          color: #38a169;
-        }
-
-        .score-card p.good {
-          color: #319795;
-        }
-
-        .score-card p.fair {
-          color: #d69e2e;
-        }
-
-        .score-card p.poor {
-          color: #e53e3e;
-        }
-
-        .checker-tabs {
-          background: white;
-          border-radius: 20px;
-          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-          overflow: hidden;
-          animation: slideUp 0.5s ease;
-        }
-
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .tabs-header {
-          display: flex;
-          border-bottom: 1px solid #e2e8f0;
-          overflow-x: auto;
-          background: linear-gradient(to right, #0B1E3F 0%, #008080 100%);
-        }
-
-        .tab-button {
-          padding: 1.25rem 1.5rem;
-          background: none;
-          border: none;
-          cursor: pointer;
-          font-weight: 500;
-          color: rgba(255, 255, 255, 0.8);
-          position: relative;
-          transition: all 0.3s ease;
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          white-space: nowrap;
-          font-family: 'Poppins', sans-serif;
-        }
-
-        .tab-button:hover {
-          color: white;
-          background-color: rgba(255, 255, 255, 0.1);
-        }
-
-        .tab-button.active {
-          color: white;
-          font-weight: 600;
-        }
-
-        .tab-button.active::after {
-          content: '';
-          position: absolute;
-          bottom: 0;
-          left: 0;
-          right: 0;
-          height: 3px;
-          background: white;
-          animation: expandLine 0.3s ease;
-        }
-
-        @keyframes expandLine {
-          from {
-            transform: scaleX(0);
-            opacity: 0;
-          }
-          to {
-            transform: scaleX(1);
-            opacity: 1;
-          }
-        }
-
-        .tab-icon {
-          font-size: 1.1rem;
-        }
-
-        .tabs-content {
-          padding: 2rem;
-        }
-
-        .checker-section {
-          margin-bottom: 1.5rem;
-          border: 1px solid #e2e8f0;
-          border-radius: 16px;
-          overflow: hidden;
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }
-
-        .checker-section:hover {
-          box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
-          transform: translateY(-2px);
-        }
-
-        .section-header {
-          padding: 1.25rem 1.5rem;
-          background-color: #f7fafc;
-          border-bottom: 1px solid #e2e8f0;
-          cursor: pointer;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          transition: background-color 0.2s;
-        }
-
-        .section-header:hover {
-          background-color: #edf2f7;
-        }
-
-        .section-header h3 {
-          margin: 0;
-          font-size: 1.1rem;
-          display: flex;
-          align-items: center;
-          color: #2d3748;
-          font-weight: 600;
-        }
-
-        .dark-mode .section-header h3 {
-          color: #e2e8f0;
-        }
-
-        .section-content {
-          padding: 1.5rem;
-          background-color: white;
-          animation: fadeIn 0.3s ease;
-        }
-
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-          transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .result-card {
-          border-radius: 12px;
-          padding: 1.5rem;
-          animation: slideIn 0.3s ease;
-        }
-
-        @keyframes slideIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
-        .result-card.valid {
-          background-color: #f0fff4;
-          border-left: 4px solid #38a169;
-        }
-
-        .result-card.invalid {
-          background-color: #fffaf0;
-          border-left: 4px solid #dd6b20;
-        }
-
-        .dark-mode .result-card.valid {
-          background-color: #22543d;
-          border-left-color: #48bb78;
-        }
-
-        .dark-mode .result-card.invalid {
-          background-color: #744210;
-          border-left-color: #ed8936;
-        }
-
-        .result-summary {
-          margin-bottom: 1rem;
-        }
-
-        .result-summary p {
-          font-weight: 600;
-          margin-bottom: 0.25rem;
-          color: #2d3748;
-          font-size: 1.1rem;
-        }
-
-        .dark-mode .result-summary p {
-          color: #e2e8f0;
-        }
-
-        .details-card {
-          background: white;
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          padding: 1.25rem;
-          margin-bottom: 1rem;
-          animation: fadeIn 0.5s ease;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-
-        .dark-mode .details-card {
-          background: #2d3748;
-          border-color: #4a5568;
-        }
-
-        .details-card h4 {
-          margin-top: 0;
-          margin-bottom: 1rem;
-          font-size: 1rem;
-          color: #2d3748;
-          font-weight: 600;
-        }
-
-        .dark-mode .details-card h4 {
-          color: #e2e8f0;
-        }
-
-        .copy-btn {
-          display: inline-flex;
-          align-items: center;
-          gap: 0.5rem;
-          background: linear-gradient(to right, #0B1E3F 0%, #008080 100%);
-          color: white;
-          border: none;
-          padding: 0.75rem 1.25rem;
-          border-radius: 50px;
-          margin-top: 0.75rem;
-          font-size: 0.875rem;
-          cursor: pointer;
-          transition: all 0.2s;
-          font-weight: 500;
-          box-shadow: 0 2px 4px rgba(11, 30, 63, 0.2);
-        }
-
-        .copy-btn:hover {
-          opacity: 0.9;
-          transform: translateY(-2px);
-          box-shadow: 0 4px 8px rgba(11, 30, 63, 0.3);
-        }
-
-        .mechanisms-list {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-        }
-
-        .mechanisms-list li {
-          display: flex;
-          align-items: center;
-          padding: 0.75rem 0;
-          border-bottom: 1px solid #edf2f7;
-          animation: fadeIn 0.5s ease;
-        }
-
-        .dark-mode .mechanisms-list li {
-          border-bottom-color: #4a5568;
-        }
-
-        .mechanisms-list li:last-child {
-          border-bottom: none;
-        }
-
-        .mechanism-type {
-          font-weight: 600;
-          width: 80px;
-          color: #4a5568;
-        }
-
-        .dark-mode .mechanism-type {
-          color: #a0aec0;
-        }
-
-        .mechanism-value {
-          flex: 1;
-          font-family: 'Fira Code', monospace;
-          font-size: 0.875rem;
-        }
-
-        .recommendation-card {
-          background: white;
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          padding: 1.25rem;
-          margin-top: 1rem;
-          animation: fadeIn 0.5s ease;
-          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-
-        .dark-mode .recommendation-card {
-          background: #2d3748;
-          border-color: #4a5568;
-        }
-
-        .recommendation-card h4 {
-          margin-top: 0;
-          margin-bottom: 0.75rem;
-          font-size: 1rem;
-          color: #2d3748;
-          font-weight: 600;
-        }
-
-        .dark-mode .recommendation-card h4 {
-          color: #e2e8f0;
-        }
-
-        .info-card {
-          background: white;
-          border: 1px solid #e2e8f0;
-          border-radius: 16px;
-          padding: 1.5rem;
-          animation: fadeIn 0.5s ease;
-          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-        }
-
-        .info-card h4 {
-          margin-top: 0;
-          margin-bottom: 1rem;
-          font-size: 1.1rem;
-          color: #2d3748;
-          font-weight: 600;
-        }
-
-        .dark-mode .info-card h4 {
-          color: #e2e8f0;
-        }
-
-        .info-card p {
-          margin-bottom: 1rem;
-          color: #4a5568;
-          line-height: 1.6;
-        }
-
-        .dark-mode .info-card p {
-          color: #a0aec0;
-        }
-
-        .blacklist-results {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-        }
-
-        .blacklist-item {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 0.75rem;
-          border-radius: 8px;
-          background-color: #f7fafc;
-        }
-
-        .dark-mode .blacklist-item {
-          background-color: #4a5568;
-        }
-
-        .blacklist-name {
-          font-weight: 500;
-        }
-
-        .blacklist-status {
-          font-size: 0.875rem;
-          padding: 0.35rem 0.75rem;
-          border-radius: 50px;
-          font-weight: 500;
-        }
-
-        .blacklist-status.listed {
-          background-color: #fed7d7;
-          color: #c53030;
-        }
-
-        .dark-mode .blacklist-status.listed {
-          background-color: #742a2a;
-          color: #fc8181;
-        }
-
-        .blacklist-status.not-listed {
-          background-color: #c6f6d5;
-          color: #2d7844;
-        }
-
-        .dark-mode .blacklist-status.not-listed {
-          background-color: #22543d;
-          color: #68d391;
-        }
-
-        .copy-notification {
-          position: fixed;
-          bottom: 1rem;
-          right: 1rem;
-          background: linear-gradient(to right, #0B1E3F 0%, #008080 100%);
-          color: white;
-          padding: 1rem 1.5rem;
-          border-radius: 50px;
-          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-          z-index: 1000;
-          font-weight: 500;
-        }
-
-        @media (max-width: 768px) {
-          .authentication-checker {
-            padding: 1rem;
-          }
-
-          .checker-header {
-            padding: 1.5rem;
-          }
-
-          .checker-header h2 {
-            font-size: 2rem;
-          }
-
-          .tabs-header {
-            overflow-x: auto;
-            padding-bottom: 0.5rem;
-          }
-
-          .tab-button {
-            white-space: nowrap;
-            padding: 1rem 1.25rem;
-          }
-
-          .input-with-button {
-            flex-direction: column;
-            gap: 0.5rem;
-          }
-
-          .input-with-button button {
-            width: 100%;
-          }
-
-          .header-top {
-            flex-direction: column;
-            gap: 1rem;
-            align-items: flex-start;
-          }
-
-          .header-actions {
-            align-self: flex-end;
-          }
-
-          .score-card {
-            width: 100%;
-            max-width: 280px;
-          }
-        }
-      `}</style>
+        {/* Headers */}
+        <div className="hidden sm:flex justify-between items-center mb-3 px-3 text-sm font-semibold text-gray-600">
+            <span className="w-2/5">Domain</span>
+            <span className="w-1/4 text-center">Date</span>
+            <span className="w-1/3 text-center">Score</span>
+        </div>
+        
+        <div className="space-y-2 mb-4">
+            {history.map((item, index) => (
+                <div
+                    key={index}
+                    className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-3 rounded-xl cursor-pointer transition-colors hover:bg-gray-50 gap-2 sm:gap-0"
+                    onClick={() => loadFromHistory(item.domain)}
+                >
+                    {/* Domain */}
+                    <span className="font-medium text-gray-900 text-sm sm:text-base sm:w-2/5">{item.domain}</span>
+                    
+                    {/* Date - Centered and properly aligned */}
+                    <span className="text-xs sm:text-sm text-gray-500 sm:w-1/4 text-center">{new Date(item.date).toLocaleDateString()}</span>
+                    
+                    {/* Score with progress bar - Centered and properly aligned */}
+                    <div className="flex items-center gap-2 sm:w-1/3 justify-center">
+                        <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                    getScoreClass(item.score) === 'excellent' ? 'bg-green-500' :
+                                    getScoreClass(item.score) === 'good' ? 'bg-green-400' :
+                                    getScoreClass(item.score) === 'fair' ? 'bg-yellow-500' : 'bg-red-500'
+                                }`}
+                                style={{ width: `${item.score}%` }}
+                            ></div>
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">{item.score}%</span>
+                    </div>
+                </div>
+            ))}
+        </div>
+        
+        <button
+            className="bg-gradient-to-r from-teal-800 to-teal-600 text-white border-none px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer text-sm font-medium transition-all duration-300 hover:opacity-90 hover:-translate-y-0.5 shadow-md w-full sm:w-auto"
+            onClick={clearHistory}
+        >
+            Clear History
+        </button>
+    </div>
+)}
+
+
+        {/* Copy Notification */}
+        {copied && (
+          <motion.div
+            className="fixed bottom-4 right-4 bg-gradient-to-r from-teal-800 to-teal-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-full shadow-lg z-50 font-medium font-['Poppins'] text-sm sm:text-base"
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+          >
+            Record copied to clipboard!
+          </motion.div>
+        )}
+
+        <ReactTooltip id="copy-tooltip" place="top" effect="solid" />
+      </div>
+
+      {/* Custom animations */}
+      <style jsx>{`
+                @keyframes fade-in {
+                    from { opacity: 0; transform: translateY(10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes slide-up {
+                    from { opacity: 0; transform: translateY(20px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes expand-line {
+                    from { transform: scaleX(0); opacity: 0; }
+                    to { transform: scaleX(1); opacity: 1; }
+                }
+                .animate-fade-in { animation: fade-in 0.3s ease; }
+                .animate-slide-up { animation: slide-up 0.5s ease; }
+                .animate-expand-line { animation: expand-line 0.3s ease; }
+            `}</style>
     </div>
   );
 };

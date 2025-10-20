@@ -211,7 +211,7 @@ const AccountAnalytics = ({ selectedAccount, accountScores, getDeliverabilityDat
             <h2 className="text-2xl font-bold text-gray-900">{selectedAccount.name}</h2>
             <div className="flex gap-3">
               <button 
-                className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-800 to-teal-600 text-white rounded-lg font-medium shadow-md hover:shadow-lg hover:from-teal-500 hover:to-teal-300 transition-all duration-200 ${
+                className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-800 to-teal-600 text-white rounded-lg font-medium shadow-md hover:shadow-lg hover:from-teal-500 to-teal-300 transition-all duration-200 ${
                   isRefreshing ? 'opacity-75 cursor-not-allowed' : ''
                 }`}
                 onClick={handleRefresh}
@@ -488,7 +488,7 @@ const AnalyticsDashboard = () => {
             <option>Last 90 days</option>
           </select>
           <button 
-            className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-800 to-teal-600 text-white rounded-lg font-medium shadow-md hover:shadow-lg hover:from-teal-500 hover:to-teal-300 transition-all duration-200 ${
+            className={`flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-800 to-teal-600 text-white rounded-lg font-medium shadow-md hover:shadow-lg hover:from-teal-500 to-teal-300 transition-all duration-200 ${
               isExporting ? 'opacity-75 cursor-not-allowed' : ''
             }`}
             onClick={handleExportReport}
@@ -555,68 +555,68 @@ const AnalyticsDashboard = () => {
       {/* Content based on active tab */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Delivered */}
-            <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center mr-4">
-                <i className="fas fa-paper-plane text-white text-lg"></i>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-600">Delivered</h3>
-                <div className="text-2xl font-bold text-gray-900">{emailStats.delivered}</div>
-                <div className="text-sm font-semibold text-green-600">{deliveryRate}%</div>
-              </div>
-            </div>
+       {/* Summary Cards with Top Border */}
+<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+  {/* Delivered */}
+  <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow border-t-4 border-teal-600">
+    <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center mr-4">
+      <i className="fas fa-paper-plane text-white text-lg"></i>
+    </div>
+    <div>
+      <h3 className="text-sm font-medium text-gray-600">Delivered</h3>
+      <div className="text-2xl font-bold text-gray-900">{emailStats.delivered}</div>
+      <div className="text-sm font-semibold text-green-600">{deliveryRate}%</div>
+    </div>
+  </div>
 
-            {/* Opened */}
-            <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center mr-4">
-                <i className="fas fa-envelope-open text-white text-lg"></i>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-600">Opened</h3>
-                <div className="text-2xl font-bold text-gray-900">{emailStats.opened}</div>
-                <div className="text-sm font-semibold text-green-600">{openRate}%</div>
-              </div>
-            </div>
+  {/* Opened */}
+  <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow border-t-4 border-teal-600">
+    <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center mr-4">
+      <i className="fas fa-envelope-open text-white text-lg"></i>
+    </div>
+    <div>
+      <h3 className="text-sm font-medium text-gray-600">Opened</h3>
+      <div className="text-2xl font-bold text-gray-900">{emailStats.opened}</div>
+      <div className="text-sm font-semibold text-green-600">{openRate}%</div>
+    </div>
+  </div>
 
-            {/* Clicked */}
-            <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center mr-4">
-                <i className="fas fa-mouse-pointer text-white text-lg"></i>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-600">Clicked</h3>
-                <div className="text-2xl font-bold text-gray-900">{emailStats.clicked}</div>
-                <div className="text-sm font-semibold text-green-600">{clickRate}%</div>
-              </div>
-            </div>
+  {/* Clicked */}
+  <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow border-t-4 border-teal-600">
+    <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center mr-4">
+      <i className="fas fa-mouse-pointer text-white text-lg"></i>
+    </div>
+    <div>
+      <h3 className="text-sm font-medium text-gray-600">Clicked</h3>
+      <div className="text-2xl font-bold text-gray-900">{emailStats.clicked}</div>
+      <div className="text-sm font-semibold text-green-600">{clickRate}%</div>
+    </div>
+  </div>
 
-            {/* Replied */}
-            <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mr-4">
-                <i className="fas fa-reply text-white text-lg"></i>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-600">Replied</h3>
-                <div className="text-2xl font-bold text-gray-900">{emailStats.replied}</div>
-                <div className="text-sm font-semibold text-green-600">{replyRate}%</div>
-              </div>
-            </div>
+  {/* Replied */}
+  <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow border-t-4 border-teal-600">
+    <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg flex items-center justify-center mr-4">
+      <i className="fas fa-reply text-white text-lg"></i>
+    </div>
+    <div>
+      <h3 className="text-sm font-medium text-gray-600">Replied</h3>
+      <div className="text-2xl font-bold text-gray-900">{emailStats.replied}</div>
+      <div className="text-sm font-semibold text-green-600">{replyRate}%</div>
+    </div>
+  </div>
 
-            {/* Bounced */}
-            <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow">
-              <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center mr-4">
-                <i className="fas fa-exclamation-circle text-white text-lg"></i>
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-600">Bounced</h3>
-                <div className="text-2xl font-bold text-gray-900">{emailStats.bounced}</div>
-                <div className="text-sm font-semibold text-red-600">{bounceRate}%</div>
-              </div>
-            </div>
-          </div>
+  {/* Bounced */}
+  <div className="bg-white rounded-xl shadow-sm p-4 flex items-center hover:shadow-md transition-shadow border-t-4 border-teal-600">
+    <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-red-600 rounded-lg flex items-center justify-center mr-4">
+      <i className="fas fa-exclamation-circle text-white text-lg"></i>
+    </div>
+    <div>
+      <h3 className="text-sm font-medium text-gray-600">Bounced</h3>
+      <div className="text-2xl font-bold text-gray-900">{emailStats.bounced}</div>
+      <div className="text-sm font-semibold text-red-600">{bounceRate}%</div>
+    </div>
+  </div>
+</div>
 
           {/* Campaign Performance */}
           <div className="bg-white rounded-xl shadow-sm p-6">
