@@ -74,6 +74,22 @@ const MicrosoftUser = sequelize.define('microsoft_users', {
     roundRobinIndexMicrosoft: {
         type: DataTypes.INTEGER,
         defaultValue: 0,
+    },
+    warmupStartTime: {
+        type: DataTypes.TIME,
+        defaultValue: '09:00:00'
+    },
+    warmupEndTime: {
+        type: DataTypes.TIME,
+        defaultValue: '18:00:00'
+    },
+    timezone: {
+        type: DataTypes.STRING,
+        defaultValue: 'UTC'
+    },
+    preferredSendInterval: {
+        type: DataTypes.INTEGER, // minutes between emails
+        defaultValue: 120
     }
 
 
