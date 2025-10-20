@@ -9,9 +9,9 @@ const passport = require('passport');
 require('./config/microsoftStrategy');
 const { sequelize } = require('./config/db');
 
-// 🟢 Import scheduler and consumer AFTER DB
-const { startWarmupScheduler } = require('./services/warmupScheduler');
-const { consumeWarmupJobs } = require("./workers/warmupWorker");
+// // 🟢 Import scheduler and consumer AFTER DB
+// const { startWarmupScheduler } = require('./services/warmupScheduler');
+// const { consumeWarmupJobs } = require("./workers/warmupWorker");
 
 // Routes
 const microsoftAuthRoutes = require('./routes/microsoftAuth');
@@ -29,7 +29,7 @@ const healthRoutes = require('./routes/healthRoutes');
 const GoogleUser = require('./models/GoogleUser');
 const MicrosoftUser = require('./models/MicrosoftUser');
 const SmtpAccount = require('./models/smtpAccounts');
-const { buildSenderConfig } = require('./utils/senderConfig');
+const { buildSenderConfig, getSenderType } = require('./utils/senderConfig');
 const { IntelligentWarmupWorker } = require('./workers/warmup');
 const { scheduleIntelligentWarmup } = require('./services/Scheduler');
 
@@ -59,7 +59,6 @@ app.use('/api/users', userRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/health', healthRoutes);
 
-// Account validation function
 async function validateAllAccounts() {
     try {
         console.log('🔍 Validating all active account configurations...');
@@ -75,30 +74,20 @@ async function validateAllAccounts() {
 
         for (const account of allAccounts) {
             try {
-                const accountType = account.roundRobinIndexGoogle ? 'google' :
-                    account.roundRobinIndexMicrosoft ? 'microsoft' : 'smtp';
+                // Use the enhanced type detection
+                const accountType = getSenderType(account);
+                console.log(`🔧 Validating ${account.email} as ${accountType} account`);
+
                 const config = buildSenderConfig(account, accountType);
 
-                // Validate critical configuration fields
-                if (!config.smtpHost || !config.smtpPort || !config.smtpUser) {
-                    throw new Error('Missing SMTP configuration');
-                }
-
-                if (accountType === 'google' && !config.smtpPass) {
-                    throw new Error('Missing app password for Gmail');
-                }
-
-                if (accountType === 'smtp' && !config.smtpPass) {
-                    throw new Error('Missing SMTP password');
-                }
-
-                console.log(`✅ ${account.email}: Configuration valid (${config.smtpHost}:${config.smtpPort})`);
+                console.log(`✅ ${account.email}: ${accountType} configuration valid (${config.smtpHost}:${config.smtpPort})`);
                 validCount++;
+
             } catch (error) {
                 console.error(`❌ ${account.email}: ${error.message}`);
                 invalidCount++;
 
-                // Auto-pause accounts with invalid configuration
+                // Auto-pause accounts with configuration issues
                 await account.update({ warmupStatus: 'paused' });
                 console.log(`⏸️  Auto-paused ${account.email} due to configuration issues`);
             }
@@ -179,33 +168,26 @@ app.get('/api/account/:email/test-config', async (req, res) => {
         });
 
         // 🧠 Start intelligent warmup scheduler after 10 seconds
-        setTimeout(() => {
-            scheduleIntelligentWarmup();
-            console.log('🧠 Intelligent Warmup Scheduler started');
+        setTimeout(async () => {
+            try {
+                await scheduleIntelligentWarmup();
+                // console.log('🧠 Intelligent Warmup Scheduler started');
+
+                // Schedule periodic rescheduling every 6 hours
+                setInterval(async () => {
+                    console.log('🔄 Rescheduling warmup jobs...');
+                    await scheduleIntelligentWarmup();
+                }, 6 * 60 * 60 * 1000);
+
+            } catch (error) {
+                console.error('❌ Failed to start scheduler:', error);
+            }
         }, 10000);
 
         // 🧠 Start intelligent warmup worker
         const worker = new IntelligentWarmupWorker();
         await worker.consumeWarmupJobs();
-        console.log('🧠 Intelligent Warmup Worker started');
-
-        // Optional: expose intelligent status
-        app.get('/api/intelligent-status', (req, res) => {
-            res.json({
-                status: 'ok',
-                scheduler: 'intelligent_running',
-                worker: 'intelligent_running',
-                features: [
-                    'balanced_bidirectional_communication',
-                    'intelligent_timing_distribution',
-                    '25%_reply_rate_cap',
-                    'gradual_warmup_progression',
-                    'user_defined_scheduling'
-                ],
-                uptime: process.uptime(),
-                timestamp: new Date().toISOString(),
-            });
-        });
+        console.log('🧠  Warmup Worker started');
 
     } catch (err) {
         console.error('❌ Startup failed:', err);

@@ -6,79 +6,189 @@ const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Array of different email templates to ensure variety
-const emailTemplates = [
-    "Introduce yourself and mention you came across their profile and were impressed by their work in the industry",
-    "Talk about recent industry trends and ask for their perspective",
-    "Mention a specific achievement or project you noticed and compliment them on it",
-    "Discuss common challenges in the industry and ask how they're navigating them",
-    "Share an interesting insight about the industry and ask for their thoughts",
-    "Talk about the importance of networking in the field and express interest in connecting",
-    "Mention a recent industry event or development and ask for their take on it"
+// Professional industry-specific contexts
+const industryContexts = {
+    technology: {
+        topics: [
+            "digital transformation initiatives",
+            "emerging tech stack architectures",
+            "cloud migration strategies",
+            "AI and machine learning implementations",
+            "cybersecurity frameworks",
+            "devops and agile methodologies",
+            "data analytics and business intelligence"
+        ],
+        challenges: [
+            "scaling infrastructure efficiently",
+            "managing technical debt",
+            "staying ahead of security threats",
+            "hiring and retaining top tech talent",
+            "balancing innovation with stability"
+        ]
+    },
+    finance: {
+        topics: [
+            "portfolio optimization strategies",
+            "risk management frameworks",
+            "regulatory compliance updates",
+            "financial technology innovations",
+            "investment analysis methodologies",
+            "wealth management trends",
+            "market volatility strategies"
+        ],
+        challenges: [
+            "navigating regulatory changes",
+            "managing client expectations in volatile markets",
+            "digital transformation in traditional finance",
+            "cybersecurity in financial systems",
+            "sustainable investing integration"
+        ]
+    },
+    healthcare: {
+        topics: [
+            "telemedicine implementations",
+            "healthcare data interoperability",
+            "patient engagement technologies",
+            "value-based care models",
+            "medical device innovations",
+            "healthcare policy updates",
+            "precision medicine advances"
+        ],
+        challenges: [
+            "balancing technology with patient care",
+            "data privacy and security compliance",
+            "healthcare cost management",
+            "regulatory approval processes",
+            "health equity and access"
+        ]
+    },
+    marketing: {
+        topics: [
+            "customer journey optimization",
+            "data-driven campaign strategies",
+            "content marketing ROI measurement",
+            "social media algorithm changes",
+            "personalization at scale",
+            "brand storytelling techniques",
+            "influencer marketing effectiveness"
+        ],
+        challenges: [
+            "attribution modeling accuracy",
+            "adapting to privacy regulations",
+            "content saturation in digital spaces",
+            "measuring true marketing impact",
+            "staying relevant with changing consumer behavior"
+        ]
+    },
+    general: {
+        topics: [
+            "strategic business development",
+            "leadership in changing markets",
+            "operational efficiency improvements",
+            "team collaboration methodologies",
+            "professional development strategies",
+            "industry networking best practices",
+            "innovation management frameworks"
+        ],
+        challenges: [
+            "adapting to market disruptions",
+            "talent development and retention",
+            "maintaining competitive advantage",
+            "scaling operations effectively",
+            "balancing growth with sustainability"
+        ]
+    }
+};
+
+// Professional tone variations
+const professionalTones = [
+    "collaborative and insightful",
+    "strategic and forward-thinking",
+    "analytical and data-driven",
+    "innovative and progressive",
+    "experienced and pragmatic",
+    "visionary and inspiring",
+    "consultative and supportive"
 ];
 
-// Array of different opening lines
-const openingLines = [
-    "I hope this email finds you well!",
-    "I'm reaching out to connect with you.",
-    "I came across your profile and was impressed by your work.",
-    "I've been following developments in our industry and wanted to connect.",
-    "I noticed we're both in the {industry} space and thought it would be great to connect.",
-    "I've been admiring your contributions to the {industry} industry.",
-    "As fellow professionals in {industry}, I thought it would be valuable to connect."
+// Sophisticated email structures
+const emailStructures = [
+    "insight-sharing-followed-by-question",
+    "compliment-then-industry-perspective",
+    "shared-challenge-discussion",
+    "trend-analysis-with-invitation",
+    "achievement-recognition-and-learning",
+    "future-focused-strategic-discussion",
+    "value-proposition-with-collaboration"
 ];
 
-// Array of different closing lines
-const closingLines = [
-    "Looking forward to hearing your thoughts!",
-    "I'd love to hear more about your perspective on this.",
-    "Would be great to connect and exchange ideas sometime.",
-    "Hope to hear from you soon!",
-    "Looking forward to potentially collaborating in the future!",
-    "I'm excited about the possibility of working together.",
-    "Let me know if you'd be open to connecting further!"
-];
+function getIndustryContext(industry = "general") {
+    const normalizedIndustry = industry.toLowerCase();
+    return industryContexts[normalizedIndustry] || industryContexts.general;
+}
 
 function getRandomItem(array) {
     return array[Math.floor(Math.random() * array.length)];
 }
 
-async function generateEmail(senderName, receiverName, industry) {
-    const template = getRandomItem(emailTemplates);
-    const opening = getRandomItem(openingLines).replace('{industry}', industry);
-    const closing = getRandomItem(closingLines);
+async function generateEmail(senderName, receiverName, industry = "general") {
+    const industryData = getIndustryContext(industry);
+    const topic = getRandomItem(industryData.topics);
+    const challenge = getRandomItem(industryData.challenges);
+    const tone = getRandomItem(professionalTones);
+    const structure = getRandomItem(emailStructures);
 
     const prompt = `
-Generate a unique and professional warmup email with the following details:
-- From: ${senderName}
-- To: ${receiverName} 
-- Industry: ${industry}
-- Template direction: ${template}
+Generate a highly professional and sophisticated business email with these specifications:
 
-Requirements:
-- Use this opening: "${opening}"
-- Use this closing: "${closing}"
-- Make it sound natural and conversational
-- Keep it between 50-150 words
-- Vary the structure and content from previous emails
-- Include specific but generic industry references
-- Return JSON with "subject" and "content" fields
+CONTEXT:
+- Sender: ${senderName} (experienced professional in ${industry})
+- Recipient: ${receiverName} (respected peer in ${industry})
+- Industry Focus: ${industry}
+- Specific Topic: ${topic}
+- Business Challenge: ${challenge}
+- Desired Tone: ${tone}
+- Email Structure: ${structure}
 
-IMPORTANT: Make each email unique in content, structure, and wording.
+PROFESSIONAL REQUIREMENTS:
+1. Sound like a senior executive or experienced professional
+2. Demonstrate deep industry knowledge and insights
+3. Use sophisticated business vocabulary appropriately
+4. Show genuine curiosity about the recipient's perspective
+5. Include specific, relevant industry references
+6. Maintain perfect business etiquette
+7. Keep length between 100-200 words
+8. End with a thoughtful, open-ended question
+
+CONTENT EXPECTATIONS:
+- Opening: Professional greeting with context
+- Body: 2-3 substantive paragraphs with insights
+- Value: Share a brief relevant observation or experience
+- Engagement: Ask a thoughtful, industry-specific question
+- Closing: Professional sign-off that invites continued dialogue
+
+STYLISTIC GUIDELINES:
+- Avoid generic phrases and clichés
+- Use confident but not arrogant language
+- Show respect for the recipient's time and expertise
+- Demonstrate emotional intelligence
+- Maintain professional boundaries
+
+Return JSON with "subject" and "content" fields. The subject should be compelling and professional.
 `;
 
     try {
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-5", // Using GPT-4 for better quality
             messages: [
                 {
                     role: "system",
-                    content: "You are a professional email writer. Generate unique, varied warmup emails. Always return valid JSON with 'subject' and 'content' fields."
+                    content: `You are an experienced ${industry} executive with 15+ years of industry experience. You write sophisticated, professional business emails that demonstrate expertise while building genuine professional relationships. Your writing is insightful, respectful, and strategically valuable. Always return valid JSON.`
                 },
                 { role: "user", content: prompt },
             ],
-            temperature: 0.9, // Higher temperature for more variety
-            max_tokens: 300,
+            temperature: 0.7, // Balanced for creativity and professionalism
+            max_tokens: 500,
             response_format: { type: "json_object" }
         });
 
@@ -87,83 +197,128 @@ IMPORTANT: Make each email unique in content, structure, and wording.
         try {
             const parsed = JSON.parse(content);
 
-            // Validate response
+            // Enhanced validation
             if (parsed.subject && parsed.content) {
-                console.log(`✅ Generated unique email: "${parsed.subject.substring(0, 50)}..."`);
-                return parsed;
+                console.log(`✅ Generated professional email: "${parsed.subject}"`);
+                return {
+                    subject: parsed.subject,
+                    content: parsed.content,
+                    industry: industry,
+                    tone: tone,
+                    structure: structure
+                };
             } else {
-                throw new Error("Missing subject or content in AI response");
+                throw new Error("Invalid AI response structure");
             }
         } catch (parseError) {
-            console.error("❌ Failed to parse AI response as JSON:", parseError.message);
-            // Fallback with variety
-            return generateFallbackEmail(senderName, receiverName, industry);
+            console.error("❌ Failed to parse AI response:", parseError.message);
+            return generateProfessionalFallbackEmail(senderName, receiverName, industry, topic, challenge);
         }
 
     } catch (err) {
         console.error("❌ OpenAI Error:", err.message);
-        return generateFallbackEmail(senderName, receiverName, industry);
+        return generateProfessionalFallbackEmail(senderName, receiverName, industry, topic, challenge);
     }
 }
 
-function generateFallbackEmail(senderName, receiverName, industry) {
-    const templates = [
+function generateProfessionalFallbackEmail(senderName, receiverName, industry, topic, challenge) {
+    const professionalTemplates = [
         {
-            subject: `Connecting from ${senderName}`,
-            content: `Hi ${receiverName}, ${getRandomItem(openingLines).replace('{industry}', industry)} I noticed we're both in the ${industry} space and thought it would be great to connect. Would be wonderful to exchange thoughts on recent industry developments. ${getRandomItem(closingLines)} Best, ${senderName}`
+            subject: `Perspectives on ${topic} in ${industry}`,
+            content: `Dear ${receiverName},
+
+I hope this message finds you well. I've been following the evolving landscape of ${topic} within our ${industry} sector and was particularly impressed by the insights you've shared in our professional community.
+
+The challenges around ${challenge} have been top of mind for many of us, and I'm curious about your perspective on balancing innovation with practical implementation. In my experience, the most successful approaches often involve ${getRandomItem(['strategic partnerships', 'incremental innovation', 'cross-functional collaboration', 'data-informed decision making'])}.
+
+I'd be very interested to hear your thoughts on how you see ${topic} evolving over the next quarter, and what you believe will be the most significant factors driving successful outcomes.
+
+Thank you for your time and consideration.
+
+Best regards,
+${senderName}`
         },
         {
-            subject: `Industry insights from ${industry}`,
-            content: `Hello ${receiverName}, ${getRandomItem(openingLines).replace('{industry}', industry)} I've been following the latest trends in ${industry} and would value your perspective. It's always helpful to connect with others who understand the landscape. ${getRandomItem(closingLines)} Warm regards, ${senderName}`
+            subject: `Navigating ${challenge} in Today's ${industry} Environment`,
+            content: `Hello ${receiverName},
+
+I'm reaching out because I've noticed our shared interest in addressing ${challenge} within the ${industry} space. Your professional approach to ${topic} particularly caught my attention.
+
+As we both know, the current environment presents both significant opportunities and complex challenges. I've found that focusing on ${getRandomItem(['sustainable growth strategies', 'client-centric solutions', 'operational excellence', 'digital transformation'])} has been crucial for navigating these waters successfully.
+
+I'd appreciate hearing about any insights you've gained recently regarding ${topic}, especially as it relates to long-term strategic positioning.
+
+Looking forward to potentially exchanging more thoughts.
+
+Warm regards,
+${senderName}`
         },
         {
-            subject: `Networking in ${industry}`,
-            content: `Hi ${receiverName}, ${getRandomItem(openingLines).replace('{industry}', industry)} As professionals in ${industry}, building connections is so important. I'd love to hear about your experiences and share some of mine. ${getRandomItem(closingLines)} Cheers, ${senderName}`
-        },
-        {
-            subject: `Great to connect in ${industry}`,
-            content: `Dear ${receiverName}, ${getRandomItem(openingLines).replace('{industry}', industry)} The ${industry} field is evolving so quickly - always valuable to connect with others navigating the same changes. ${getRandomItem(closingLines)} All the best, ${senderName}`
+            subject: `Strategic Insights on ${industry} Evolution`,
+            content: `Dear ${receiverName},
+
+I hope this email finds you well. I've been admiring your strategic approach to ${topic} within our industry, and I believe our perspectives on ${challenge} might be well-aligned.
+
+The intersection of ${topic} and market dynamics has created some fascinating opportunities for professionals like us who understand both the technical and business dimensions. I'm particularly interested in how organizations are leveraging ${getRandomItem(['emerging technologies', 'data analytics', 'strategic partnerships', 'talent development'])} to create sustainable advantage.
+
+Would you be open to sharing your perspective on the most promising developments you're seeing in our space?
+
+Thank you for considering this connection.
+
+Sincerely,
+${senderName}`
         }
     ];
 
-    const email = getRandomItem(templates);
-    console.log(`🔄 Using fallback email template`);
+    const email = getRandomItem(professionalTemplates);
+    console.log(`🔄 Using professional fallback template`);
     return email;
 }
 
 async function generateReply(originalEmail) {
-    console.log("Generating reply for:", {
+    console.log("Generating professional reply for:", {
         subject: originalEmail.subject,
-        content_preview: originalEmail.content?.substring(0, 100) + '...'
+        industry: originalEmail.industry || "general"
     });
 
     const prompt = `
-Generate a professional email reply to the following message. Return ONLY JSON with "reply_content" field.
+Generate a highly professional and sophisticated email reply that demonstrates executive-level communication skills.
 
-Original Email:
+ORIGINAL EMAIL:
 Subject: ${originalEmail.subject}
 Content: ${originalEmail.content}
+Industry Context: ${originalEmail.industry || "general"}
 
-Requirements:
-- Keep it warm, friendly, and professional
-- Sound like a natural human response
-- Vary your reply style and content
-- Mention something specific from their email
-- Keep it concise (2-4 sentences)
-- Return valid JSON: {"reply_content": "your reply here"}
+REPLY REQUIREMENTS:
+1. Sound like an experienced industry professional
+2. Acknowledge the sender's insights thoughtfully
+3. Add value with your own relevant perspective
+4. Demonstrate emotional intelligence and business acumen
+5. Keep the conversation moving forward naturally
+6. Maintain perfect professional etiquette
+7. Length: 3-5 substantive sentences
+
+STYLISTIC GUIDELINES:
+- Use sophisticated but accessible business language
+- Show appreciation for the sender's time and insights
+- Provide thoughtful, relevant additions to the discussion
+- Ask a follow-up question that shows engagement
+- Avoid generic responses and clichés
+
+Return JSON: {"reply_content": "your professional reply here"}
 `;
 
     try {
         const completion = await openai.chat.completions.create({
-            model: "gpt-4o-mini",
+            model: "gpt-5",
             messages: [
                 {
                     role: "system",
-                    content: `You are a professional email assistant. Always return valid JSON with "reply_content" field. Vary your response style.`
+                    content: `You are a senior executive with excellent communication skills. You write replies that are insightful, professional, and build meaningful business relationships. Your responses demonstrate expertise while showing genuine interest in the sender's perspective.`
                 },
                 { role: "user", content: prompt },
             ],
-            temperature: 0.8,
+            temperature: 0.7,
             response_format: { type: "json_object" }
         });
 
@@ -172,63 +327,91 @@ Requirements:
         try {
             const parsedReply = JSON.parse(reply);
 
-            if (parsedReply.reply_content && parsedReply.reply_content.trim().length > 10) {
-                console.log("✅ Generated unique reply");
+            if (parsedReply.reply_content && parsedReply.reply_content.trim().length > 20) {
+                console.log("✅ Generated professional reply");
                 return parsedReply;
             } else {
-                console.warn("⚠️ AI returned empty reply_content");
-                return generateFallbackReply(originalEmail);
+                console.warn("⚠️ AI returned insufficient reply content");
+                return generateProfessionalFallbackReply(originalEmail);
             }
         } catch (parseError) {
             console.error("❌ Failed to parse AI reply:", parseError.message);
-            return generateFallbackReply(originalEmail);
+            return generateProfessionalFallbackReply(originalEmail);
         }
 
     } catch (err) {
         console.error("❌ OpenAI Reply Error:", err.message);
-        return generateFallbackReply(originalEmail);
+        return generateProfessionalFallbackReply(originalEmail);
     }
 }
 
-function generateFallbackReply(originalEmail) {
-    const fallbacks = [
-        `Thanks for your email! ${originalEmail.subject} sounds interesting. I'd love to hear more about your thoughts on this.`,
-        `Appreciate you reaching out about ${originalEmail.subject?.toLowerCase() || 'this'}. Looking forward to learning more.`,
-        `Thanks for connecting! ${originalEmail.content?.includes('industry') ? 'The industry insights you shared are valuable.' : 'Your message is much appreciated.'}`,
-        `Great to hear from you! ${originalEmail.content?.includes('project') ? 'The project you mentioned sounds fascinating.' : 'I appreciate you taking the time to connect.'}`,
-        `Thanks for your message! ${originalEmail.content?.includes('collaborat') ? 'Collaboration sounds like a wonderful idea.' : 'It would be great to exchange more ideas soon.'}`
+function generateProfessionalFallbackReply(originalEmail) {
+    const professionalReplies = [
+        `Thank you for your thoughtful email regarding ${originalEmail.subject?.toLowerCase() || 'this important topic'}. I appreciate you sharing your insights and perspective on this matter.
+
+Your points about the industry challenges resonate with my own experiences, particularly around the need for strategic alignment between innovation and execution. I've found that focusing on sustainable approaches often yields the most meaningful long-term results.
+
+I'd be interested to hear more about any specific initiatives or strategies you've seen successfully address these challenges in practice.`,
+
+        `I appreciate you reaching out and sharing your perspective on ${originalEmail.subject?.toLowerCase() || 'this subject'}. Your email demonstrates a keen understanding of the current landscape.
+
+The intersection of strategy and implementation you mentioned is indeed crucial, and it's refreshing to connect with someone who understands both the theoretical and practical dimensions of our work.
+
+What are your thoughts on the evolving role of leadership in navigating these complex environments?`,
+
+        `Thank you for your insightful email. I've been considering similar questions around ${originalEmail.subject?.toLowerCase() || 'these industry developments'}, and your perspective adds valuable context to the conversation.
+
+The balance between innovation and stability you referenced is something I encounter regularly in my work. It's a challenge that requires both strategic vision and operational discipline.
+
+I'm curious to learn more about your approach to measuring success in these initiatives.`
     ];
 
     return {
-        reply_content: getRandomItem(fallbacks),
+        reply_content: getRandomItem(professionalReplies),
         is_fallback: true
     };
 }
 
-// Enhanced version with retry logic
+
 async function generateReplyWithRetry(originalEmail, maxRetries = 2) {
     for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
         try {
-            console.log(`🔄 Reply generation attempt ${attempt}/${maxRetries + 1}`);
+            console.log(`🔄 Professional reply generation attempt ${attempt}/${maxRetries + 1}`);
             const result = await generateReply(originalEmail);
 
-            if (result && result.reply_content && result.reply_content.trim().length > 10) {
+            if (result && result.reply_content && result.reply_content.trim().length > 20) {
                 return result;
             }
         } catch (error) {
-            console.error(`❌ Attempt ${attempt} failed:`, error.message);
+            console.error(`❌ Professional reply attempt ${attempt} failed:`, error.message);
         }
 
         if (attempt <= maxRetries) {
-            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            const delayMs = 2000 * attempt; // Longer delays for quality
+            console.log(`⏳ Retrying professional reply in ${delayMs / 1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, delayMs));
         }
     }
 
-    return generateFallbackReply(originalEmail);
+    console.log(`🔄 Using professional fallback reply`);
+    return generateProfessionalFallbackReply(originalEmail);
+}
+
+
+function getIndustryExpertise(industry) {
+    const expertise = {
+        technology: "digital transformation, cloud architecture, and emerging technologies",
+        finance: "investment strategies, risk management, and financial innovation",
+        healthcare: "healthcare technology, patient care models, and regulatory compliance",
+        marketing: "brand strategy, digital marketing, and customer engagement",
+        general: "business strategy, leadership, and operational excellence"
+    };
+    return expertise[industry] || expertise.general;
 }
 
 module.exports = {
     generateEmail,
     generateReply,
-    generateReplyWithRetry
+    generateReplyWithRetry,
+    getIndustryExpertise
 };
