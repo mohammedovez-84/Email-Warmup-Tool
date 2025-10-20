@@ -463,7 +463,7 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
                         ) : (
                             <form onSubmit={handleSubmit} className="space-y-5">
                                 {/* IMAP Credentials Toggle */}
-                                {/* <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
                                     <label className="flex items-center space-x-2 text-gray-700 font-medium text-sm cursor-pointer">
                                         <span>Use same credentials as SMTP</span>
                                     </label>
@@ -478,7 +478,7 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
                                                 }`}
                                         />
                                     </button>
-                                </div> */}
+                                </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     {/* IMAP Email */}

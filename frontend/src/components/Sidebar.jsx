@@ -88,7 +88,6 @@ const Sidebar = ({ onToggle }) => {
                         `}>
                             <img
                                 src={logo}
-                                alt="Endbounce Warmup"
                                 className={`
                                     w-full h-full
                                     object-contain
