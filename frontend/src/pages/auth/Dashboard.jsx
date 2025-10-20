@@ -3,12 +3,13 @@ import {
     FiSearch, FiSettings, FiPlus, FiChevronRight,
     FiX, FiTrash2, FiLink, FiBarChart2, FiPower, FiArrowLeft, FiSave,
     FiMail, FiShield, FiServer, FiUser, FiCheck, FiMenu, FiEdit3,
-    FiPause, FiPlay, FiRefreshCw, FiFilter, FiDownload, FiUpload
+    FiPause, FiPlay, FiRefreshCw, FiFilter, FiDownload, FiUpload,
+    FiAlertTriangle, FiInfo, FiPauseCircle, FiPlayCircle
 } from 'react-icons/fi';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import googleLogo from "../../assets/google-icon-svgrepo-com.svg";
+import googleLogo from "../../assets/google.svg";
 import MicrosoftLogo from "../../assets/microsoft.svg";
 import SmtpLogo from "../../assets/smtp.svg";
 
@@ -38,8 +39,14 @@ const Dashboard = ({ isSidebarCollapsed }) => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [showWarmupReport, setShowWarmupReport] = useState(false);
     const [selectedReportEmail, setSelectedReportEmail] = useState(null);
+    const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+    const [emailToDisconnect, setEmailToDisconnect] = useState(null);
+    const [showPauseModal, setShowPauseModal] = useState(false);
+    const [emailToPause, setEmailToPause] = useState(null);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [emailToDelete, setEmailToDelete] = useState(null);
 
-    // Format email account data
+    // Format email account data with auto-activation
     const formatEmailAccount = useCallback((account) => ({
         ...account,
         id: account._id || account.email,
@@ -48,7 +55,8 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         status: account.status || 'unknown',
         deliverability: account.deliverability || 0,
         provider: account.provider || 'unknown',
-        warmupStatus: account.warmupStatus || 'paused',
+        // Auto-activate warmup for newly added emails
+        warmupStatus: account.warmupStatus || 'active',
         warmupSettings: account.warmupSettings || {
             startEmailsPerDay: 3,
             increaseByPerDay: 3,
@@ -66,7 +74,37 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         toast.info('Session expired. Please login again.');
     }, [navigate]);
 
-    // Fetch emails
+    // Auto-activate warmup for newly added emails
+    const activateWarmupForNewEmail = useCallback(async (emailAddress) => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                handleUnauthorized();
+                return;
+            }
+
+            await axios.put(
+                `${API_BASE_URL}/api/warmup/emails/${encodeURIComponent(emailAddress)}/status`,
+                { status: 'active' },
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 5000
+                }
+            );
+
+            setWarmupEmails(prev =>
+                prev.map(email =>
+                    email.address === emailAddress ? { ...email, warmupStatus: 'active' } : email
+                )
+            );
+
+            console.log(`Auto-activated warmup for ${emailAddress}`);
+        } catch (error) {
+            console.error('Error auto-activating warmup:', error);
+        }
+    }, [handleUnauthorized]);
+
+    // Fetch emails with auto-activation for new ones
     const fetchWarmupEmails = useCallback(async () => {
         try {
             setLoading(true);
@@ -103,6 +141,14 @@ const Dashboard = ({ isSidebarCollapsed }) => {
 
             setWarmupEmails(allEmails);
             setEmailStats(stats);
+
+            // Auto-activate warmup for any emails that don't have a status set
+            allEmails.forEach(email => {
+                if (!email.warmupStatus || email.warmupStatus === 'paused') {
+                    activateWarmupForNewEmail(email.address);
+                }
+            });
+
         } catch (error) {
             console.error('Error fetching emails:', error);
             if (error.response?.status === 401) {
@@ -115,21 +161,92 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         } finally {
             setLoading(false);
         }
-    }, [formatEmailAccount, handleUnauthorized]);
+    }, [formatEmailAccount, handleUnauthorized, activateWarmupForNewEmail]);
 
-    // Toggle email warmup status
+    // Enhanced success handler for provider connections
+    const handleProviderSuccess = useCallback(() => {
+        fetchWarmupEmails();
+        toast.success('Email account connected successfully! Warmup has been automatically activated.');
+    }, [fetchWarmupEmails]);
+
+    // Show delete confirmation modal
+    const showDeleteConfirmation = (email) => {
+        setEmailToDelete(email);
+        setShowDeleteModal(true);
+        closeSettingsPanel();
+    };
+
+    // Delete email account
+    const handleDeleteEmail = async () => {
+        if (!emailToDelete) return;
+
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                handleUnauthorized();
+                return;
+            }
+
+            // Optimistically remove email from UI
+            setWarmupEmails(prev => prev.filter(email => email.id !== emailToDelete.id));
+
+            setEmailStats(prev => {
+                const newStats = { ...prev };
+                delete newStats[emailToDelete.address];
+                return newStats;
+            });
+
+            await axios.delete(
+                `${API_BASE_URL}/api/accounts/data/${encodeURIComponent(emailToDelete.id)}`,
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 5000
+                }
+            );
+
+            toast.success('Email account deleted successfully');
+            setShowDeleteModal(false);
+            setEmailToDelete(null);
+
+            fetchWarmupEmails();
+        } catch (error) {
+            console.error('Error deleting email:', error);
+            fetchWarmupEmails();
+
+            if (error.response?.status === 401) {
+                handleUnauthorized();
+            } else {
+                toast.error('Failed to delete email account');
+            }
+        }
+    };
+
+    // Show pause confirmation modal
+    const showPauseConfirmation = (emailAddress, currentWarmupStatus) => {
+        const email = warmupEmails.find(e => e.address === emailAddress);
+        if (email) {
+            setEmailToPause({ emailAddress, currentWarmupStatus });
+            setShowPauseModal(true);
+        }
+    };
+
+    // Enhanced toggle function with immediate UI feedback
     const handleToggle = async (emailAddress, currentWarmupStatus) => {
         const newStatus = currentWarmupStatus === 'active' ? 'paused' : 'active';
 
         if (newStatus === 'paused') {
-            const confirm = window.confirm('Are you sure you want to pause warmup for this email?');
-            if (!confirm) return;
+            showPauseConfirmation(emailAddress, currentWarmupStatus);
+            return;
         }
 
+        await performToggle(emailAddress, currentWarmupStatus, newStatus);
+    };
+
+    // Perform the actual toggle with better error handling
+    const performToggle = async (emailAddress, currentWarmupStatus, newStatus) => {
         try {
             setTogglingEmails(prev => ({ ...prev, [emailAddress]: true }));
 
-            // Optimistically update UI
             setWarmupEmails(prev =>
                 prev.map(email =>
                     email.address === emailAddress ? { ...email, warmupStatus: newStatus } : email
@@ -155,7 +272,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         } catch (error) {
             console.error('Toggle failed:', error);
 
-            // Revert optimistic update
             setWarmupEmails(prev =>
                 prev.map(email =>
                     email.address === emailAddress ? { ...email, warmupStatus: currentWarmupStatus } : email
@@ -171,13 +287,21 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             }
         } finally {
             setTogglingEmails(prev => ({ ...prev, [emailAddress]: false }));
+            setShowPauseModal(false);
+            setEmailToPause(null);
         }
     };
 
+    // Show disconnect confirmation modal
+    const showDisconnectConfirmation = (email) => {
+        setEmailToDisconnect(email);
+        setShowDisconnectModal(true);
+        closeSettingsPanel();
+    };
+
     // Disconnect email account
-    const handleDisconnectEmail = async (emailId, emailAddress) => {
-        const confirm = window.confirm(`Are you sure you want to disconnect ${emailAddress}? The account will be removed from warmup but can be reconnected later.`);
-        if (!confirm) return;
+    const handleDisconnectEmail = async () => {
+        if (!emailToDisconnect) return;
 
         try {
             const token = localStorage.getItem('token');
@@ -187,7 +311,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             }
 
             await axios.post(
-                `${API_BASE_URL}/api/accounts/disconnect/${encodeURIComponent(emailId)}`,
+                `${API_BASE_URL}/api/accounts/disconnect/${encodeURIComponent(emailToDisconnect.id)}`,
                 {},
                 {
                     headers: { Authorization: `Bearer ${token}` },
@@ -197,46 +321,14 @@ const Dashboard = ({ isSidebarCollapsed }) => {
 
             toast.success('Email disconnected successfully');
             fetchWarmupEmails();
-            closeSettingsPanel();
+            setShowDisconnectModal(false);
+            setEmailToDisconnect(null);
         } catch (error) {
             console.error('Error disconnecting email:', error);
             if (error.response?.status === 401) {
                 handleUnauthorized();
             } else {
                 toast.error('Failed to disconnect email');
-            }
-        }
-    };
-
-    // Delete email
-    const handleDeleteEmail = async (emailId, emailAddress) => {
-        const confirm = window.confirm(`Are you sure you want to permanently delete ${emailAddress}? This action cannot be undone.`);
-        if (!confirm) return;
-
-        try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                handleUnauthorized();
-                return;
-            }
-
-            await axios.delete(
-                `${API_BASE_URL}/api/accounts/data/${encodeURIComponent(emailId)}`,
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                    timeout: 5000
-                }
-            );
-
-            toast.success('Email deleted successfully');
-            fetchWarmupEmails();
-            closeSettingsPanel();
-        } catch (error) {
-            console.error('Error deleting email:', error);
-            if (error.response?.status === 401) {
-                handleUnauthorized();
-            } else {
-                toast.error('Failed to delete email');
             }
         }
     };
@@ -314,7 +406,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             : words[0].charAt(0).toUpperCase();
     }, []);
 
-    // Provider configuration with enhanced data
+    // Provider configuration with enhanced data and auto-activation
     const providers = useMemo(() => [
         {
             id: 'google',
@@ -325,8 +417,8 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             iconColor: "text-red-600",
             bgColor: "bg-red-50",
             borderColor: "border-red-200",
-            features: ["Gmail accounts", "Google Workspace", "OAuth2 secure login"],
-            component: <GoogleConnect onSuccess={fetchWarmupEmails} onClose={() => setSelectedProvider(null)} />
+            features: ["Gmail accounts", "Google Workspace", "OAuth2 secure login", "Auto-warmup activation"],
+            component: <GoogleConnect onSuccess={handleProviderSuccess} onClose={() => setSelectedProvider(null)} />
         },
         {
             id: 'microsoft',
@@ -337,8 +429,8 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             iconColor: "text-blue-600",
             bgColor: "bg-blue-50",
             borderColor: "border-blue-200",
-            features: ["Office 365", "Outlook.com", "Exchange servers"],
-            component: <MicrosoftConnect onSuccess={fetchWarmupEmails} onClose={() => setSelectedProvider(null)} />
+            features: ["Office 365", "Outlook.com", "Exchange servers", "Auto-warmup activation"],
+            component: <MicrosoftConnect onSuccess={handleProviderSuccess} onClose={() => setSelectedProvider(null)} />
         },
         {
             id: 'smtp',
@@ -349,21 +441,203 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             iconColor: "text-green-600",
             bgColor: "bg-green-50",
             borderColor: "border-green-200",
-            features: ["Custom SMTP servers", "IMAP support", "All email providers"],
-            component: <SMTPConnect onSuccess={fetchWarmupEmails} onClose={() => setSelectedProvider(null)} />
+            features: ["Custom SMTP servers", "IMAP support", "All email providers", "Auto-warmup activation"],
+            component: <SMTPConnect onSuccess={handleProviderSuccess} onClose={() => setSelectedProvider(null)} />
         }
-    ], [fetchWarmupEmails]);
+    ], [handleProviderSuccess]);
 
     const handleProviderSelect = (provider) => {
         setSelectedProvider(provider);
         setShowProviderModal(false);
     };
 
+    // Enhanced Delete Confirmation Modal
+    const DeleteConfirmationModal = () => (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl w-full max-w-md mx-auto shadow-2xl border border-gray-200">
+                <div className="flex items-center gap-4 p-6 border-b border-gray-200">
+                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                        <FiAlertTriangle className="w-6 h-6 text-red-600" />
+                    </div>
+                    <div className="flex-1">
+                        <h2 className="text-xl font-bold text-gray-900">Delete Email Account</h2>
+                        <p className="text-gray-600 mt-1">This action cannot be undone. Are you sure?</p>
+                    </div>
+                </div>
+
+                <div className="p-6 space-y-4">
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-sm">
+                                {getInitials(emailToDelete?.name)}
+                            </div>
+                            <div>
+                                <div className="font-medium text-gray-900">{emailToDelete?.name}</div>
+                                <div className="text-sm text-gray-500">{emailToDelete?.address}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <FiAlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-sm text-red-800">
+                            <strong>Warning:</strong> This will permanently delete the email account and all associated data including warmup progress, settings, and statistics. This action cannot be undone.
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex gap-3 p-6 border-t border-gray-200">
+                    <button
+                        className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium"
+                        onClick={() => {
+                            setShowDeleteModal(false);
+                            setEmailToDelete(null);
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        className="flex-1 px-4 py-2.5 bg-red-600 border border-red-600 text-white rounded-lg hover:bg-red-700 hover:border-red-700 transition-all duration-200 font-medium flex items-center justify-center gap-2"
+                        onClick={handleDeleteEmail}
+                    >
+                        <FiTrash2 className="w-4 h-4" />
+                        Delete Permanently
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+
+    // Enhanced Pause Confirmation Modal
+    const PauseConfirmationModal = () => {
+        const email = warmupEmails.find(e => e.address === emailToPause?.emailAddress);
+
+        if (!email) return null;
+
+        return (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-xl w-full max-w-md mx-auto shadow-2xl border border-gray-200">
+                    <div className="flex items-center gap-4 p-6 border-b border-gray-200">
+                        <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
+                            <FiPauseCircle className="w-6 h-6 text-yellow-600" />
+                        </div>
+                        <div className="flex-1">
+                            <h2 className="text-xl font-bold text-gray-900">Pause Warmup</h2>
+                            <p className="text-gray-600 mt-1">Are you sure you want to pause warmup for this email?</p>
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-4">
+                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-sm">
+                                    {getInitials(email.name)}
+                                </div>
+                                <div>
+                                    <div className="font-medium text-gray-900">{email.name}</div>
+                                    <div className="text-sm text-gray-500">{email.address}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <FiInfo className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                            <div className="text-sm text-blue-800">
+                                <strong>Note:</strong> Pausing warmup will stop all automated email sending.
+                                You can resume warmup at any time. Your progress and settings will be saved.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3 p-6 border-t border-gray-200">
+                        <button
+                            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium"
+                            onClick={() => {
+                                setShowPauseModal(false);
+                                setEmailToPause(null);
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            className="flex-1 px-4 py-2.5 bg-yellow-600 border border-yellow-600 text-white rounded-lg hover:bg-yellow-700 hover:border-yellow-700 transition-all duration-200 font-medium flex items-center justify-center gap-2"
+                            onClick={() => performToggle(
+                                emailToPause.emailAddress,
+                                emailToPause.currentWarmupStatus,
+                                'paused'
+                            )}
+                        >
+                            <FiPause className="w-4 h-4" />
+                            Pause Warmup
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // Enhanced Disconnect Confirmation Modal
+    const DisconnectConfirmationModal = () => (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl w-full max-w-md mx-auto shadow-2xl border border-gray-200">
+                <div className="flex items-center gap-4 p-6 border-b border-gray-200">
+                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                        <FiAlertTriangle className="w-6 h-6 text-red-600" />
+                    </div>
+                    <div className="flex-1">
+                        <h2 className="text-xl font-bold text-gray-900">Disconnect Email Account</h2>
+                        <p className="text-gray-600 mt-1">Are you sure you want to disconnect this account?</p>
+                    </div>
+                </div>
+
+                <div className="p-6 space-y-4">
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-sm">
+                                {getInitials(emailToDisconnect?.name)}
+                            </div>
+                            <div>
+                                <div className="font-medium text-gray-900">{emailToDisconnect?.name}</div>
+                                <div className="text-sm text-gray-500">{emailToDisconnect?.address}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                        <FiInfo className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-sm text-yellow-800">
+                            <strong>Note:</strong> The account will be removed from warmup but can be reconnected later.
+                            Your warmup progress and settings will be saved.
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex gap-3 p-6 border-t border-gray-200">
+                    <button
+                        className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium"
+                        onClick={() => {
+                            setShowDisconnectModal(false);
+                            setEmailToDisconnect(null);
+                        }}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        className="flex-1 px-4 py-2.5 bg-red-600 border border-red-600 text-white rounded-lg hover:bg-red-700 hover:border-red-700 transition-all duration-200 font-medium flex items-center justify-center gap-2"
+                        onClick={handleDisconnectEmail}
+                    >
+                        <FiPower className="w-4 h-4" />
+                        Disconnect
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+
     // Enhanced Provider Modal Component - Responsive
     const ProviderModal = () => (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-xl w-full max-w-4xl mx-auto shadow-2xl border border-gray-200 max-h-[90vh] overflow-hidden flex flex-col">
-                {/* Header */}
                 <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100 flex-shrink-0">
                     <div>
                         <h2 className="text-lg sm:text-xl font-bold text-gray-900">Connect Email Account</h2>
@@ -377,7 +651,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     </button>
                 </div>
 
-                {/* Provider Cards - Responsive Layout */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-4 p-4 sm:p-6 overflow-y-auto flex-1">
                     {providers.map((provider) => (
                         <div
@@ -386,10 +659,8 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                             className="group cursor-pointer"
                         >
                             <div className={`bg-white border ${provider.borderColor} rounded-lg p-4 sm:p-5 hover:shadow-md hover:border-indigo-400 transition-all duration-200 h-full flex flex-col relative overflow-hidden`}>
-                                {/* Background Gradient Effect */}
                                 <div className={`absolute inset-0 bg-gradient-to-br ${provider.color} opacity-0 group-hover:opacity-3 transition-opacity duration-300`}></div>
 
-                                {/* Icon and Header */}
                                 <div className="flex items-center gap-3 mb-3 sm:mb-4 relative z-10">
                                     <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-lg ${provider.bgColor} flex items-center justify-center`}>
                                         <span className={`text-sm font-bold ${provider.iconColor}`}>
@@ -406,7 +677,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                     </div>
                                 </div>
 
-                                {/* Features */}
                                 <div className="flex-1 mb-3 sm:mb-4 relative z-10">
                                     <ul className="space-y-1 sm:space-y-2">
                                         {provider.features.map((feature, index) => (
@@ -418,7 +688,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                     </ul>
                                 </div>
 
-                                {/* Footer */}
                                 <div className="flex items-center justify-between pt-2 sm:pt-3 border-t border-gray-100 relative z-10">
                                     <div className="flex items-center text-gray-400 text-xs">
                                         <FiShield className="w-3 h-3 text-green-500 mr-1" />
@@ -434,7 +703,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     ))}
                 </div>
 
-                {/* Security Note */}
                 <div className="bg-gray-50 rounded-b-xl p-3 sm:p-4 border-t border-gray-200 flex-shrink-0">
                     <div className="flex items-center justify-center text-center">
                         <FiShield className="w-4 h-4 text-green-500 mr-2" />
@@ -496,7 +764,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 [name]: processedValue
             }));
 
-            // Clear error when user starts typing
             if (errors[name]) {
                 setErrors(prev => ({ ...prev, [name]: '' }));
             }
@@ -518,7 +785,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         return (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                 <div className="bg-white rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl">
-                    {/* Header */}
                     <div className="flex justify-between items-center p-4 sm:p-6 border-b border-gray-200 sticky top-0 bg-white">
                         <div>
                             <h2 className="text-lg sm:text-xl font-semibold text-gray-800">Warm-up Settings</h2>
@@ -532,9 +798,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         </button>
                     </div>
 
-                    {/* Settings Form */}
                     <div className="p-4 sm:p-6 space-y-4">
-                        {/* Start Emails Per Day */}
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-700">
                                 Start with emails/day (Recommended 3)
@@ -557,7 +821,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                             )}
                         </div>
 
-                        {/* Increase By Emails Per Day */}
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-700">
                                 Increase by emails every day (Recommended 3)
@@ -580,7 +843,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                             )}
                         </div>
 
-                        {/* Max Emails Per Day */}
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-700">
                                 Maximum emails to be sent per day (Recommended 25)
@@ -603,7 +865,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                             )}
                         </div>
 
-                        {/* Reply Rate */}
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-700">Reply rate</label>
                             <input
@@ -625,7 +886,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                             )}
                         </div>
 
-                        {/* Sender Name */}
                         <div className="space-y-2">
                             <label className="text-sm font-medium text-gray-700">Sender name</label>
                             <input
@@ -637,7 +897,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                             />
                         </div>
 
-                        {/* Checkbox */}
                         <div className="flex items-center gap-2">
                             <input
                                 type="checkbox"
@@ -656,7 +915,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                             </label>
                         </div>
 
-                        {/* Custom Folder Name Input */}
                         {settings.customFolderName && (
                             <div className="space-y-2">
                                 <input
@@ -671,7 +929,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         )}
                     </div>
 
-                    {/* Action Buttons */}
                     <div className="flex justify-between p-4 sm:p-6 border-t border-gray-200 gap-3">
                         <button
                             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-all flex-1"
@@ -711,16 +968,14 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     </button>
                 </div>
                 <div className="p-2 max-h-60 overflow-y-auto">
-                    {/* Disconnect Email */}
                     <button
                         className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                        onClick={() => handleDisconnectEmail(email.id, email.address)}
+                        onClick={() => showDisconnectConfirmation(email)}
                     >
                         <FiPower className="text-gray-400" />
                         Disconnect Email
                     </button>
 
-                    {/* Warmup Settings */}
                     <button
                         className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                         onClick={() => {
@@ -733,11 +988,9 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         Warmup Settings
                     </button>
 
-                    {/* Connection Settings */}
                     <button
                         className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                         onClick={() => {
-                            // Implement connection settings logic here
                             toast.info('Connection settings feature coming soon');
                             onClose();
                         }}
@@ -746,7 +999,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         Connection Settings
                     </button>
 
-                    {/* Warmup Report */}
                     <button
                         className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
                         onClick={() => handleShowWarmupReport(email)}
@@ -755,10 +1007,9 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         Warmup Report
                     </button>
 
-                    {/* Delete Email */}
                     <button
                         className="flex items-center gap-3 w-full p-3 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-2"
-                        onClick={() => handleDeleteEmail(email.id, email.address)}
+                        onClick={() => showDeleteConfirmation(email)}
                     >
                         <FiTrash2 />
                         Delete Email
@@ -770,10 +1021,10 @@ const Dashboard = ({ isSidebarCollapsed }) => {
 
     // Enhanced Desktop Settings Panel with all functionality
     const DesktopSettingsPanel = () => (
-        <div className="fixed top-16 right-4 w-64 bg-white rounded-lg shadow-xl border border-gray-200 z-40">
-            <div className="flex justify-between items-center p-4 border-b border-gray-200">
+        <div className="fixed top-16 right-4 w-64 bg-white rounded-lg shadow-xl border border-teal-400 z-40">
+            <div className="flex justify-between items-center p-4 border-b border-teal-600">
                 <div>
-                    <h3 className="font-semibold text-gray-900">Settings</h3>
+                    <h3 className="font-semibold text-teal-900">Settings</h3>
                     <p className="text-gray-500 text-sm mt-1 truncate">{selectedEmail?.address}</p>
                 </div>
                 <button
@@ -784,18 +1035,16 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 </button>
             </div>
             <div className="p-2">
-                {/* Disconnect Email */}
                 <button
-                    className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                    onClick={() => handleDisconnectEmail(selectedEmail.id, selectedEmail.address)}
+                    className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-teal-100 rounded-lg transition-colors"
+                    onClick={() => showDisconnectConfirmation(selectedEmail)}
                 >
                     <FiPower className="text-gray-400" />
                     Disconnect Email
                 </button>
 
-                {/* Warmup Settings */}
                 <button
-                    className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-teal-100 rounded-lg transition-colors"
                     onClick={() => {
                         setWarmupSettingsEmail(selectedEmail);
                         setShowWarmupSettings(true);
@@ -806,11 +1055,9 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     Warmup Settings
                 </button>
 
-                {/* Connection Settings */}
                 <button
-                    className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-teal-100 rounded-lg transition-colors"
                     onClick={() => {
-                        // Implement connection settings logic here
                         toast.info('Connection settings feature coming soon');
                         closeSettingsPanel();
                     }}
@@ -819,19 +1066,17 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     Connection Settings
                 </button>
 
-                {/* Warmup Report */}
                 <button
-                    className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                    className="flex items-center gap-3 w-full p-3 text-sm text-gray-700 hover:bg-teal-100 rounded-lg transition-colors"
                     onClick={() => handleShowWarmupReport(selectedEmail)}
                 >
                     <FiBarChart2 className="text-gray-400" />
                     Warmup Report
                 </button>
 
-                {/* Delete Email */}
                 <button
                     className="flex items-center gap-3 w-full p-3 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors mt-2"
-                    onClick={() => handleDeleteEmail(selectedEmail.id, selectedEmail.address)}
+                    onClick={() => showDeleteConfirmation(selectedEmail)}
                 >
                     <FiTrash2 />
                     Delete Email
@@ -880,25 +1125,26 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 </div>
             </div>
 
-            {/* Main Content - Responsive Table */}
+            {/* Main Content - Responsive Table with IMPROVED SPACING */}
             <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-                {/* Table Header */}
-                <div className="hidden sm:grid grid-cols-6 bg-gradient-to-r from-teal-900 to-teal-600 px-4 md:px-6 py-3 text-white text-xs font-semibold uppercase tracking-wide">
-                    <div className="col-span-1">Email Account</div>
-                    <div>Status</div>
-                    <div>Sent</div>
-                    <div>Replied</div>
-                    <div>Deliverability</div>
+                {/* Table Header - UPDATED WITH BETTER SPACING */}
+                <div className="hidden sm:grid grid-cols-12 bg-gradient-to-r from-teal-900 to-teal-600 px-6 py-4 text-white text-xs font-semibold uppercase tracking-wide gap-4">
+                    <div className="col-span-4">Email Account</div>
+                    <div className="col-span-2 text-center">Status</div>
+                    <div className="col-span-2 text-center">Sent</div>
+                    <div className="col-span-2 text-center">Replied</div>
+                    <div className="col-span-1 text-center">Deliverability</div>
+                    <div className="col-span-1 text-right">Actions</div>
+                </div>
+
+                {/* Mobile Table Header - UPDATED */}
+                <div className="sm:hidden grid grid-cols-4 bg-gradient-to-r from-teal-900 to-teal-600 px-4 py-3 text-white text-xs font-semibold uppercase tracking-wide">
+                    <div className="col-span-2">Email Account</div>
+                    <div className="text-center">Status</div>
                     <div className="text-right">Actions</div>
                 </div>
 
-                {/* Mobile Table Header */}
-                <div className="sm:hidden grid grid-cols-3 bg-gradient-to-r from-teal-900 to-teal-600 px-4 py-3 text-white text-xs font-semibold uppercase tracking-wide">
-                    <div className="col-span-2">Email Account</div>
-                    <div className="text-right">Status</div>
-                </div>
-
-                {/* Table Body */}
+                {/* Table Body - UPDATED WITH BETTER SPACING */}
                 {loading ? (
                     <div className="flex flex-col items-center justify-center py-12">
                         <div className="w-8 h-8 border-3 border-teal-200 border-t-teal-600 rounded-full animate-spin mb-3"></div>
@@ -914,10 +1160,11 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         };
 
                         return (
-                            <div key={email.id} className="grid grid-cols-3 sm:grid-cols-6 px-4 md:px-6 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors group">
-                                {/* Email Account */}
-                                <div className="col-span-2 sm:col-span-1 flex items-center gap-3">
-                                    <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-sm flex-shrink-0">
+                            <div key={email.id} className="grid grid-cols-4 sm:grid-cols-12 px-4 sm:px-6 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors group items-center gap-4">
+
+                                {/* Email Account - UPDATED WITH BETTER SPACING */}
+                                <div className="col-span-2 sm:col-span-4 flex items-center gap-4">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-sm flex-shrink-0">
                                         {getInitials(email.name)}
                                     </div>
                                     <div className="min-w-0 flex-1">
@@ -929,48 +1176,45 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                     </div>
                                 </div>
 
-                                {/* Status */}
-                                <div className="hidden sm:flex items-center">
-                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${email.warmupStatus === 'active'
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-red-100 text-red-800'
+                                {/* Status - UPDATED */}
+                                <div className="hidden sm:flex items-center col-span-2 justify-center">
+                                    <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium ${email.warmupStatus === 'active'
+                                        ? 'bg-green-100 text-green-800 border border-green-200'
+                                        : 'bg-red-100 text-red-800 border border-red-200'
                                         }`}>
                                         {email.warmupStatus?.charAt(0).toUpperCase() + email.warmupStatus?.slice(1) || 'Unknown'}
                                     </span>
                                 </div>
 
-                                {/* Sent */}
-                                <div className="hidden sm:flex items-center font-medium text-gray-900 text-sm">
+                                {/* Mobile Status - UPDATED */}
+                                <div className="sm:hidden flex items-center justify-center col-span-1">
+                                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${email.warmupStatus === 'active'
+                                        ? 'bg-green-100 text-green-800'
+                                        : 'bg-red-100 text-red-800'
+                                        }`}>
+                                        {email.warmupStatus === 'active' ? 'On' : 'Off'}
+                                    </span>
+                                </div>
+
+                                {/* Sent - UPDATED */}
+                                <div className="hidden sm:flex items-center col-span-2 font-medium text-gray-900 text-sm justify-center">
                                     {Number(stats.sent || 0).toLocaleString()}
                                 </div>
 
-                                {/* Replied */}
-                                <div className="hidden sm:flex items-center font-medium text-gray-900 text-sm">
+                                {/* Replied - UPDATED */}
+                                <div className="hidden sm:flex items-center col-span-2 font-medium text-gray-900 text-sm justify-center">
                                     {Number(stats.replied || 0).toLocaleString()}
                                 </div>
 
-                                {/* Deliverability */}
-                                <div className="hidden sm:flex items-center">
-                                    <div className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-xs font-medium">
+                                {/* Deliverability - UPDATED */}
+                                <div className="hidden sm:flex items-center col-span-1 justify-center">
+                                    <div className="bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded text-xs font-medium border border-indigo-200">
                                         {stats.deliverability}%
                                     </div>
                                 </div>
 
-                                {/* Actions */}
-                                <div className="flex items-center justify-end gap-2">
-                                    {/* Mobile Status & Stats */}
-                                    <div className="sm:hidden flex flex-col items-end gap-1 mr-2">
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${email.warmupStatus === 'active'
-                                            ? 'bg-green-100 text-green-800'
-                                            : 'bg-red-100 text-red-800'
-                                            }`}>
-                                            {email.warmupStatus === 'active' ? 'On' : 'Off'}
-                                        </span>
-                                        <div className="text-xs text-gray-500">
-                                            {Number(stats.replied || 0)} replies
-                                        </div>
-                                    </div>
-
+                                {/* Actions - UPDATED WITH BETTER SPACING */}
+                                <div className="flex items-center justify-end gap-3 col-span-1">
                                     {/* Toggle Switch */}
                                     <label className="relative inline-flex items-center cursor-pointer">
                                         <input
@@ -980,7 +1224,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                             className="sr-only peer"
                                             disabled={togglingEmails[email.address]}
                                         />
-                                        <div className="w-9 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-4 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-500"></div>
+                                        <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
                                         {togglingEmails[email.address] && (
                                             <div className="absolute inset-0 flex items-center justify-center">
                                                 <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -990,10 +1234,10 @@ const Dashboard = ({ isSidebarCollapsed }) => {
 
                                     {/* Settings Button */}
                                     <button
-                                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                                        className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                                         onClick={() => handleSettingsClick(email)}
                                     >
-                                        <FiSettings size={14} />
+                                        <FiSettings size={16} />
                                     </button>
                                 </div>
                             </div>
@@ -1018,6 +1262,15 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     </div>
                 )}
             </div>
+
+            {/* Delete Confirmation Modal */}
+            {showDeleteModal && <DeleteConfirmationModal />}
+
+            {/* Pause Confirmation Modal */}
+            {showPauseModal && <PauseConfirmationModal />}
+
+            {/* Disconnect Confirmation Modal */}
+            {showDisconnectModal && <DisconnectConfirmationModal />}
 
             {/* Settings Panel - Desktop */}
             {showSettingsPanel && selectedEmail && window.innerWidth >= 640 && (
