@@ -24,7 +24,6 @@ class IntelligentWarmupScheduler {
 
             console.log('🧠 Starting intelligent warmup scheduling...');
 
-            // Get all active accounts
             const activeAccounts = await this.getActiveAccounts();
 
             if (activeAccounts.length < 2) {
@@ -35,13 +34,10 @@ class IntelligentWarmupScheduler {
 
             console.log(`📊 Processing ${activeAccounts.length} active accounts`);
 
-            // Clear previous scheduled jobs
             this.clearScheduledJobs();
 
-            // Create intelligent warmup plan
-            const warmupPlan = this.createWarmupPlan(activeAccounts);
+            const warmupPlan = await this.createBalancedWarmupPlan(activeAccounts);
 
-            // Schedule jobs based on the plan
             await this.scheduleJobs(channel, warmupPlan);
 
             console.log('✅ Intelligent warmup scheduling completed');
@@ -57,151 +53,258 @@ class IntelligentWarmupScheduler {
         const smtpAccounts = await SmtpAccount.findAll({ where: { warmupStatus: 'active' } });
         const microsoftAccounts = await MicrosoftUser.findAll({ where: { warmupStatus: 'active' } });
 
-        return [...googleAccounts, ...smtpAccounts, ...microsoftAccounts];
+        console.log(`📊 Database accounts found:`);
+        console.log(`   Google: ${googleAccounts.length}, SMTP: ${smtpAccounts.length}, Microsoft: ${microsoftAccounts.length}`);
+
+        const allAccounts = [...googleAccounts, ...smtpAccounts, ...microsoftAccounts];
+
+        for (const account of allAccounts) {
+            const sendLimit = await computeEmailsToSend(account);
+            console.log(`   ${account.email}: Day ${account.warmupDayCount}, Send Limit: ${sendLimit}, ReplyRate: ${account.replyRate}`);
+        }
+
+        return allAccounts;
     }
 
-    createWarmupPlan(accounts) {
+    async createBalancedWarmupPlan(accounts) {
+        console.log(`🎯 Creating BALANCED warmup plan for ${accounts.length} accounts`);
+
         const plan = {
             timeSlots: new Map(),
             totalEmails: 0,
-            accountDistribution: new Map()
+            accountStats: new Map()
         };
 
-        console.log(`🎯 Creating warmup plan for ${accounts.length} accounts`);
+        // Calculate individual sending limits
+        const accountSendLimits = new Map();
+        const accountSentCounts = new Map();
+        const accountReceivedCounts = new Map();
 
-        // Create balanced pairs ensuring bidirectional communication
-        const allPairs = this.createBalancedPairs(accounts);
-
-        // Distribute pairs intelligently across time
-        this.distributePairsOverTime(allPairs, plan);
-
-        console.log(`📅 Warmup Plan: ${plan.totalEmails} emails across ${plan.timeSlots.size} time slots`);
-
-        // Log account distribution
-        console.log('📊 Account Distribution:');
-        for (const [email, count] of plan.accountDistribution) {
-            console.log(`   ${email}: ${count} emails`);
+        for (const account of accounts) {
+            const sendLimit = await computeEmailsToSend(account);
+            accountSendLimits.set(account.email, sendLimit);
+            accountSentCounts.set(account.email, 0);
+            accountReceivedCounts.set(account.email, 0);
+            plan.accountStats.set(account.email, { sent: 0, received: 0 });
         }
+
+        console.log('📊 Individual Send Limits:');
+        for (const [email, limit] of accountSendLimits) {
+            console.log(`   ${email}: ${limit} emails to SEND`);
+        }
+
+        // Create balanced pairs
+        const allPairs = await this.createBalancedPairs(
+            accounts,
+            accountSendLimits,
+            accountSentCounts,
+            accountReceivedCounts
+        );
+
+        // Distribute to time slots
+        await this.distributeToTimeSlots(allPairs, plan);
+
+        // Final validation
+        this.validateDistribution(accounts, accountSentCounts, accountReceivedCounts, accountSendLimits);
 
         return plan;
     }
 
-    createBalancedPairs(accounts) {
-        const pairs = [];
+    async createBalancedPairs(accounts, sendLimits, sentCounts, receivedCounts) {
+        console.log(`\n🔄 Creating balanced email pairs...`);
 
-        console.log(`🔗 Creating balanced pairs for ${accounts.length} accounts`);
+        const allPairs = [];
+        const totalRounds = Math.max(...Array.from(sendLimits.values()));
 
-        // Create bidirectional pairs ensuring everyone sends and receives
-        for (let i = 0; i < accounts.length; i++) {
-            for (let j = 0; j < accounts.length; j++) {
-                if (i === j) continue; // Skip self-pairing
+        // Reset counts for fresh calculation
+        for (const account of accounts) {
+            sentCounts.set(account.email, 0);
+            receivedCounts.set(account.email, 0);
+        }
 
-                const accountA = accounts[i];
-                const accountB = accounts[j];
+        // Create rounds until all send limits are met
+        for (let round = 1; round <= totalRounds; round++) {
+            const roundPairs = [];
 
-                // Calculate balanced email exchange
-                const emailsAtoB = this.calculateBalancedEmails(accountA, accountB);
-                const emailsBtoA = this.calculateBalancedEmails(accountB, accountA);
+            // Try to create a balanced exchange in each round
+            for (const sender of accounts) {
+                const senderEmail = sender.email;
+                const senderSent = sentCounts.get(senderEmail);
+                const senderLimit = sendLimits.get(senderEmail);
 
-                // Add bidirectional emails
-                for (let k = 0; k < emailsAtoB; k++) {
-                    pairs.push({
-                        sender: accountA,
-                        receiver: accountB,
-                        replyRate: Math.min(0.25, computeReplyRate(accountA)),
-                        warmupDay: accountA.warmupDayCount || 0
+                // If sender has reached their limit, skip
+                if (senderSent >= senderLimit) continue;
+
+                // Find the best receiver for this sender
+                const receiver = this.findOptimalReceiver(sender, accounts, receivedCounts, sentCounts);
+
+                if (receiver && receiver.email !== senderEmail) {
+                    const replyRate = await computeReplyRate(sender);
+
+                    roundPairs.push({
+                        sender,
+                        receiver,
+                        senderEmail: senderEmail,
+                        receiverEmail: receiver.email,
+                        replyRate: replyRate,
+                        warmupDay: sender.warmupDayCount,
+                        senderType: this.getSenderType(sender),
+                        round: round
                     });
-                }
 
-                for (let k = 0; k < emailsBtoA; k++) {
-                    pairs.push({
-                        sender: accountB,
-                        receiver: accountA,
-                        replyRate: Math.min(0.25, computeReplyRate(accountB)),
-                        warmupDay: accountB.warmupDayCount || 0
-                    });
+                    // Update counts
+                    sentCounts.set(senderEmail, senderSent + 1);
+                    receivedCounts.set(receiver.email, receivedCounts.get(receiver.email) + 1);
                 }
+            }
 
-                if (emailsAtoB > 0 || emailsBtoA > 0) {
-                    console.log(`   ${accountA.email} <-> ${accountB.email}: ${emailsAtoB}A→B, ${emailsBtoA}B→A`);
-                }
+            if (roundPairs.length > 0) {
+                allPairs.push({
+                    roundNumber: round,
+                    pairs: roundPairs,
+                    emailCount: roundPairs.length
+                });
+
+                console.log(`   Round ${round}: ${roundPairs.length} emails`);
+
+                // Show round details
+                roundPairs.forEach(pair => {
+                    console.log(`     📤 ${pair.senderEmail} → ${pair.receiverEmail}`);
+                });
             }
         }
 
-        console.log(`✅ Created ${pairs.length} balanced bidirectional pairs`);
-        return pairs;
+        return allPairs;
     }
 
-    calculateBalancedEmails(sender, receiver) {
-        const senderDays = sender.warmupDayCount || 0;
+    findOptimalReceiver(sender, accounts, receivedCounts, sentCounts) {
+        const senderEmail = sender.email;
 
-        // Gradual increase based on warmup progress
-        let emailsToSend;
-        if (senderDays === 0) emailsToSend = 1;
-        else if (senderDays <= 3) emailsToSend = 1;
-        else if (senderDays <= 7) emailsToSend = 2;
-        else if (senderDays <= 14) emailsToSend = 2;
-        else emailsToSend = 3;
+        // Create list of potential receivers (excluding sender)
+        const potentialReceivers = accounts
+            .filter(account => account.email !== senderEmail)
+            .map(receiver => {
+                const received = receivedCounts.get(receiver.email);
+                const sent = sentCounts.get(receiver.email);
 
-        return emailsToSend;
+                // Calculate balance score (prefer receivers who have received fewer emails)
+                const balanceScore = -received; // Negative because we want lower received counts
+
+                return { receiver, received, sent, balanceScore };
+            })
+            .sort((a, b) => b.balanceScore - a.balanceScore); // Sort by balance (ascending received count)
+
+        return potentialReceivers.length > 0 ? potentialReceivers[0].receiver : null;
     }
 
-    distributePairsOverTime(pairs, plan) {
-        if (pairs.length === 0) {
-            console.log('⚠️ No pairs to distribute');
+    async distributeToTimeSlots(rounds, plan) {
+        if (rounds.length === 0) {
+            console.log('⚠️ No rounds to distribute');
             return;
         }
 
-        console.log(`📅 Distributing ${pairs.length} pairs over time...`);
+        console.log(`\n📅 Distributing ${rounds.length} rounds to time slots...`);
 
-        // Shuffle pairs for random distribution
-        const shuffledPairs = this.shuffleArray([...pairs]);
+        const timeSlots = this.calculateOptimalTimeSlots(rounds.length);
 
-        // Track account distribution
-        const accountEmails = new Map();
+        rounds.forEach((round, index) => {
+            if (index < timeSlots.length) {
+                const slot = timeSlots[index];
+                const timeKey = slot.time.toISOString();
 
-        // Distribute emails throughout the day with 30-minute intervals
-        let currentTime = this.getNextAvailableTime();
-        const sendInterval = 30 * 60 * 1000; // 30 minutes between emails
+                if (!plan.timeSlots.has(timeKey)) {
+                    plan.timeSlots.set(timeKey, []);
+                }
 
-        shuffledPairs.forEach((pair, index) => {
-            const scheduledTime = new Date(currentTime.getTime() + (index * sendInterval));
+                // Add all pairs from this round to the time slot
+                round.pairs.forEach(pair => {
+                    plan.timeSlots.get(timeKey).push(pair);
+                    plan.totalEmails++;
 
-            const timeKey = scheduledTime.toISOString();
-            if (!plan.timeSlots.has(timeKey)) {
-                plan.timeSlots.set(timeKey, []);
+                    // Update account stats
+                    const senderStats = plan.accountStats.get(pair.senderEmail);
+                    const receiverStats = plan.accountStats.get(pair.receiverEmail);
+                    senderStats.sent++;
+                    receiverStats.received++;
+                });
+
+                console.log(`   🕐 ${slot.time.toLocaleTimeString()} - Round ${round.roundNumber} (${round.pairs.length} emails)`);
             }
-
-            plan.timeSlots.get(timeKey).push(pair);
-            plan.totalEmails++;
-
-            // Track account distribution
-            const senderEmail = pair.sender.email;
-            accountEmails.set(senderEmail, (accountEmails.get(senderEmail) || 0) + 1);
         });
 
-        plan.accountDistribution = accountEmails;
         console.log(`✅ Distributed ${plan.totalEmails} emails across ${plan.timeSlots.size} time slots`);
+
+        // Log final distribution
+        console.log('\n📊 FINAL DISTRIBUTION:');
+        for (const [email, stats] of plan.accountStats) {
+            console.log(`   ${email}: Sent ${stats.sent}, Received ${stats.received}`);
+        }
     }
 
-    getNextAvailableTime() {
-        // Start scheduling from next 30-minute mark
+    calculateOptimalTimeSlots(totalRounds) {
+        const timeSlots = [];
         const now = new Date();
-        const nextSlot = new Date(now);
-        nextSlot.setMinutes(Math.ceil(now.getMinutes() / 30) * 30, 0, 0);
 
-        // If it's the same minute, add 30 minutes
-        if (nextSlot.getTime() <= now.getTime()) {
-            nextSlot.setMinutes(nextSlot.getMinutes() + 30);
+        console.log(`   ⏱️ ULTRA-FAST TESTING: ${totalRounds} rounds starting within seconds`);
+
+        for (let i = 0; i < totalRounds; i++) {
+            // Start first email in 30 seconds, then space out by 2-5 minutes
+            const baseDelay = 30 * 1000; // 30 seconds for first email
+            const additionalDelay = i * 3 * 60 * 1000; // 3 minutes between subsequent rounds
+
+            const slotTime = new Date(now.getTime() + baseDelay + additionalDelay);
+
+            timeSlots.push({ time: slotTime, round: i + 1 });
+
+            const secondsFromNow = Math.round((baseDelay + additionalDelay) / 1000);
+            const minutes = Math.floor(secondsFromNow / 60);
+            const seconds = secondsFromNow % 60;
+
+            console.log(`   🚀 Slot ${i + 1}: ${slotTime.toLocaleTimeString()} (in ${minutes}m ${seconds}s)`);
         }
 
-        return nextSlot;
+        return timeSlots;
+    }
+
+    validateDistribution(accounts, sentCounts, receivedCounts, sendLimits) {
+        console.log('\n📊 DISTRIBUTION VALIDATION:');
+        console.log('='.repeat(50));
+
+        let totalSent = 0;
+        let totalReceived = 0;
+        let allLimitsMet = true;
+
+        for (const account of accounts) {
+            const email = account.email;
+            const sent = sentCounts.get(email);
+            const received = receivedCounts.get(email);
+            const limit = sendLimits.get(email);
+
+            totalSent += sent;
+            totalReceived += received;
+
+            const status = sent >= limit ? '✅' : '❌';
+            console.log(`   ${email}:`);
+            console.log(`     Sent: ${sent}/${limit} ${status}`);
+            console.log(`     Received: ${received}`);
+
+            if (sent < limit) {
+                allLimitsMet = false;
+            }
+        }
+
+        console.log(`\n📈 SYSTEM SUMMARY:`);
+        console.log(`   Total Sent: ${totalSent}`);
+        console.log(`   Total Received: ${totalReceived}`);
+        console.log(`   Balance: ${Math.abs(totalSent - totalReceived)} difference`);
+        console.log(`   All Limits Met: ${allLimitsMet ? '✅ YES' : '❌ NO'}`);
+        console.log('='.repeat(50));
     }
 
     async scheduleJobs(channel, warmupPlan) {
         let totalScheduled = 0;
 
-        console.log(`🕐 Scheduling ${warmupPlan.timeSlots.size} time slots...`);
+        console.log(`\n🕐 Scheduling ${warmupPlan.timeSlots.size} time slots...`);
 
         for (const [timeString, pairs] of warmupPlan.timeSlots) {
             const scheduledTime = new Date(timeString);
@@ -211,41 +314,42 @@ class IntelligentWarmupScheduler {
             if (delay > 0) {
                 console.log(`   📅 ${scheduledTime.toLocaleTimeString()} - ${pairs.length} emails`);
 
+                const job = {
+                    timeSlot: timeString,
+                    pairs: pairs.map(pair => ({
+                        senderEmail: pair.senderEmail,
+                        senderType: pair.senderType,
+                        receiverEmail: pair.receiverEmail,
+                        replyRate: pair.replyRate,
+                        warmupDay: pair.warmupDay,
+                        round: pair.round
+                    })),
+                    timestamp: new Date().toISOString(),
+                    coordinated: true
+                };
+
                 const timeoutId = setTimeout(async () => {
                     try {
-                        console.log(`🎯 Executing ${pairs.length} emails scheduled for ${scheduledTime.toLocaleTimeString()}`);
+                        console.log(`\n🎯 EXECUTING TIME SLOT: ${scheduledTime.toLocaleTimeString()}`);
+                        console.log(`   Processing ${pairs.length} emails...`);
 
-                        for (const pair of pairs) {
-                            const jobPayload = {
-                                senderEmail: pair.sender.email,
-                                senderType: this.getSenderType(pair.sender),
-                                receiverEmail: pair.receiver.email,
-                                replyRate: pair.replyRate,
-                                warmupDay: pair.warmupDay,
-                                timestamp: new Date().toISOString(),
-                                scheduled: true
-                            };
+                        await channel.sendToQueue('warmup_jobs', Buffer.from(JSON.stringify(job)), {
+                            persistent: true,
+                            priority: 5
+                        });
 
-                            await channel.sendToQueue('warmup_jobs', Buffer.from(JSON.stringify(jobPayload)), {
-                                persistent: true,
-                                priority: 5
-                            });
-
-                            console.log(`   📨 ${pair.sender.email} -> ${pair.receiver.email} (Reply: ${(pair.replyRate * 100).toFixed(1)}%)`);
-                        }
+                        console.log(`   ✅ Job queued successfully`);
                     } catch (error) {
-                        console.error('❌ Error executing scheduled job:', error);
+                        console.error('❌ Error queuing job:', error);
                     }
                 }, delay);
 
                 this.scheduledJobs.set(timeString, timeoutId);
                 totalScheduled += pairs.length;
-            } else {
-                console.log(`⚠️ Skipping past time slot: ${scheduledTime.toLocaleTimeString()}`);
             }
         }
 
-        console.log(`✅ Successfully scheduled ${totalScheduled} emails`);
+        console.log(`\n✅ Successfully scheduled ${totalScheduled} emails across ${warmupPlan.timeSlots.size} time slots`);
         this.isRunning = false;
     }
 
@@ -258,15 +362,6 @@ class IntelligentWarmupScheduler {
             return 'smtp';
         }
         return 'unknown';
-    }
-
-    shuffleArray(array) {
-        const shuffled = [...array];
-        for (let i = shuffled.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-        }
-        return shuffled;
     }
 
     clearScheduledJobs() {
@@ -286,7 +381,6 @@ class IntelligentWarmupScheduler {
 // Create singleton instance
 const schedulerInstance = new IntelligentWarmupScheduler();
 
-// Export functions
 module.exports = {
     scheduleIntelligentWarmup: () => schedulerInstance.scheduleIntelligentWarmup(),
     stopIntelligentScheduler: () => schedulerInstance.stopScheduler(),
