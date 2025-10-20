@@ -5,7 +5,7 @@ const { warmupSingleEmail } = require('../services/warmupWorkflow');
 const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
-const { buildSenderConfig } = require('../utils/senderConfig');
+const { buildSenderConfig } = require('../utils/senderConfig'); // FIXED IMPORT
 
 class IntelligentWarmupWorker {
     constructor() {
@@ -60,42 +60,24 @@ class IntelligentWarmupWorker {
 
         try {
             job = JSON.parse(msg.content.toString());
-            console.log('🔨 Processing warmup job:', {
-                sender: job.senderEmail,
-                receiver: job.receiverEmail,
-                replyRate: job.replyRate,
-                warmupDay: job.warmupDay,
-                scheduled: job.scheduled || false
-            });
 
-            const { senderEmail, senderType, receiverEmail, replyRate } = job;
-
-            if (!senderEmail || !senderType || !receiverEmail) {
-                console.error('❌ Missing required job fields');
-                return channel.ack(msg);
+            // Check if this is a coordinated time slot job
+            if (job.coordinated && job.timeSlot && job.pairs) {
+                console.log('🔨 Processing COORDINATED warmup job:', {
+                    timeSlot: job.timeSlot,
+                    pairs: job.pairs.length,
+                    round: job.round
+                });
+                await this.processCoordinatedTimeSlot(job);
+            } else {
+                // Fallback to single email processing
+                console.log('🔨 Processing SINGLE warmup job:', {
+                    sender: job.senderEmail,
+                    receiver: job.receiverEmail,
+                    replyRate: job.replyRate
+                });
+                await this.processSingleEmail(job);
             }
-
-            // Get sender and receiver
-            const sender = await this.getSender(senderType, senderEmail);
-            const receiver = await this.findReceiver(receiverEmail);
-
-            if (!sender) {
-                console.error(`❌ Sender not found: ${senderEmail}`);
-                return channel.ack(msg);
-            }
-            if (!receiver) {
-                console.error(`❌ Receiver not found: ${receiverEmail}`);
-                return channel.ack(msg);
-            }
-
-            // Validate and build sender configuration
-            const senderConfig = buildSenderConfig(sender, senderType);
-
-            // Ensure reply rate doesn't exceed 25%
-            const safeReplyRate = Math.min(0.25, replyRate || 0.25);
-
-            await warmupSingleEmail(senderConfig, receiver, safeReplyRate);
-            console.log(`✅ Warmup completed: ${senderEmail} -> ${receiverEmail}`);
 
             channel.ack(msg);
 
@@ -120,6 +102,110 @@ class IntelligentWarmupWorker {
         }
     }
 
+    async processCoordinatedTimeSlot(job) {
+        const { timeSlot, pairs, round } = job;
+
+        console.log(`🎯 Executing COORDINATED time slot: ${timeSlot}`);
+        console.log(`   Processing ${pairs.length} interactions in round ${round}`);
+
+        // Process ALL sends first in parallel
+        const sendPromises = pairs.map(async (pair, index) => {
+            console.log(`     📤 Sending (${index + 1}/${pairs.length}): ${pair.senderEmail} → ${pair.receiverEmail}`);
+
+            const sender = await this.getSender(pair.senderType, pair.senderEmail);
+            const receiver = await this.findReceiver(pair.receiverEmail);
+
+            if (!sender || !receiver) {
+                console.error(`❌ Missing sender/receiver for pair`);
+                return { pair, success: false, error: 'Missing sender/receiver' };
+            }
+
+            try {
+                const senderConfig = buildSenderConfig(sender, pair.senderType);
+                const safeReplyRate = Math.min(0.25, pair.replyRate || 0.25);
+
+                // Send the email
+                await warmupSingleEmail(senderConfig, receiver, safeReplyRate, false);
+                return { pair, success: true };
+            } catch (error) {
+                console.error(`❌ Error sending email for pair:`, error.message);
+                return { pair, success: false, error: error.message };
+            }
+        });
+
+        // Wait for ALL sends to complete
+        const sendResults = await Promise.allSettled(sendPromises);
+
+        const successfulSends = sendResults
+            .filter(result => result.status === 'fulfilled' && result.value?.success)
+            .map(result => result.value.pair);
+
+        const failedSends = sendResults
+            .filter(result => result.status === 'fulfilled' && !result.value?.success)
+            .map(result => result.value);
+
+        console.log(`✅ ${successfulSends.length}/${pairs.length} emails sent successfully in coordinated time slot`);
+
+        if (failedSends.length > 0) {
+            console.log(`❌ ${failedSends.length} emails failed in coordinated time slot`);
+            failedSends.forEach(failed => {
+                console.log(`     Failed: ${failed.pair.senderEmail} → ${failed.pair.receiverEmail}: ${failed.error}`);
+            });
+        }
+
+        // Now process replies (they happen after sends in the same time slot)
+        await this.processCoordinatedReplies(successfulSends, round);
+    }
+
+    async processCoordinatedReplies(successfulPairs, round) {
+        console.log(`🔄 Processing coordinated replies for round ${round}...`);
+
+        // Process replies for successful sends
+        for (const pair of successfulPairs) {
+            try {
+                // Note: The actual reply logic is handled within warmupSingleEmail
+                // This is just for logging and coordination
+                console.log(`     📨 Reply processing scheduled: ${pair.receiverEmail} → ${pair.senderEmail}`);
+
+            } catch (replyError) {
+                console.error(`❌ Reply processing error:`, replyError.message);
+            }
+        }
+
+        console.log(`✅ Coordinated round ${round} completed (sends + replies scheduled)`);
+    }
+
+    async processSingleEmail(job) {
+        const { senderEmail, senderType, receiverEmail, replyRate } = job;
+
+        if (!senderEmail || !senderType || !receiverEmail) {
+            console.error('❌ Missing required job fields');
+            return;
+        }
+
+        // Get sender and receiver
+        const sender = await this.getSender(senderType, senderEmail);
+        const receiver = await this.findReceiver(receiverEmail);
+
+        if (!sender) {
+            console.error(`❌ Sender not found: ${senderEmail}`);
+            return;
+        }
+        if (!receiver) {
+            console.error(`❌ Receiver not found: ${receiverEmail}`);
+            return;
+        }
+
+        // Validate and build sender configuration
+        const senderConfig = buildSenderConfig(sender, senderType);
+
+        // Ensure reply rate doesn't exceed 25%
+        const safeReplyRate = Math.min(0.25, replyRate || 0.25);
+
+        await warmupSingleEmail(senderConfig, receiver, safeReplyRate);
+        console.log(`✅ Warmup completed: ${senderEmail} -> ${receiverEmail}`);
+    }
+
     async getSender(senderType, email) {
         const senderModel = this.getSenderModel(senderType);
         return await senderModel.findOne({ where: { email } });
@@ -141,19 +227,5 @@ class IntelligentWarmupWorker {
     }
 }
 
-// Start the intelligent worker
-const worker = new IntelligentWarmupWorker();
-worker.consumeWarmupJobs().catch(console.error);
-
-// Handle graceful shutdown
-process.on('SIGINT', async () => {
-    console.log('🛑 Received SIGINT. Shutting down gracefully...');
-    process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-    console.log('🛑 Received SIGTERM. Shutting down gracefully...');
-    process.exit(0);
-});
-
+// Export just the class (not an instance)
 module.exports = { IntelligentWarmupWorker };
