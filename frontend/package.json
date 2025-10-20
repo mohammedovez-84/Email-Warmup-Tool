@@ -20,6 +20,8 @@
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "framer-motion": "^12.23.9",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^3.0.3",
     "jwt-decode": "^4.0.0",
     "lucide-react": "^0.542.0",
     "qrcode": "^1.5.4",

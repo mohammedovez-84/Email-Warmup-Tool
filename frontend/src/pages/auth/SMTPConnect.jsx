@@ -658,21 +658,7 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
                                 <FiMail className="mr-2" />
                                 Test {activeTab.toUpperCase()}
                             </motion.button>
-                            <motion.button
-                                type="button"
-                                className="bg-white border border-teal-200 text-teal-700 py-3 rounded-lg font-semibold text-sm hover:bg-teal-50 hover:border-teal-300 transition-all font-['Poppins'] flex items-center justify-center"
-                                onClick={activeTab === 'smtp' ? handleTestSmtp : handleTestImap}
-                                whileHover={{ scale: 1.02, y: -1 }}
-                                whileTap={{ scale: 0.98 }}
-                                disabled={
-                                    activeTab === 'smtp'
-                                        ? !formData.smtpHost || !formData.email || !formData.password
-                                        : !formData.imapHost || !formData.email
-                                }
-                            >
-                                <FiServer className="mr-2" />
-                                Test Connection
-                            </motion.button>
+                            {/*  */}
                         </motion.div>
                     </div>
                 </div>
