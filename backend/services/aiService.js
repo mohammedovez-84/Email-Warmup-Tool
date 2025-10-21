@@ -179,7 +179,7 @@ Return JSON with "subject" and "content" fields. The subject should be compellin
 
     try {
         const completion = await openai.chat.completions.create({
-            model: "gpt-5", // Using GPT-4 for better quality
+            model: "gpt-4o-mini", // Using GPT-4 for better quality
             messages: [
                 {
                     role: "system",
@@ -310,7 +310,7 @@ Return JSON: {"reply_content": "your professional reply here"}
 
     try {
         const completion = await openai.chat.completions.create({
-            model: "gpt-5",
+            model: "gpt-4o-mini",
             messages: [
                 {
                     role: "system",

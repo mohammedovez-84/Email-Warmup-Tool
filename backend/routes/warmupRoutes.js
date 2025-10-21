@@ -6,6 +6,9 @@ const warmupController = require('../controllers/warmupController');
 
 // router.post('/start', warmupController.startWarmupAll);
 
+
+router.patch("/disconnect/:email", warmupController.disconnectMail)
+
 router.put('/emails/:emailAddress/status', warmupController.toggleWarmupStatus);
 
 module.exports = router;
