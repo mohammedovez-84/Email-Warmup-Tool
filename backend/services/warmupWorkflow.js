@@ -2,14 +2,18 @@ const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const { sendEmail } = require('./emailSender');
 const { checkEmailStatus, moveEmailToInbox, getImapConfig } = require('./imapHelper');
 const { maybeReply } = require('./replyHelper');
-const { generateEmail, generateReplyWithRetry } = require("./aiService");
+
+// ✅ CORRECTED: Import from the actual service files
+const { generateEmail: gpt2GenerateEmail, generateReplyWithRetry: gpt2GenerateReplyWithRetry } = require("./aiService");
+const { generateEmail: templateGenerateEmail, generateReplyWithRetry: templateGenerateReplyWithRetry } = require("./email-template.service");
+
 const EmailMetric = require('../models/EmailMetric');
 const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
 const { buildSenderConfig, getSenderType } = require('../utils/senderConfig');
 
-// Rate limiting configuration
+// Rate limiting configuration (keep your existing)
 const RATE_LIMIT_CONFIG = {
     minDelayBetweenEmails: 15 * 60 * 1000,
     maxEmailsPerHour: 8,
@@ -18,7 +22,7 @@ const RATE_LIMIT_CONFIG = {
     dailyResetTime: '00:00'
 };
 
-// Track rate limiting state
+// Track rate limiting state (keep your existing)
 const rateLimitState = {
     hourlyCounts: new Map(),
     dailyCounts: new Map(),
@@ -26,7 +30,6 @@ const rateLimitState = {
     lastDailyReset: new Date().setHours(0, 0, 0, 0),
     concurrentJobs: 0
 };
-
 // Reset hourly counts every hour
 setInterval(() => {
     rateLimitState.hourlyCounts.clear();
@@ -45,76 +48,88 @@ function extractNameFromEmail(email) {
     return localPart.split(/[._-]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
-function checkRateLimit(senderEmail) {
-    const hourlyCount = rateLimitState.hourlyCounts.get(senderEmail) || 0;
-    const dailyCount = rateLimitState.dailyCounts.get(senderEmail) || 0;
 
-    if (hourlyCount >= RATE_LIMIT_CONFIG.maxEmailsPerHour) {
-        throw new Error(`Hourly rate limit exceeded for ${senderEmail}: ${hourlyCount}/${RATE_LIMIT_CONFIG.maxEmailsPerHour}`);
-    }
-    if (dailyCount >= RATE_LIMIT_CONFIG.maxEmailsPerDay) {
-        throw new Error(`Daily rate limit exceeded for ${senderEmail}: ${dailyCount}/${RATE_LIMIT_CONFIG.maxEmailsPerDay}`);
-    }
-    if (rateLimitState.concurrentJobs >= RATE_LIMIT_CONFIG.maxConcurrentJobs) {
-        throw new Error(`Too many concurrent jobs: ${rateLimitState.concurrentJobs}/${RATE_LIMIT_CONFIG.maxConcurrentJobs}`);
+function checkRateLimit(senderEmail, isCoordinatedJob = false) {
+    // Skip concurrent job check for coordinated jobs (they're managed by the scheduler)
+    if (!isCoordinatedJob) {
+        const hourlyCount = rateLimitState.hourlyCounts.get(senderEmail) || 0;
+        const dailyCount = rateLimitState.dailyCounts.get(senderEmail) || 0;
+
+        if (hourlyCount >= RATE_LIMIT_CONFIG.maxEmailsPerHour) {
+            throw new Error(`Hourly rate limit exceeded for ${senderEmail}: ${hourlyCount}/${RATE_LIMIT_CONFIG.maxEmailsPerHour}`);
+        }
+        if (dailyCount >= RATE_LIMIT_CONFIG.maxEmailsPerDay) {
+            throw new Error(`Daily rate limit exceeded for ${senderEmail}: ${dailyCount}/${RATE_LIMIT_CONFIG.maxEmailsPerDay}`);
+        }
+        // if (rateLimitState.concurrentJobs >= RATE_LIMIT_CONFIG.maxConcurrentJobs) {
+        //     throw new Error(`Too many concurrent jobs: ${rateLimitState.concurrentJobs}/${RATE_LIMIT_CONFIG.maxConcurrentJobs}`);
+        // }
     }
     return true;
 }
 
-function updateRateLimit(senderEmail) {
-    const hourlyCount = rateLimitState.hourlyCounts.get(senderEmail) || 0;
-    const dailyCount = rateLimitState.dailyCounts.get(senderEmail) || 0;
-    rateLimitState.hourlyCounts.set(senderEmail, hourlyCount + 1);
-    rateLimitState.dailyCounts.set(senderEmail, dailyCount + 1);
+function updateRateLimit(senderEmail, isCoordinatedJob = false) {
+    if (!isCoordinatedJob) {
+        const hourlyCount = rateLimitState.hourlyCounts.get(senderEmail) || 0;
+        const dailyCount = rateLimitState.dailyCounts.get(senderEmail) || 0;
+        rateLimitState.hourlyCounts.set(senderEmail, hourlyCount + 1);
+        rateLimitState.dailyCounts.set(senderEmail, dailyCount + 1);
+    }
+}
+
+async function computeReplyRate(account) {
+    // Use ACTUAL database fields with safe defaults
+    const warmupDayCount = account.warmupDayCount || 0;
+    const configuredReplyRate = account.replyRate || 0.25;
+
+    console.log(`📨 Reply rate calculation for ${account.email}:`);
+    console.log(`   warmupDayCount: ${warmupDayCount}`);
+    console.log(`   configuredReplyRate: ${configuredReplyRate}`);
+
+    // Progressive warmup: start at 15%, increase by 2% daily, max 25%
+    const baseRate = 0.15;
+    const dailyIncrease = 0.02;
+    let calculatedRate = baseRate + (dailyIncrease * warmupDayCount);
+
+    // Cap at configured rate and absolute maximum of 25%
+    const maxAllowedRate = Math.min(configuredReplyRate, 0.25);
+    calculatedRate = Math.min(calculatedRate, maxAllowedRate);
+
+    // Ensure minimum of 15%
+    calculatedRate = Math.max(calculatedRate, 0.15);
+
+    const finalRate = Math.round(calculatedRate * 100) / 100;
+
+    console.log(`   Calculated: ${(finalRate * 100).toFixed(1)}% reply rate`);
+    return finalRate;
 }
 
 // PROPER DATABASE FIELD USAGE
 async function computeEmailsToSend(account) {
-    // Use ACTUAL database fields - no hardcoded defaults
-    const warmupDayCount = account.warmupDayCount;
-    const startEmailsPerDay = account.startEmailsPerDay;
-    const increaseEmailsPerDay = account.increaseEmailsPerDay;
-    const maxEmailsPerDay = account.maxEmailsPerDay;
+    // Use ACTUAL database fields with safe defaults
+    const warmupDayCount = account.warmupDayCount || 0;
+    const startEmailsPerDay = account.startEmailsPerDay || 3;
+    const increaseEmailsPerDay = account.increaseEmailsPerDay || 3;
+    const maxEmailsPerDay = account.maxEmailsPerDay || 25;
 
-    console.log(`📊 Database fields for ${account.email}:`);
+    console.log(`📊 Send limit calculation for ${account.email}:`);
     console.log(`   warmupDayCount: ${warmupDayCount}`);
     console.log(`   startEmailsPerDay: ${startEmailsPerDay}`);
     console.log(`   increaseEmailsPerDay: ${increaseEmailsPerDay}`);
     console.log(`   maxEmailsPerDay: ${maxEmailsPerDay}`);
 
-    // Progressive warmup using ACTUAL database fields
+    // Progressive warmup formula
     let emailsToSend = startEmailsPerDay + (increaseEmailsPerDay * warmupDayCount);
 
-    // Use ACTUAL maxEmailsPerDay from database
+    // Cap at account maximum and system maximum
     emailsToSend = Math.min(emailsToSend, maxEmailsPerDay);
-    emailsToSend = Math.max(emailsToSend, 1);
     emailsToSend = Math.min(emailsToSend, RATE_LIMIT_CONFIG.maxEmailsPerDay);
+
+    // Ensure minimum of 1 email
+    emailsToSend = Math.max(emailsToSend, 1);
 
     console.log(`   Calculated: ${emailsToSend} emails/day`);
     return emailsToSend;
-}
-
-// PROPER DATABASE FIELD USAGE
-async function computeReplyRate(account) {
-    // Use ACTUAL database fields
-    const warmupDayCount = account.warmupDayCount;
-    const configuredReplyRate = account.replyRate;
-
-    console.log(`📨 Database fields for ${account.email}:`);
-    console.log(`   warmupDayCount: ${warmupDayCount}`);
-    console.log(`   replyRate: ${configuredReplyRate}`);
-
-    const baseRate = 0.20;
-    const dailyIncrease = 0.02;
-    let replyRate = baseRate + (dailyIncrease * warmupDayCount);
-
-    // Use ACTUAL replyRate from database
-    const maxReplyRate = Math.min(configuredReplyRate, 0.25);
-    replyRate = Math.min(replyRate, maxReplyRate);
-    replyRate = Math.max(replyRate, 0.15);
-
-    console.log(`   Calculated: ${(replyRate * 100).toFixed(1)}% reply rate`);
-    return Math.round(replyRate * 100) / 100;
 }
 
 // Get account from database
@@ -154,32 +169,23 @@ function getReceiverTypeFromModel(receiver) {
     return getSenderType(receiver);
 }
 
-// Warmup email workflow
-async function warmupSingleEmail(sender, receiver, replyRate = 0.25, isScheduledReply = false) {
+async function warmupSingleEmail(sender, receiver, replyRate = 0.25, isScheduledReply = false, isCoordinatedJob = false) {
     let emailMetric = null;
     let messageId = null;
 
     try {
-        // ✅ ADDED: Debug logging to see what's received
-        console.log(`🔍 warmupSingleEmail received config:`, {
-            senderEmail: sender.email,
-            senderType: sender.type,
-            hasSmtpHost: !!sender.smtpHost,
-            hasSmtpPort: !!sender.smtpPort,
-            hasSmtpUser: !!sender.smtpUser,
-            hasSmtpPass: !!sender.smtpPass,
-            receiverEmail: receiver.email
-        });
-
-        // ✅ FIX: Use the sender config directly (it's already built)
-        const freshSender = sender; // Use the provided config directly
+        const freshSender = await buildSenderConfig(sender);
         const freshReceiver = await getFreshAccountData(receiver);
 
-        if (!isScheduledReply) {
-            checkRateLimit(freshSender.email);
-        }
+        // // ✅ FIX: Skip rate limit check for coordinated jobs (they're managed by scheduler)
+        // if (!isScheduledReply && !isCoordinatedJob) {
+        //     checkRateLimit(freshSender.email);
+        // }
 
-        rateLimitState.concurrentJobs++;
+        // ✅ FIX: Only track concurrent jobs for non-coordinated emails
+        if (!isCoordinatedJob) {
+            rateLimitState.concurrentJobs++;
+        }
 
         const senderName = extractNameFromEmail(freshSender.email);
         const receiverName = extractNameFromEmail(freshReceiver.email);
@@ -195,7 +201,7 @@ async function warmupSingleEmail(sender, receiver, replyRate = 0.25, isScheduled
 
         const { subject, content: html } = aiEmail;
 
-        // ✅ Use the sender config directly (it already has all SMTP settings)
+        // ✅ Now using properly built sender config
         const sendResult = await sendEmail(freshSender, {
             to: freshReceiver.email,
             subject: subject.trim(),
@@ -208,7 +214,8 @@ async function warmupSingleEmail(sender, receiver, replyRate = 0.25, isScheduled
 
         messageId = sendResult.messageId;
 
-        if (!isScheduledReply) {
+        // ✅ FIX: Only update rate limits for non-coordinated jobs
+        if (!isScheduledReply && !isCoordinatedJob) {
             updateRateLimit(freshSender.email);
         }
 
@@ -225,7 +232,7 @@ async function warmupSingleEmail(sender, receiver, replyRate = 0.25, isScheduled
             replied: false,
             warmupDay: warmupDay,
             replyRate: replyRate,
-            emailType: isScheduledReply ? 'scheduled_reply' : 'warmup',
+            emailType: isScheduledReply ? 'scheduled_reply' : (isCoordinatedJob ? 'coordinated' : 'warmup'),
             industry: industry
         });
 
@@ -311,7 +318,10 @@ async function warmupSingleEmail(sender, receiver, replyRate = 0.25, isScheduled
         }
         throw error;
     } finally {
-        rateLimitState.concurrentJobs = Math.max(0, rateLimitState.concurrentJobs - 1);
+        // ✅ FIX: Only decrement for non-coordinated jobs
+        if (!isCoordinatedJob) {
+            rateLimitState.concurrentJobs = Math.max(0, rateLimitState.concurrentJobs - 1);
+        }
     }
 }
 
@@ -399,6 +409,30 @@ function getRateLimitStats() {
         lastDailyReset: rateLimitState.lastDailyReset,
         config: RATE_LIMIT_CONFIG
     };
+}
+
+async function generateEmail(senderName, receiverName, industry = "general") {
+    try {
+        // Try GPT-2 first for more creative emails
+        console.log('🤖 Attempting GPT-2 email generation...');
+        return await gpt2GenerateEmail(senderName, receiverName, industry);
+    } catch (error) {
+        console.log('🔄 GPT-2 failed, using template service...');
+        // Fallback to reliable templates
+        return await templateGenerateEmail(senderName, receiverName, industry);
+    }
+}
+
+async function generateReplyWithRetry(originalEmail, maxRetries = 2) {
+    try {
+        // Try GPT-2 first
+        console.log('🤖 Attempting GPT-2 reply generation...');
+        return await gpt2GenerateReplyWithRetry(originalEmail, maxRetries);
+    } catch (error) {
+        console.log('🔄 GPT-2 reply failed, using template service...');
+        // Fallback to reliable templates
+        return await templateGenerateReplyWithRetry(originalEmail, maxRetries);
+    }
 }
 
 module.exports = {
