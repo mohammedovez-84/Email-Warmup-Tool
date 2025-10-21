@@ -46,7 +46,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [emailToDelete, setEmailToDelete] = useState(null);
 
-    // Format email account data with auto-activation
+    // Format email account data - FIXED: Default to 'paused' instead of 'active'
     const formatEmailAccount = useCallback((account) => ({
         ...account,
         id: account._id || account.email,
@@ -55,8 +55,8 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         status: account.status || 'unknown',
         deliverability: account.deliverability || 0,
         provider: account.provider || 'unknown',
-        // Auto-activate warmup for newly added emails
-        warmupStatus: account.warmupStatus || 'active',
+        // FIXED: Use actual status from database, default to 'paused' for safety
+        warmupStatus: account.warmupStatus || 'paused',
         warmupSettings: account.warmupSettings || {
             startEmailsPerDay: 3,
             increaseByPerDay: 3,
@@ -74,37 +74,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         toast.info('Session expired. Please login again.');
     }, [navigate]);
 
-    // Auto-activate warmup for newly added emails
-    const activateWarmupForNewEmail = useCallback(async (emailAddress) => {
-        try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                handleUnauthorized();
-                return;
-            }
-
-            await axios.put(
-                `${API_BASE_URL}/api/warmup/emails/${encodeURIComponent(emailAddress)}/status`,
-                { status: 'active' },
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                    timeout: 5000
-                }
-            );
-
-            setWarmupEmails(prev =>
-                prev.map(email =>
-                    email.address === emailAddress ? { ...email, warmupStatus: 'active' } : email
-                )
-            );
-
-            console.log(`Auto-activated warmup for ${emailAddress}`);
-        } catch (error) {
-            console.error('Error auto-activating warmup:', error);
-        }
-    }, [handleUnauthorized]);
-
-    // Fetch emails with auto-activation for new ones
+    // Fetch emails - FIXED: Removed auto-activation logic
     const fetchWarmupEmails = useCallback(async () => {
         try {
             setLoading(true);
@@ -142,12 +112,8 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             setWarmupEmails(allEmails);
             setEmailStats(stats);
 
-            // Auto-activate warmup for any emails that don't have a status set
-            allEmails.forEach(email => {
-                if (!email.warmupStatus || email.warmupStatus === 'paused') {
-                    activateWarmupForNewEmail(email.address);
-                }
-            });
+            console.log(`📊 Loaded ${allEmails.length} accounts with their actual warmup status`);
+            // FIXED: Removed auto-activation loop - accounts keep their database status
 
         } catch (error) {
             console.error('Error fetching emails:', error);
@@ -161,12 +127,12 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         } finally {
             setLoading(false);
         }
-    }, [formatEmailAccount, handleUnauthorized, activateWarmupForNewEmail]);
+    }, [formatEmailAccount, handleUnauthorized]);
 
-    // Enhanced success handler for provider connections
+    // Enhanced success handler for provider connections - FIXED: Removed auto-activation from message
     const handleProviderSuccess = useCallback(() => {
         fetchWarmupEmails();
-        toast.success('Email account connected successfully! Warmup has been automatically activated.');
+        toast.success('Email account connected successfully! You can now activate warmup.');
     }, [fetchWarmupEmails]);
 
     // Show delete confirmation modal
@@ -406,7 +372,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             : words[0].charAt(0).toUpperCase();
     }, []);
 
-    // Provider configuration with enhanced data and auto-activation
+    // Provider configuration - FIXED: Removed "Auto-warmup activation" from features
     const providers = useMemo(() => [
         {
             id: 'google',
@@ -417,7 +383,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             iconColor: "text-red-600",
             bgColor: "bg-red-50",
             borderColor: "border-red-200",
-            features: ["Gmail accounts", "Google Workspace", "OAuth2 secure login", "Auto-warmup activation"],
+            features: ["Gmail accounts", "Google Workspace", "OAuth2 secure login"],
             component: <GoogleConnect onSuccess={handleProviderSuccess} onClose={() => setSelectedProvider(null)} />
         },
         {
@@ -429,7 +395,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             iconColor: "text-blue-600",
             bgColor: "bg-blue-50",
             borderColor: "border-blue-200",
-            features: ["Office 365", "Outlook.com", "Exchange servers", "Auto-warmup activation"],
+            features: ["Office 365", "Outlook.com", "Exchange servers"],
             component: <MicrosoftConnect onSuccess={handleProviderSuccess} onClose={() => setSelectedProvider(null)} />
         },
         {
@@ -441,7 +407,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             iconColor: "text-green-600",
             bgColor: "bg-green-50",
             borderColor: "border-green-200",
-            features: ["Custom SMTP servers", "IMAP support", "All email providers", "Auto-warmup activation"],
+            features: ["Custom SMTP servers", "IMAP support", "All email providers"],
             component: <SMTPConnect onSuccess={handleProviderSuccess} onClose={() => setSelectedProvider(null)} />
         }
     ], [handleProviderSuccess]);

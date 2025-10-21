@@ -7,7 +7,7 @@ const EmailMetric = require('../models/EmailMetric');
 const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
-const { buildSenderConfig, getSenderType } = require('../utils/senderConfig'); // FIXED IMPORT
+const { buildSenderConfig, getSenderType } = require('../utils/senderConfig');
 
 // Rate limiting configuration
 const RATE_LIMIT_CONFIG = {
@@ -147,11 +147,11 @@ async function getFreshAccountData(account) {
 }
 
 function getSenderTypeFromModel(sender) {
-    return getSenderType(sender); // Use the imported function
+    return getSenderType(sender);
 }
 
 function getReceiverTypeFromModel(receiver) {
-    return getSenderType(receiver); // Use the same function for receiver
+    return getSenderType(receiver);
 }
 
 // Warmup email workflow
@@ -160,7 +160,19 @@ async function warmupSingleEmail(sender, receiver, replyRate = 0.25, isScheduled
     let messageId = null;
 
     try {
-        const freshSender = await getFreshAccountData(sender);
+        // ✅ ADDED: Debug logging to see what's received
+        console.log(`🔍 warmupSingleEmail received config:`, {
+            senderEmail: sender.email,
+            senderType: sender.type,
+            hasSmtpHost: !!sender.smtpHost,
+            hasSmtpPort: !!sender.smtpPort,
+            hasSmtpUser: !!sender.smtpUser,
+            hasSmtpPass: !!sender.smtpPass,
+            receiverEmail: receiver.email
+        });
+
+        // ✅ FIX: Use the sender config directly (it's already built)
+        const freshSender = sender; // Use the provided config directly
         const freshReceiver = await getFreshAccountData(receiver);
 
         if (!isScheduledReply) {
@@ -183,6 +195,7 @@ async function warmupSingleEmail(sender, receiver, replyRate = 0.25, isScheduled
 
         const { subject, content: html } = aiEmail;
 
+        // ✅ Use the sender config directly (it already has all SMTP settings)
         const sendResult = await sendEmail(freshSender, {
             to: freshReceiver.email,
             subject: subject.trim(),
@@ -306,7 +319,7 @@ async function sendScheduledReply(sender, receiver, originalSubject, replyRate =
     console.log(`📅 Executing scheduled reply: ${sender.email} -> ${receiver.email}`);
 
     try {
-        const freshSender = await getFreshAccountData(sender);
+        const freshSender = sender;
         const freshReceiver = await getFreshAccountData(receiver);
 
         const aiReply = await generateReplyWithFallback({
