@@ -111,10 +111,9 @@ class IntelligentWarmupScheduler {
     }
 
     async createBalancedPairs(accounts, sendLimits, sentCounts, receivedCounts) {
-        console.log(`\n🔄 Creating balanced email pairs...`);
+        console.log(`\n🔄 Creating OPTIMIZED round-robin pairs...`);
 
         const allPairs = [];
-        const totalRounds = Math.max(...Array.from(sendLimits.values()));
 
         // Reset counts for fresh calculation
         for (const account of accounts) {
@@ -122,54 +121,112 @@ class IntelligentWarmupScheduler {
             receivedCounts.set(account.email, 0);
         }
 
-        // Create rounds until all send limits are met
-        for (let round = 1; round <= totalRounds; round++) {
+        // Create complete round-robin: each account sends to every other account
+        for (const sender of accounts) {
+            const senderEmail = sender.email;
+            const senderLimit = sendLimits.get(senderEmail);
+
+            console.log(`\n   🔄 Processing sender: ${senderEmail} (limit: ${senderLimit})`);
+
+            // Find all other accounts to send to
+            const otherAccounts = accounts.filter(acc => acc.email !== senderEmail);
+
+            for (const receiver of otherAccounts) {
+                // Check if sender has reached their daily limit
+                if (sentCounts.get(senderEmail) >= senderLimit) {
+                    console.log(`     ⚠️  ${senderEmail} reached daily limit, skipping remaining sends`);
+                    break;
+                }
+
+                const replyRate = await computeReplyRate(sender);
+
+                allPairs.push({
+                    sender,
+                    receiver,
+                    senderEmail: senderEmail,
+                    receiverEmail: receiver.email,
+                    replyRate: replyRate,
+                    warmupDay: sender.warmupDayCount,
+                    senderType: this.getSenderType(sender),
+                    round: 1
+                });
+
+                // Update counts
+                sentCounts.set(senderEmail, sentCounts.get(senderEmail) + 1);
+                receivedCounts.set(receiver.email, receivedCounts.get(receiver.email) + 1);
+
+                console.log(`     📤 ${senderEmail} → ${receiver.email} (${sentCounts.get(senderEmail)}/${senderLimit})`);
+            }
+        }
+
+        // If we still have capacity, create additional exchanges
+        let additionalRound = 2;
+        let hasCapacity = true;
+
+        while (hasCapacity && additionalRound <= 3) { // Max 3 rounds
+            hasCapacity = false;
             const roundPairs = [];
 
-            // Try to create a balanced exchange in each round
             for (const sender of accounts) {
                 const senderEmail = sender.email;
-                const senderSent = sentCounts.get(senderEmail);
+                const currentSent = sentCounts.get(senderEmail);
                 const senderLimit = sendLimits.get(senderEmail);
 
-                // If sender has reached their limit, skip
-                if (senderSent >= senderLimit) continue;
+                if (currentSent < senderLimit) {
+                    hasCapacity = true;
 
-                // Find the best receiver for this sender
-                const receiver = this.findOptimalReceiver(sender, accounts, receivedCounts, sentCounts);
+                    // Find a receiver who has received fewer emails
+                    const potentialReceivers = accounts
+                        .filter(acc => acc.email !== senderEmail)
+                        .sort((a, b) => receivedCounts.get(a.email) - receivedCounts.get(b.email));
 
-                if (receiver && receiver.email !== senderEmail) {
-                    const replyRate = await computeReplyRate(sender);
+                    if (potentialReceivers.length > 0) {
+                        const receiver = potentialReceivers[0];
+                        const replyRate = await computeReplyRate(sender);
 
-                    roundPairs.push({
-                        sender,
-                        receiver,
-                        senderEmail: senderEmail,
-                        receiverEmail: receiver.email,
-                        replyRate: replyRate,
-                        warmupDay: sender.warmupDayCount,
-                        senderType: this.getSenderType(sender),
-                        round: round // ✅ Ensure round is set
-                    });
+                        roundPairs.push({
+                            sender,
+                            receiver,
+                            senderEmail: senderEmail,
+                            receiverEmail: receiver.email,
+                            replyRate: replyRate,
+                            warmupDay: sender.warmupDayCount,
+                            senderType: this.getSenderType(sender),
+                            round: additionalRound
+                        });
 
-                    // Update counts
-                    sentCounts.set(senderEmail, senderSent + 1);
-                    receivedCounts.set(receiver.email, receivedCounts.get(receiver.email) + 1);
+                        sentCounts.set(senderEmail, currentSent + 1);
+                        receivedCounts.set(receiver.email, receivedCounts.get(receiver.email) + 1);
+
+                        console.log(`     📤 [Round ${additionalRound}] ${senderEmail} → ${receiver.email} (${currentSent + 1}/${senderLimit})`);
+                    }
                 }
             }
 
             if (roundPairs.length > 0) {
-                allPairs.push({
-                    roundNumber: round, // ✅ Include round number in the round object
-                    pairs: roundPairs,
-                    emailCount: roundPairs.length
-                });
-
-                console.log(`   Round ${round}: ${roundPairs.length} emails`);
+                allPairs.push(...roundPairs);
+                additionalRound++;
             }
         }
 
-        return allPairs;
+        console.log(`\n   ✅ Created ${allPairs.length} total pairs across ${additionalRound - 1} rounds`);
+
+        // Group by rounds for time slot distribution
+        const rounds = [];
+        const pairsPerRound = Math.max(1, Math.floor(allPairs.length / 3)); // Distribute across 3 rounds max
+
+        for (let i = 0; i < allPairs.length; i += pairsPerRound) {
+            const roundPairs = allPairs.slice(i, i + pairsPerRound);
+            if (roundPairs.length > 0) {
+                rounds.push({
+                    roundNumber: rounds.length + 1,
+                    pairs: roundPairs,
+                    emailCount: roundPairs.length
+                });
+            }
+        }
+
+        return rounds;
     }
 
     findOptimalReceiver(sender, accounts, receivedCounts, sentCounts) {
