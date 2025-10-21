@@ -81,8 +81,13 @@ const SmtpAccount = sequelize.define('smtpimap_accounts', {
     defaultValue: 'UTC'
   },
   preferredSendInterval: {
-    type: DataTypes.INTEGER, // minutes between emails
+    type: DataTypes.INTEGER,
     defaultValue: 120
+  },
+  is_connected: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: true,
   }
 }, {
   tableName: 'smtpimap_accounts',
