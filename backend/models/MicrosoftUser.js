@@ -91,7 +91,11 @@ const MicrosoftUser = sequelize.define('microsoft_users', {
         type: DataTypes.INTEGER, // minutes between emails
         defaultValue: 120
     }
-
+    , is_connected: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true, // default connected when added
+    }
 
 }, {
     tableName: 'microsoft_users',
