@@ -9,172 +9,201 @@ function getSenderType(sender) {
         access_token: !!sender.access_token
     });
 
-    // Check for Google user - prioritize explicit indicators
-    if (sender.roundRobinIndexGoogle !== undefined || sender.provider === 'google') {
+    // Check for explicit provider first
+    if (sender.provider === 'google' || sender.roundRobinIndexGoogle !== undefined) {
         console.log(`✅ Detected as Google account (explicit): ${sender.email}`);
         return 'google';
     }
-
-    // Check for Microsoft user - prioritize explicit indicators
-    if (sender.roundRobinIndexMicrosoft !== undefined || sender.provider === 'microsoft') {
+    if (sender.provider === 'microsoft' || sender.roundRobinIndexMicrosoft !== undefined) {
         console.log(`✅ Detected as Microsoft account (explicit): ${sender.email}`);
         return 'microsoft';
     }
-
-    // Check for SMTP account - prioritize explicit indicators
-    if (sender.roundRobinIndexCustom !== undefined) {
+    if (sender.provider === 'smtp' || sender.roundRobinIndexCustom !== undefined) {
         console.log(`✅ Detected as SMTP account (explicit): ${sender.email}`);
         return 'smtp';
     }
 
-    // Secondary checks for credentials
+    // Check for credentials
     if (sender.app_password) {
         console.log(`✅ Detected as Google account (app_password): ${sender.email}`);
         return 'google';
     }
-
     if (sender.access_token) {
         console.log(`✅ Detected as Microsoft account (access_token): ${sender.email}`);
         return 'microsoft';
     }
-
-    if (sender.smtp_host) {
+    if (sender.smtp_host || sender.smtp_pass) {
         console.log(`✅ Detected as SMTP account (smtp_host): ${sender.email}`);
         return 'smtp';
     }
 
-    // Fallback: Check email domain (only if no other indicators)
+    // Fallback to email domain detection
     if (sender.email) {
-        if (sender.email.endsWith('@gmail.com')) {
+        const domain = sender.email.toLowerCase();
+        if (domain.endsWith('@gmail.com') || domain.endsWith('@googlemail.com')) {
             console.log(`✅ Detected as Google account by domain: ${sender.email}`);
             return 'google';
         }
-
-        if (sender.email.endsWith('@outlook.com') || sender.email.endsWith('@hotmail.com') || sender.email.endsWith('@live.com')) {
+        if (domain.endsWith('@outlook.com') || domain.endsWith('@hotmail.com') || domain.endsWith('@live.com')) {
             console.log(`✅ Detected as Microsoft account by domain: ${sender.email}`);
             return 'microsoft';
         }
-
-        // For custom domains, check if we have any SMTP-like configuration
-        if (sender.smtp_user || sender.smtp_pass) {
-            console.log(`✅ Detected as SMTP account (credentials): ${sender.email}`);
-            return 'smtp';
-        }
+        // For custom domains, default to SMTP
+        console.log(`✅ Detected as SMTP account (custom domain): ${sender.email}`);
+        return 'smtp';
     }
 
     console.log(`❓ Unknown account type for: ${sender.email}, defaulting to SMTP`);
     return 'smtp';
 }
-function buildSenderConfig(sender, senderType) {
-    console.log(`🔧 DEBUG Building sender config for:`, {
-        email: sender.email,
-        senderType: senderType,
-        hasAppPassword: !!sender.app_password,
-        hasAccessToken: !!sender.access_token,
-        hasSmtpHost: !!sender.smtp_host,
-        hasSmtpPass: !!sender.smtp_pass,
-        hasSmtpUser: !!sender.smtp_user
-    });
 
-    // If senderType is not provided, detect it
+function buildSenderConfig(sender, senderType = null) {
+    if (!sender) {
+        throw new Error('❌ Sender object is required');
+    }
+
     if (!senderType) {
         senderType = getSenderType(sender);
     }
 
-    console.log(`🔧 Final sender type: ${senderType}`);
+    console.log(`🔧 Building sender config for: ${sender.email} (type: ${senderType})`);
+    console.log(`📦 Sender data:`, {
+        email: sender.email,
+        hasAppPassword: !!sender.app_password,
+        hasAccessToken: !!sender.access_token,
+        hasSmtpPass: !!sender.smtp_pass,
+        hasSmtpHost: !!sender.smtp_host,
+        provider: sender.provider
+    });
 
-    const base = {
+    const baseConfig = {
         userId: sender.userId || sender.user_id,
-        name: sender.name || sender.sender_name || sender.email,
+        name: sender.name || sender.sender_name || extractNameFromEmail(sender.email),
         email: sender.email,
         type: senderType,
-        startEmailsPerDay: sender.startEmailsPerDay,
-        increaseEmailsPerDay: sender.increaseEmailsPerDay,
-        maxEmailsPerDay: sender.maxEmailsPerDay,
-        replyRate: sender.replyRate,
-        warmupDayCount: sender.warmupDayCount,
-        industry: sender.industry
+        startEmailsPerDay: sender.startEmailsPerDay || 3,
+        increaseEmailsPerDay: sender.increaseEmailsPerDay || 3,
+        maxEmailsPerDay: sender.maxEmailsPerDay || 25,
+        replyRate: sender.replyRate || 0.25,
+        warmupDayCount: sender.warmupDayCount || 0,
+        industry: sender.industry || 'general',
+        provider: sender.provider || senderType
     };
 
-    if (senderType === 'google') {
-        if (!sender.app_password) {
-            throw new Error(`❌ App password required for Gmail account: ${sender.email}`);
-        }
+    switch (senderType) {
+        case 'google':
+            // ✅ FIX: Check for app_password in the actual sender object
+            if (!sender.app_password) {
+                console.error(`❌ Google account ${sender.email} is missing app_password. Available fields:`, Object.keys(sender));
+                throw new Error(`Google account ${sender.email} is missing app password. Please check your database.`);
+            }
 
-        const config = {
-            ...base,
-            smtpHost: 'smtp.gmail.com',
-            smtpPort: 587,
-            smtpUser: sender.email,
-            smtpPass: sender.app_password,
-            smtpEncryption: 'TLS',
-            imapHost: 'imap.gmail.com',
-            imapPort: 993,
-            imapUser: sender.email,
-            imapPass: sender.app_password,
-            imapEncryption: 'SSL',
-        };
+            return {
+                ...baseConfig,
+                smtpHost: 'smtp.gmail.com',
+                smtpPort: 587,
+                smtpUser: sender.email,
+                smtpPass: sender.app_password,
+                smtpEncryption: 'TLS',
+                imapHost: 'imap.gmail.com',
+                imapPort: 993,
+                imapUser: sender.email,
+                imapPass: sender.app_password,
+                imapEncryption: 'SSL',
+                app_password: sender.app_password // Include for reference
+            };
 
-        console.log(`✅ Google config built: ${config.smtpHost}:${config.smtpPort}`);
-        return config;
+        case 'microsoft':
+            // ✅ FIX: Check for both access_token and app_password
+            const microsoftAuth = sender.access_token || sender.app_password;
+            if (!microsoftAuth) {
+                console.error(`❌ Microsoft account ${sender.email} is missing both access_token and app_password. Available fields:`, Object.keys(sender));
+                throw new Error(`Microsoft account ${sender.email} is missing credentials. Please check your database.`);
+            }
+
+            return {
+                ...baseConfig,
+                smtpHost: 'smtp.office365.com',
+                smtpPort: 587,
+                smtpUser: sender.email,
+                smtpPass: microsoftAuth,
+                smtpEncryption: 'STARTTLS',
+                imapHost: 'outlook.office365.com',
+                imapPort: 993,
+                imapUser: sender.email,
+                imapPass: microsoftAuth,
+                imapEncryption: 'SSL',
+                access_token: sender.access_token, // Include for reference
+                app_password: sender.app_password // Include for reference
+            };
+
+        case 'smtp':
+            // ✅ FIX: Use correct field names from your database model
+            console.log(`🔧 SMTP account details for ${sender.email}:`, {
+                smtp_host: sender.smtp_host,
+                smtp_port: sender.smtp_port,
+                smtp_user: sender.smtp_user,
+                smtp_pass: sender.smtp_pass ? 'SET' : 'MISSING',
+                imap_host: sender.imap_host,
+                imap_port: sender.imap_port,
+                imap_user: sender.imap_user,
+                imap_pass: sender.imap_pass
+            });
+
+            // Use the exact field names from your database model
+            const smtpHost = sender.smtp_host;
+            const smtpUser = sender.smtp_user || sender.email;
+            const smtpPass = sender.smtp_pass;
+            const smtpPort = sender.smtp_port || 587;
+
+            const imapHost = sender.imap_host || smtpHost?.replace('smtp', 'imap');
+            const imapUser = sender.imap_user || smtpUser;
+            const imapPass = sender.imap_pass || smtpPass;
+            const imapPort = sender.imap_port || 993;
+
+            // Validate required fields
+            if (!smtpPass) {
+                console.error(`❌ SMTP account ${sender.email} is missing smtp_pass`);
+                throw new Error(`SMTP account ${sender.email} is missing SMTP password`);
+            }
+
+            if (!smtpHost) {
+                console.error(`❌ SMTP account ${sender.email} is missing smtp_host`);
+                throw new Error(`SMTP account ${sender.email} is missing SMTP host`);
+            }
+
+            console.log(`✅ SMTP config built: ${smtpHost}:${smtpPort}`);
+
+            return {
+                ...baseConfig,
+                smtpHost: smtpHost,
+                smtpPort: smtpPort,
+                smtpUser: smtpUser,
+                smtpPass: smtpPass,
+                smtpEncryption: sender.smtp_encryption || 'TLS',
+                imapHost: imapHost,
+                imapPort: imapPort,
+                imapUser: imapUser,
+                imapPass: imapPass,
+                imapEncryption: sender.imap_encryption || 'SSL'
+            };
+
+        default:
+            throw new Error(`❌ Unsupported sender type: ${senderType}`);
     }
-
-    if (senderType === 'microsoft') {
-        // Check for either access token or app password
-        const hasValidAuth = sender.access_token || sender.app_password;
-        if (!hasValidAuth) {
-            throw new Error(`❌ Access token or app password required for Microsoft account: ${sender.email}`);
-        }
-
-        const config = {
-            ...base,
-            smtpHost: 'smtp.office365.com',
-            smtpPort: 587,
-            smtpUser: sender.email,
-            smtpPass: sender.access_token || sender.app_password,
-            smtpEncryption: 'STARTTLS',
-            imapHost: 'outlook.office365.com',
-            imapPort: 993,
-            imapUser: sender.email,
-            imapPass: sender.access_token || sender.app_password,
-            imapEncryption: 'SSL',
-            refreshToken: sender.refresh_token,
-            accessToken: sender.access_token,
-            expiresAt: sender.expires_at,
-        };
-
-        console.log(`✅ Microsoft config built: ${config.smtpHost}:${config.smtpPort}`);
-        return config;
-    }
-
-    // SMTP account - with better validation
-    if (senderType === 'smtp') {
-        // Check for minimum required SMTP configuration
-        const hasSmtpConfig = sender.smtp_host && sender.smtp_pass;
-        const hasFallbackSmtpConfig = sender.smtp_user && sender.smtp_pass; // Some might only have user/pass
-
-        if (!hasSmtpConfig && !hasFallbackSmtpConfig) {
-            throw new Error(`❌ SMTP configuration required for account: ${sender.email}. Need at least smtp_host + smtp_pass OR smtp_user + smtp_pass`);
-        }
-
-        const config = {
-            ...base,
-            smtpHost: sender.smtp_host || 'smtp.' + sender.email.split('@')[1], // Try to guess host from domain
-            smtpPort: sender.smtp_port || 587,
-            smtpUser: sender.smtp_user || sender.email,
-            smtpPass: sender.smtp_pass,
-            smtpEncryption: sender.smtp_encryption || 'TLS',
-            imapHost: sender.imap_host || sender.smtp_host, // Fallback to SMTP host
-            imapPort: sender.imap_port || 993,
-            imapUser: sender.imap_user || sender.smtp_user || sender.email,
-            imapPass: sender.imap_pass || sender.smtp_pass,
-            imapEncryption: sender.imap_encryption || 'SSL',
-        };
-
-        console.log(`✅ SMTP config built: ${config.smtpHost}:${config.smtpPort}`);
-        return config;
-    }
-
-    throw new Error(`❌ Unsupported sender type: ${senderType} for account: ${sender.email}`);
 }
-module.exports = { buildSenderConfig, getSenderType };
+
+// ✅ ADD: Helper function to extract name from email
+function extractNameFromEmail(email) {
+    if (!email) return "User";
+    const localPart = email.split("@")[0];
+    return localPart.split(/[._-]/).map(word =>
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(" ");
+}
+
+module.exports = {
+    buildSenderConfig,
+    getSenderType,
+    extractNameFromEmail
+};
