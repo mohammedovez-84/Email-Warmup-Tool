@@ -19,7 +19,8 @@ exports.getDashboardData = async (req, res) => {
         });
 
         const microsoftUsers = await MicrosoftUser.findAll({
-            where: { user_id: userId }
+            where: { user_id: userId },
+            attributes: { exclude: ["access_token", "refresh_token"] }
         });
 
         console.log(`📥 Google Users Count for user ${userId}:`, googleUsers.length);
