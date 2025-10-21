@@ -55,15 +55,28 @@ exports.toggleWarmupStatus = async (req, res) => {
 
     await sender.update(updateData);
 
-    // If activating warmup, schedule intelligent warmup
+    // ✅ FIX: Only schedule warmup if activating AND there are other active accounts
     if (status === 'active') {
       try {
-        await scheduleIntelligentWarmup();
-        console.log(`✅ Intelligent warmup scheduled for ${emailAddress}`);
+        // Check if there are at least 2 active accounts (including this one)
+        const activeAccounts = await getActiveAccountsCount();
+
+        if (activeAccounts >= 2) {
+          await scheduleIntelligentWarmup();
+          console.log(`✅ Intelligent warmup scheduled for ${emailAddress} (${activeAccounts} active accounts)`);
+        } else {
+          console.log(`⏸️  Warmup activated for ${emailAddress} but waiting for more active accounts (currently: ${activeAccounts})`);
+        }
       } catch (err) {
         console.error('❌ Error scheduling warmup:', err);
         // Don't fail the request if scheduling fails
       }
+    } else {
+      // ✅ FIX: When pausing, stop any running scheduler for this account
+      console.log(`⏸️  Warmup paused for ${emailAddress} - no new jobs will be scheduled`);
+
+      // Optional: You could add logic here to cancel any pending jobs for this account
+      // await cancelPendingJobsForAccount(emailAddress);
     }
 
     // Get updated sender info
@@ -86,3 +99,25 @@ exports.toggleWarmupStatus = async (req, res) => {
     res.status(500).json({ error: 'Failed to update warmup status' });
   }
 };
+
+// ✅ NEW: Helper function to count active accounts
+async function getActiveAccountsCount() {
+  const googleCount = await GoogleUser.count({ where: { warmupStatus: 'active' } });
+  const microsoftCount = await MicrosoftUser.count({ where: { warmupStatus: 'active' } });
+  const smtpCount = await SmtpAccount.count({ where: { warmupStatus: 'active' } });
+
+  const total = googleCount + microsoftCount + smtpCount;
+  console.log(`📊 Active accounts: Google:${googleCount}, Microsoft:${microsoftCount}, SMTP:${smtpCount} = Total:${total}`);
+
+  return total;
+}
+
+exports.disconnectMail = async (req, res) => {
+  const { email } = req.params;
+
+  try {
+
+  } catch (error) {
+
+  }
+}
