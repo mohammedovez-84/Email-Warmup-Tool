@@ -5,7 +5,7 @@ const { warmupSingleEmail } = require('../services/warmupWorkflow');
 const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
-const { buildSenderConfig } = require('../utils/senderConfig'); // FIXED IMPORT
+const { buildSenderConfig } = require('../utils/senderConfig');
 
 class IntelligentWarmupWorker {
     constructor() {
@@ -106,11 +106,11 @@ class IntelligentWarmupWorker {
         const { timeSlot, pairs, round } = job;
 
         console.log(`🎯 Executing COORDINATED time slot: ${timeSlot}`);
-        console.log(`   Processing ${pairs.length} interactions in round ${round}`);
+        console.log(`   Processing ${pairs.length} interactions in round ${round || 'N/A'}`); // ✅ Handle undefined round
 
         // Process ALL sends first in parallel
         const sendPromises = pairs.map(async (pair, index) => {
-            console.log(`     📤 Sending (${index + 1}/${pairs.length}): ${pair.senderEmail} → ${pair.receiverEmail}`);
+            console.log(`     📤 Sending (${index + 1}/${pairs.length}): ${pair.senderEmail} → ${pair.receiverEmail} [Round ${pair.round || round || 'N/A'}]`);
 
             const sender = await this.getSender(pair.senderType, pair.senderEmail);
             const receiver = await this.findReceiver(pair.receiverEmail);
@@ -124,7 +124,6 @@ class IntelligentWarmupWorker {
                 const senderConfig = buildSenderConfig(sender, pair.senderType);
                 const safeReplyRate = Math.min(0.25, pair.replyRate || 0.25);
 
-                // Send the email
                 await warmupSingleEmail(senderConfig, receiver, safeReplyRate, false);
                 return { pair, success: true };
             } catch (error) {
@@ -148,31 +147,30 @@ class IntelligentWarmupWorker {
 
         if (failedSends.length > 0) {
             console.log(`❌ ${failedSends.length} emails failed in coordinated time slot`);
-            failedSends.forEach(failed => {
-                console.log(`     Failed: ${failed.pair.senderEmail} → ${failed.pair.receiverEmail}: ${failed.error}`);
-            });
         }
 
-        // Now process replies (they happen after sends in the same time slot)
-        await this.processCoordinatedReplies(successfulSends, round);
+        // Now process replies with proper round information
+        await this.processCoordinatedReplies(successfulSends, round || pairs[0]?.round || 1);
     }
 
     async processCoordinatedReplies(successfulPairs, round) {
-        console.log(`🔄 Processing coordinated replies for round ${round}...`);
+        const actualRound = round || successfulPairs[0]?.round || 1;
+
+        console.log(`🔄 Processing coordinated replies for round ${actualRound}...`);
 
         // Process replies for successful sends
         for (const pair of successfulPairs) {
             try {
-                // Note: The actual reply logic is handled within warmupSingleEmail
-                // This is just for logging and coordination
-                console.log(`     📨 Reply processing scheduled: ${pair.receiverEmail} → ${pair.senderEmail}`);
+                console.log(`     📨 Reply processing scheduled: ${pair.receiverEmail} → ${pair.senderEmail} [Round ${actualRound}]`);
 
+                // ✅ You might want to actually schedule replies here
+                // For now, it's just logging, but you could add actual reply scheduling logic
             } catch (replyError) {
                 console.error(`❌ Reply processing error:`, replyError.message);
             }
         }
 
-        console.log(`✅ Coordinated round ${round} completed (sends + replies scheduled)`);
+        console.log(`✅ Coordinated round ${actualRound} completed (sends + replies scheduled)`);
     }
 
     async processSingleEmail(job) {
@@ -199,22 +197,72 @@ class IntelligentWarmupWorker {
         // Validate and build sender configuration
         const senderConfig = buildSenderConfig(sender, senderType);
 
+        // ✅ Convert to plain object
+        const configData = {
+            smtpHost: senderConfig.smtpHost,
+            smtpPort: senderConfig.smtpPort,
+            smtpUser: senderConfig.smtpUser,
+            smtpPass: senderConfig.smtpPass,
+            smtpEncryption: senderConfig.smtpEncryption,
+            imapHost: senderConfig.imapHost,
+            imapPort: senderConfig.imapPort,
+            imapUser: senderConfig.imapUser,
+            imapPass: senderConfig.imapPass,
+            imapEncryption: senderConfig.imapEncryption,
+            email: senderConfig.email,
+            name: senderConfig.name,
+            type: senderConfig.type,
+            userId: senderConfig.userId,
+            startEmailsPerDay: senderConfig.startEmailsPerDay,
+            increaseEmailsPerDay: senderConfig.increaseEmailsPerDay,
+            maxEmailsPerDay: senderConfig.maxEmailsPerDay,
+            replyRate: senderConfig.replyRate,
+            warmupDayCount: senderConfig.warmupDayCount,
+            industry: senderConfig.industry
+        };
+
         // Ensure reply rate doesn't exceed 25%
         const safeReplyRate = Math.min(0.25, replyRate || 0.25);
 
-        await warmupSingleEmail(senderConfig, receiver, safeReplyRate);
+        await warmupSingleEmail(configData, receiver, safeReplyRate);
         console.log(`✅ Warmup completed: ${senderEmail} -> ${receiverEmail}`);
     }
 
     async getSender(senderType, email) {
-        const senderModel = this.getSenderModel(senderType);
-        return await senderModel.findOne({ where: { email } });
+        try {
+            const senderModel = this.getSenderModel(senderType);
+            const sender = await senderModel.findOne({ where: { email } });
+
+            if (!sender) {
+                console.error(`❌ Sender not found: ${email} for type: ${senderType}`);
+                return null;
+            }
+
+            return sender;
+        } catch (error) {
+            console.error(`❌ Error fetching sender ${email} for type ${senderType}:`, error.message);
+            return null;
+        }
     }
 
     async findReceiver(email) {
-        return (await GoogleUser.findOne({ where: { email } })) ||
-            (await MicrosoftUser.findOne({ where: { email } })) ||
-            (await SmtpAccount.findOne({ where: { email } }));
+        try {
+            // Try all models to find the receiver
+            const googleUser = await GoogleUser.findOne({ where: { email } });
+            if (googleUser) return googleUser;
+
+            const microsoftUser = await MicrosoftUser.findOne({ where: { email } });
+            if (microsoftUser) return microsoftUser;
+
+            const smtpAccount = await SmtpAccount.findOne({ where: { email } });
+            if (smtpAccount) return smtpAccount;
+
+            console.error(`❌ Receiver not found in any model: ${email}`);
+            return null;
+        } catch (error) {
+            console.error(`❌ Error finding receiver ${email}:`, error.message);
+            return null;
+        }
     }
 
     getSenderModel(senderType) {

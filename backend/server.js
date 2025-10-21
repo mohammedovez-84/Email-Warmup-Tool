@@ -100,72 +100,23 @@ async function validateAllAccounts() {
     }
 }
 
-// Test endpoint for account configuration
-app.get('/api/account/:email/test-config', async (req, res) => {
-    try {
-        const { email } = req.params;
 
-        // Find account in any table
-        let account = await GoogleUser.findOne({ where: { email } });
-        let accountType = 'google';
-
-        if (!account) {
-            account = await MicrosoftUser.findOne({ where: { email } });
-            accountType = 'microsoft';
-        }
-        if (!account) {
-            account = await SmtpAccount.findOne({ where: { email } });
-            accountType = 'smtp';
-        }
-
-        if (!account) {
-            return res.status(404).json({ error: 'Account not found' });
-        }
-
-        try {
-            const config = buildSenderConfig(account, accountType);
-
-            return res.json({
-                success: true,
-                email: email,
-                type: accountType,
-                smtpConfig: {
-                    host: config.smtpHost,
-                    port: config.smtpPort,
-                    user: config.smtpUser,
-                    hasPassword: !!config.smtpPass
-                },
-                message: 'Configuration is valid'
-            });
-        } catch (error) {
-            return res.status(400).json({
-                success: false,
-                email: email,
-                error: error.message
-            });
-        }
-
-    } catch (error) {
-        console.error('Test configuration error:', error);
-        res.status(500).json({ error: 'Failed to test configuration' });
-    }
-});
-
-// --- STARTUP LOGIC ---
 (async () => {
     try {
         await sequelize.authenticate();
         console.log('✅ Database connection established');
 
-        await sequelize.sync({ alter: true });
-        console.log('✅ Models synchronized');
+        // ⚠️ REMOVE or MODIFY this line - it's causing the data overwrite
+        // await sequelize.sync({ alter: true });
+
+        // Instead, just verify connection without modifying schema
+        console.log('✅ Database connection verified');
 
         // Validate all accounts before starting
         await validateAllAccounts();
 
-        app.listen(PORT, () => {
-            console.log(`🚀 Server started on http://localhost:${PORT}`);
-        });
+
+        //warmup scheduler
 
         // 🧠 Start intelligent warmup scheduler after 10 seconds
         setTimeout(async () => {
@@ -189,6 +140,11 @@ app.get('/api/account/:email/test-config', async (req, res) => {
         await worker.consumeWarmupJobs();
         console.log('🧠  Warmup Worker started');
 
+        app.listen(PORT, () => {
+            console.log(`🚀 Server started on http://localhost:${PORT}`);
+        });
+
+        // ... rest of your code
     } catch (err) {
         console.error('❌ Startup failed:', err);
         process.exit(1);

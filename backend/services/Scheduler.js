@@ -149,7 +149,7 @@ class IntelligentWarmupScheduler {
                         replyRate: replyRate,
                         warmupDay: sender.warmupDayCount,
                         senderType: this.getSenderType(sender),
-                        round: round
+                        round: round // ✅ Ensure round is set
                     });
 
                     // Update counts
@@ -160,17 +160,12 @@ class IntelligentWarmupScheduler {
 
             if (roundPairs.length > 0) {
                 allPairs.push({
-                    roundNumber: round,
+                    roundNumber: round, // ✅ Include round number in the round object
                     pairs: roundPairs,
                     emailCount: roundPairs.length
                 });
 
                 console.log(`   Round ${round}: ${roundPairs.length} emails`);
-
-                // Show round details
-                roundPairs.forEach(pair => {
-                    console.log(`     📤 ${pair.senderEmail} → ${pair.receiverEmail}`);
-                });
             }
         }
 
@@ -245,22 +240,20 @@ class IntelligentWarmupScheduler {
         const timeSlots = [];
         const now = new Date();
 
-        console.log(`   ⏱️ ULTRA-FAST TESTING: ${totalRounds} rounds starting within seconds`);
+        console.log(`   ⏱️ Scheduling ${totalRounds} rounds with proper spacing`);
 
         for (let i = 0; i < totalRounds; i++) {
-            // Start first email in 30 seconds, then space out by 2-5 minutes
-            const baseDelay = 30 * 1000; // 30 seconds for first email
-            const additionalDelay = i * 3 * 60 * 1000; // 3 minutes between subsequent rounds
+            // ✅ IMPROVED: Better timing for email sending
+            // Start first round in 2 minutes, then space out by 5-10 minutes
+            const baseDelay = 2 * 60 * 1000; // 2 minutes for first round
+            const additionalDelay = i * 8 * 60 * 1000; // 8 minutes between rounds
 
             const slotTime = new Date(now.getTime() + baseDelay + additionalDelay);
 
             timeSlots.push({ time: slotTime, round: i + 1 });
 
-            const secondsFromNow = Math.round((baseDelay + additionalDelay) / 1000);
-            const minutes = Math.floor(secondsFromNow / 60);
-            const seconds = secondsFromNow % 60;
-
-            console.log(`   🚀 Slot ${i + 1}: ${slotTime.toLocaleTimeString()} (in ${minutes}m ${seconds}s)`);
+            const minutesFromNow = Math.round((baseDelay + additionalDelay) / (60 * 1000));
+            console.log(`   🚀 Round ${i + 1}: ${slotTime.toLocaleTimeString()} (in ${minutesFromNow} minutes)`);
         }
 
         return timeSlots;
@@ -314,6 +307,7 @@ class IntelligentWarmupScheduler {
             if (delay > 0) {
                 console.log(`   📅 ${scheduledTime.toLocaleTimeString()} - ${pairs.length} emails`);
 
+                // ✅ FIX: Include round information in the job
                 const job = {
                     timeSlot: timeString,
                     pairs: pairs.map(pair => ({
@@ -322,23 +316,24 @@ class IntelligentWarmupScheduler {
                         receiverEmail: pair.receiverEmail,
                         replyRate: pair.replyRate,
                         warmupDay: pair.warmupDay,
-                        round: pair.round
+                        round: pair.round // ✅ Make sure round is included
                     })),
                     timestamp: new Date().toISOString(),
-                    coordinated: true
+                    coordinated: true,
+                    round: pairs[0]?.round || 1 // ✅ Include overall round for the time slot
                 };
 
                 const timeoutId = setTimeout(async () => {
                     try {
                         console.log(`\n🎯 EXECUTING TIME SLOT: ${scheduledTime.toLocaleTimeString()}`);
-                        console.log(`   Processing ${pairs.length} emails...`);
+                        console.log(`   Processing ${pairs.length} emails in round ${job.round}...`);
 
                         await channel.sendToQueue('warmup_jobs', Buffer.from(JSON.stringify(job)), {
                             persistent: true,
                             priority: 5
                         });
 
-                        console.log(`   ✅ Job queued successfully`);
+                        console.log(`   ✅ Job queued successfully for round ${job.round}`);
                     } catch (error) {
                         console.error('❌ Error queuing job:', error);
                     }
@@ -351,6 +346,99 @@ class IntelligentWarmupScheduler {
 
         console.log(`\n✅ Successfully scheduled ${totalScheduled} emails across ${warmupPlan.timeSlots.size} time slots`);
         this.isRunning = false;
+    }
+
+    // ✅ NEW: Build sender config for coordinated jobs
+    buildSenderConfigForCoordinated(sender, senderType) {
+        const base = {
+            userId: sender.userId || sender.user_id,
+            name: sender.name || sender.sender_name || sender.email,
+            email: sender.email,
+            type: senderType,
+            startEmailsPerDay: sender.startEmailsPerDay,
+            increaseEmailsPerDay: sender.increaseEmailsPerDay,
+            maxEmailsPerDay: sender.maxEmailsPerDay,
+            replyRate: sender.replyRate,
+            warmupDayCount: sender.warmupDayCount,
+            industry: sender.industry
+        };
+
+        if (senderType === 'google') {
+            return {
+                ...base,
+                smtpHost: 'smtp.gmail.com',
+                smtpPort: 587,
+                smtpUser: sender.email,
+                smtpPass: sender.app_password,
+                smtpEncryption: 'TLS',
+                imapHost: 'imap.gmail.com',
+                imapPort: 993,
+                imapUser: sender.email,
+                imapPass: sender.app_password,
+                imapEncryption: 'SSL',
+            };
+        }
+
+        if (senderType === 'microsoft') {
+            return {
+                ...base,
+                smtpHost: 'smtp.office365.com',
+                smtpPort: 587,
+                smtpUser: sender.email,
+                smtpPass: sender.access_token || sender.app_password,
+                smtpEncryption: 'STARTTLS',
+                imapHost: 'outlook.office365.com',
+                imapPort: 993,
+                imapUser: sender.email,
+                imapPass: sender.access_token || sender.app_password,
+                imapEncryption: 'SSL',
+            };
+        }
+
+        // SMTP account
+        return {
+            ...base,
+            smtpHost: sender.smtp_host,
+            smtpPort: sender.smtp_port || 587,
+            smtpUser: sender.smtp_user || sender.email,
+            smtpPass: sender.smtp_pass,
+            smtpEncryption: sender.smtp_encryption || 'TLS',
+            imapHost: sender.imap_host,
+            imapPort: sender.imap_port || 993,
+            imapUser: sender.imap_user || sender.email,
+            imapPass: sender.imap_pass || sender.smtp_pass,
+            imapEncryption: sender.imap_encryption || 'SSL',
+        };
+    }
+
+    async getSender(senderType, email) {
+        try {
+            let senderModel;
+            switch (senderType) {
+                case 'google':
+                    senderModel = GoogleUser;
+                    break;
+                case 'microsoft':
+                    senderModel = MicrosoftUser;
+                    break;
+                case 'smtp':
+                    senderModel = SmtpAccount;
+                    break;
+                default:
+                    throw new Error(`Unknown sender type: ${senderType}`);
+            }
+
+            const sender = await senderModel.findOne({ where: { email } });
+            if (!sender) {
+                console.error(`❌ Sender not found: ${email} for type: ${senderType}`);
+                return null;
+            }
+
+            return sender;
+        } catch (error) {
+            console.error(`❌ Error fetching sender ${email} for type ${senderType}:`, error.message);
+            return null;
+        }
     }
 
     getSenderType(sender) {
@@ -376,6 +464,36 @@ class IntelligentWarmupScheduler {
         this.isRunning = false;
         console.log('🛑 Intelligent warmup scheduler stopped');
     }
+
+    async incrementWarmupDayCount() {
+        try {
+            const activeAccounts = await this.getActiveAccounts();
+            for (const account of activeAccounts) {
+                const newDayCount = (account.warmupDayCount || 0) + 1;
+
+                if (account.provider === 'google' || account.roundRobinIndexGoogle !== undefined) {
+                    await GoogleUser.update(
+                        { warmupDayCount: newDayCount },
+                        { where: { email: account.email } }
+                    );
+                } else if (account.provider === 'microsoft' || account.roundRobinIndexMicrosoft !== undefined) {
+                    await MicrosoftUser.update(
+                        { warmupDayCount: newDayCount },
+                        { where: { email: account.email } }
+                    );
+                } else {
+                    await SmtpAccount.update(
+                        { warmupDayCount: newDayCount },
+                        { where: { email: account.email } }
+                    );
+                }
+            }
+            console.log('📈 Warmup day incremented for all active accounts');
+        } catch (error) {
+            console.error('❌ Error incrementing warmup day count:', error);
+        }
+    }
+
 }
 
 // Create singleton instance
