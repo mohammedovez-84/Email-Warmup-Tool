@@ -477,9 +477,9 @@ const AuthenticationChecker = () => {
 
   const getStatusIcon = (valid) => {
     return valid ? (
-      <FiCheckCircle className="text-green-500 text-xl" />
+      <FiCheckCircle className="text-teal-600 text-xl" />
     ) : (
-      <FiAlertTriangle className="text-yellow-500 text-xl" />
+      <FiAlertTriangle className="text-orange-500 text-xl" />
     );
   };
 
@@ -511,20 +511,16 @@ const AuthenticationChecker = () => {
     // In a real app, you would fetch the results for this domain
   };
 
-  // ... (rest of your renderTabContent and JSX remains exactly the same)
-  // The renderTabContent function and all JSX components remain identical to your original code
-  // Only the data fetching logic has been replaced with real DNS lookups
-
   const renderTabContent = () => {
     switch (activeTab) {
       case 'overview':
         return (
-          <div className="p-0 font-['Poppins']">
+          <div className="p-0 font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
             {results && (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center text-xl sm:text-2xl">
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl sm:text-2xl">
                       <FiMail />
                     </div>
                     <div>
@@ -535,8 +531,8 @@ const AuthenticationChecker = () => {
                     </div>
                   </div>
 
-                  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center text-xl sm:text-2xl">
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-xl sm:text-2xl">
                       <FiLock />
                     </div>
                     <div>
@@ -547,8 +543,8 @@ const AuthenticationChecker = () => {
                     </div>
                   </div>
 
-                  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-teal-100 text-teal-600 rounded-2xl flex items-center justify-center text-xl sm:text-2xl">
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center text-xl sm:text-2xl">
                       <FiShield />
                     </div>
                     <div>
@@ -559,8 +555,8 @@ const AuthenticationChecker = () => {
                     </div>
                   </div>
 
-                  <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
-                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center text-xl sm:text-2xl">
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center text-xl sm:text-2xl">
                       <FiList />
                     </div>
                     <div>
@@ -573,8 +569,8 @@ const AuthenticationChecker = () => {
                 </div>
 
                 {results.issues && results.issues.length > 0 && (
-                  <div className="bg-white rounded-2xl p-4 sm:p-6 mb-6 shadow-sm font-['Poppins']">
-                    <h3 className="text-lg sm:text-xl font-bold mb-4 flex items-center">
+                  <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-6 mb-6 shadow-sm font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
+                    <h3 className="text-lg sm:text-xl font-bold mb-4 flex items-center text-gray-900">
                       <FiAlertTriangle className="mr-2 text-orange-500" />
                       Domain Health Issues
                     </h3>
@@ -583,12 +579,12 @@ const AuthenticationChecker = () => {
                         <div key={index} className={`flex items-start gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl ${issue.type === 'error'
                           ? 'bg-red-50 border-l-4 border-red-500'
                           : issue.type === 'warning'
-                            ? 'bg-yellow-50 border-l-4 border-yellow-500'
+                            ? 'bg-orange-50 border-l-4 border-orange-500'
                             : 'bg-blue-50 border-l-4 border-blue-500'
                           }`}>
                           <div className="flex-shrink-0 mt-1">
                             {issue.type === 'error' && <FiAlertTriangle className="text-red-500 text-lg sm:text-xl" />}
-                            {issue.type === 'warning' && <FiAlertTriangle className="text-yellow-500 text-lg sm:text-xl" />}
+                            {issue.type === 'warning' && <FiAlertTriangle className="text-orange-500 text-lg sm:text-xl" />}
                             {issue.type === 'info' && <FiInfo className="text-blue-500 text-lg sm:text-xl" />}
                           </div>
                           <div className="flex-1 min-w-0">
@@ -601,9 +597,9 @@ const AuthenticationChecker = () => {
                   </div>
                 )}
 
-                <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-sm font-['Poppins']">
-                  <h3 className="text-lg sm:text-xl font-bold mb-4 flex items-center">
-                    <FiCheckCircle className="mr-2 text-green-500" />
+                <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-6 shadow-sm font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
+                  <h3 className="text-lg sm:text-xl font-bold mb-4 flex items-center text-gray-900">
+                    <FiCheckCircle className="mr-2 text-teal-600" />
                     Recommendations
                   </h3>
                   <div className="space-y-3">
@@ -660,13 +656,13 @@ const AuthenticationChecker = () => {
 
       case 'spf':
         return (
-          <div className="border border-gray-200 rounded-2xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-lg font-['Poppins']">
+          <div className="border border-gray-100 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
             <div
-              className="bg-gray-50 border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
+              className="bg-gray-50 border-b border-gray-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
               onClick={() => toggleSection('spf')}
             >
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center">
-                <FiMail className="inline mr-2" />
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FiMail className="inline text-orange-500" />
                 SPF (Sender Policy Framework)
                 {results?.spf && getStatusIcon(results.spf.valid)}
               </h3>
@@ -678,8 +674,8 @@ const AuthenticationChecker = () => {
                 {results ? (
                   <>
                     <div className={`rounded-xl p-4 sm:p-6 ${results.spf.valid
-                      ? 'bg-green-50 border-l-4 border-green-500'
-                      : 'bg-yellow-50 border-l-4 border-yellow-500'
+                      ? 'bg-teal-50 border-l-4 border-teal-600'
+                      : 'bg-orange-50 border-l-4 border-orange-500'
                       }`}>
                       <div className="mb-4">
                         <p className="font-semibold text-lg text-gray-900 mb-1">
@@ -690,19 +686,19 @@ const AuthenticationChecker = () => {
 
                       {results.spf.exists && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
-                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                          <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-5 shadow-sm">
                             <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
                             <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-xs sm:text-sm">
                               {results.spf.record}
                             </SyntaxHighlighter>
                             <CopyToClipboard text={results.spf.record} onCopy={() => setCopied(true)}>
-                              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-800 to-teal-600 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-sm font-medium cursor-pointer transition-all duration-200 hover:opacity-90 hover:-translate-y-0.5 shadow-md">
+                              <button className="inline-flex items-center gap-2 bg-orange-500 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-orange-600 hover:-translate-y-0.5 shadow-md">
                                 <FiCopy /> Copy Record
                               </button>
                             </CopyToClipboard>
                           </div>
 
-                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                          <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-5 shadow-sm">
                             <h4 className="font-semibold text-gray-900 mb-3">Mechanisms</h4>
                             <ul className="space-y-2">
                               {results.spf.mechanisms.map((mechanism, idx) => (
@@ -712,9 +708,9 @@ const AuthenticationChecker = () => {
                                     <span className="font-mono text-xs sm:text-sm text-gray-600 flex-1 truncate">{mechanism.value}</span>
                                   </div>
                                   {mechanism.valid ? (
-                                    <FiCheckCircle className="text-green-500 flex-shrink-0" />
+                                    <FiCheckCircle className="text-teal-600 flex-shrink-0" />
                                   ) : (
-                                    <FiAlertTriangle className="text-yellow-500 flex-shrink-0" />
+                                    <FiAlertTriangle className="text-orange-500 flex-shrink-0" />
                                   )}
                                 </li>
                               ))}
@@ -724,14 +720,14 @@ const AuthenticationChecker = () => {
                         </div>
                       )}
 
-                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                      <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
                         <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
                         <p className="text-gray-700 text-sm sm:text-base">{results.spf.recommendation}</p>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+                  <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-6 shadow-sm">
                     <h4 className="font-semibold text-gray-900 mb-3">SPF Check</h4>
                     <p className="text-gray-600 mb-4 text-sm sm:text-base">SPF (Sender Policy Framework) is an email authentication method designed to detect forging sender addresses during the delivery of the email.</p>
                     <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
@@ -752,13 +748,13 @@ const AuthenticationChecker = () => {
 
       case 'dkim':
         return (
-          <div className="border border-gray-200 rounded-2xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-lg font-['Poppins']">
+          <div className="border border-gray-100 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
             <div
-              className="bg-gray-50 border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
+              className="bg-gray-50 border-b border-gray-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
               onClick={() => toggleSection('dkim')}
             >
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center">
-                <FiLock className="inline mr-2" />
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FiLock className="inline text-orange-500" />
                 DKIM (DomainKeys Identified Mail)
                 {results?.dkim && getStatusIcon(results.dkim.valid)}
               </h3>
@@ -770,8 +766,8 @@ const AuthenticationChecker = () => {
                 {results ? (
                   <>
                     <div className={`rounded-xl p-4 sm:p-6 ${results.dkim.valid
-                      ? 'bg-green-50 border-l-4 border-green-500'
-                      : 'bg-yellow-50 border-l-4 border-yellow-500'
+                      ? 'bg-teal-50 border-l-4 border-teal-600'
+                      : 'bg-orange-50 border-l-4 border-orange-500'
                       }`}>
                       <div className="mb-4">
                         <p className="font-semibold text-lg text-gray-900 mb-1">
@@ -782,19 +778,19 @@ const AuthenticationChecker = () => {
 
                       {results.dkim.exists && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
-                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                          <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-5 shadow-sm">
                             <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
                             <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-xs sm:text-sm">
                               {results.dkim.record}
                             </SyntaxHighlighter>
                             <CopyToClipboard text={results.dkim.record} onCopy={() => setCopied(true)}>
-                              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-800 to-teal-600 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-sm font-medium cursor-pointer transition-all duration-200 hover:opacity-90 hover:-translate-y-0.5 shadow-md">
+                              <button className="inline-flex items-center gap-2 bg-orange-500 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-orange-600 hover:-translate-y-0.5 shadow-md">
                                 <FiCopy /> Copy Record
                               </button>
                             </CopyToClipboard>
                           </div>
 
-                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                          <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-5 shadow-sm">
                             <h4 className="font-semibold text-gray-900 mb-3">Key Information</h4>
                             <ul className="space-y-2 sm:space-y-3">
                               <li className="flex justify-between items-center py-2 border-b border-gray-100">
@@ -814,14 +810,14 @@ const AuthenticationChecker = () => {
                         </div>
                       )}
 
-                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                      <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
                         <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
                         <p className="text-gray-700 text-sm sm:text-base">{results.dkim.recommendation}</p>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+                  <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-6 shadow-sm">
                     <h4 className="font-semibold text-gray-900 mb-3">DKIM Check</h4>
                     <p className="text-gray-600 mb-4 text-sm sm:text-base">DKIM (DomainKeys Identified Mail) is an email authentication method that allows the receiver to check that an email was indeed sent and authorized by the owner of that domain.</p>
                     <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
@@ -842,13 +838,13 @@ const AuthenticationChecker = () => {
 
       case 'dmarc':
         return (
-          <div className="border border-gray-200 rounded-2xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-lg font-['Poppins']">
+          <div className="border border-gray-100 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
             <div
-              className="bg-gray-50 border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
+              className="bg-gray-50 border-b border-gray-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
               onClick={() => toggleSection('dmarc')}
             >
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center">
-                <FiShield className="inline mr-2" />
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FiShield className="inline text-orange-500" />
                 DMARC (Domain-based Message Authentication, Reporting & Conformance)
                 {results?.dmarc && getStatusIcon(results.dmarc.valid)}
               </h3>
@@ -860,8 +856,8 @@ const AuthenticationChecker = () => {
                 {results ? (
                   <>
                     <div className={`rounded-xl p-4 sm:p-6 ${results.dmarc.valid
-                      ? 'bg-green-50 border-l-4 border-green-500'
-                      : 'bg-yellow-50 border-l-4 border-yellow-500'
+                      ? 'bg-teal-50 border-l-4 border-teal-600'
+                      : 'bg-orange-50 border-l-4 border-orange-500'
                       }`}>
                       <div className="mb-4">
                         <p className="font-semibold text-lg text-gray-900 mb-1">
@@ -872,19 +868,19 @@ const AuthenticationChecker = () => {
 
                       {results.dmarc.exists && (
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
-                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                          <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-5 shadow-sm">
                             <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
                             <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-xs sm:text-sm">
                               {results.dmarc.record}
                             </SyntaxHighlighter>
                             <CopyToClipboard text={results.dmarc.record} onCopy={() => setCopied(true)}>
-                              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-800 to-teal-600 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-sm font-medium cursor-pointer transition-all duration-200 hover:opacity-90 hover:-translate-y-0.5 shadow-md">
+                              <button className="inline-flex items-center gap-2 bg-orange-500 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-orange-600 hover:-translate-y-0.5 shadow-md">
                                 <FiCopy /> Copy Record
                               </button>
                             </CopyToClipboard>
                           </div>
 
-                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                          <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-5 shadow-sm">
                             <h4 className="font-semibold text-gray-900 mb-3">Policy Details</h4>
                             <ul className="space-y-2">
                               <li className="flex justify-between items-center py-2 border-b border-gray-100">
@@ -920,14 +916,14 @@ const AuthenticationChecker = () => {
                         </div>
                       )}
 
-                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                      <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
                         <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
                         <p className="text-gray-700 text-sm sm:text-base">{results.dmarc.recommendation}</p>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+                  <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-6 shadow-sm">
                     <h4 className="font-semibold text-gray-900 mb-3">DMARC Check</h4>
                     <p className="text-gray-600 mb-4 text-sm sm:text-base">DMARC (Domain-based Message Authentication, Reporting & Conformance) is an email authentication protocol that builds on SPF and DKIM protocols.</p>
                     <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
@@ -948,13 +944,13 @@ const AuthenticationChecker = () => {
 
       case 'blacklist':
         return (
-          <div className="border border-gray-200 rounded-2xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-lg font-['Poppins']">
+          <div className="border border-gray-100 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
             <div
-              className="bg-gray-50 border-b border-gray-200 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
+              className="bg-gray-50 border-b border-gray-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-gray-100 transition-colors"
               onClick={() => toggleSection('blacklist')}
             >
-              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center">
-                <FiList className="inline mr-2" />
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FiList className="inline text-orange-500" />
                 Blacklist Check
                 {results?.blacklist && getStatusIcon(results.blacklist.listed === 0)}
               </h3>
@@ -965,8 +961,8 @@ const AuthenticationChecker = () => {
               <div className="bg-white p-4 sm:p-6 animate-fade-in">
                 {results ? (
                   <div className={`rounded-xl p-4 sm:p-6 ${results.blacklist.listed === 0
-                    ? 'bg-green-50 border-l-4 border-green-500'
-                    : 'bg-yellow-50 border-l-4 border-yellow-500'
+                    ? 'bg-teal-50 border-l-4 border-teal-600'
+                    : 'bg-orange-50 border-l-4 border-orange-500'
                     }`}>
                     <div className="mb-4">
                       <p className="font-semibold text-lg text-gray-900 mb-1">
@@ -977,15 +973,15 @@ const AuthenticationChecker = () => {
                       <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
                     </div>
 
-                    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                    <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-5 shadow-sm">
                       <h4 className="font-semibold text-gray-900 mb-3">Blacklist Results</h4>
                       <div className="space-y-2">
                         {results.blacklist.details.map((blacklist, index) => (
                           <div key={index} className="flex justify-between items-center py-2 px-3 bg-gray-50 rounded-lg">
                             <span className="font-medium text-gray-900 text-sm sm:text-base">{blacklist.name}</span>
                             <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${blacklist.listed
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-green-100 text-green-800'
+                              ? 'bg-red-50 text-red-700'
+                              : 'bg-teal-50 text-teal-700'
                               }`}>
                               {blacklist.listed ? 'Listed' : 'Not Listed'}
                             </span>
@@ -994,13 +990,13 @@ const AuthenticationChecker = () => {
                       </div>
                     </div>
 
-                    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                    <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
                       <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
                       <p className="text-gray-700 text-sm sm:text-base">{results.blacklist.recommendation}</p>
                     </div>
                   </div>
                 ) : (
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm">
+                  <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-6 shadow-sm">
                     <h4 className="font-semibold text-gray-900 mb-3">Blacklist Monitoring</h4>
                     <p className="text-gray-600 mb-4 text-sm sm:text-base">Check if your domain or IP address is listed on any major email blacklists that could affect email deliverability.</p>
                     <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
@@ -1029,106 +1025,104 @@ const AuthenticationChecker = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 font-['Poppins',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_Roboto,_sans-serif] transition-colors duration-300 ${darkMode ? 'dark bg-gray-900' : ''}`}>
+    <div className={`min-h-screen bg-gray-50 font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif] transition-colors duration-300 ${darkMode ? 'dark bg-gray-900' : ''}`}>
       <div className="max-w-full mx-auto px-2 sm:px-4 py-4 sm:py-8">
         {/* Header */}
-        <div className="bg-white border-2 border-transparent bg-gradient-to-r from-teal-800 to-teal-600 bg-origin-border rounded-2xl p-4 sm:p-8 text-gray-900 mb-6 sm:mb-8 shadow-xl relative overflow-hidden">
-          <div className="bg-white rounded-xl p-4 sm:p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-teal-800 to-teal-600 bg-clip-text text-transparent">
-                Email Authentication Checker
-              </h2>
-              <div className="flex gap-2">
-                {/* Settings and Download buttons removed */}
-              </div>
+        <div className="bg-white border-t-4 border-orange-500 rounded-xl p-4 sm:p-8 text-gray-900 mb-6 sm:mb-8 shadow-lg">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">
+              Email Authentication Checker
+            </h2>
+            <div className="flex gap-2">
+              {/* Settings and Download buttons removed */}
             </div>
+          </div>
 
-            <p className="text-gray-600 mb-4 sm:mb-6 text-base sm:text-lg">
-              Comprehensive tool for SPF, DKIM, and DMARC configuration, validation, and deployment
-            </p>
+          <p className="text-gray-600 mb-4 sm:mb-6 text-base sm:text-lg">
+            Comprehensive tool for SPF, DKIM, and DMARC configuration, validation, and deployment
+          </p>
 
-            <AnimatePresence>
-              {showSettings && (
-                <motion.div
-                  className="bg-gray-50 border border-gray-200 rounded-xl mb-4 overflow-hidden"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                >
-                  <div className="flex justify-between items-center p-4 border-b border-gray-200">
-                    <h3 className="text-gray-900 font-semibold">Settings</h3>
-                    <button
-                      onClick={() => setShowSettings(false)}
-                      className="text-gray-600 hover:text-gray-900"
-                    >
-                      <FiX />
-                    </button>
-                  </div>
-                  <div className="p-4 space-y-3">
-                    <div className="flex items-center">
-                      <label className="flex items-center gap-2 cursor-pointer text-gray-700">
-                        <input
-                          type="checkbox"
-                          checked={autoRefresh}
-                          onChange={(e) => setAutoRefresh(e.target.checked)}
-                          className="rounded border-gray-300 text-teal-800 focus:ring-teal-800"
-                        />
-                        Auto-refresh results
-                      </label>
-                    </div>
-                    <div className="flex items-center">
-                      <label className="flex items-center gap-2 cursor-pointer text-gray-700">
-                        <input
-                          type="checkbox"
-                          checked={darkMode}
-                          onChange={(e) => setDarkMode(e.target.checked)}
-                          className="rounded border-gray-300 text-teal-800 focus:ring-teal-800"
-                        />
-                        Dark mode
-                      </label>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <form onSubmit={handleDomainSubmit} className="max-w-2xl mx-auto">
-              <div className="flex flex-col">
-                <label className="text-gray-700 font-medium mb-2 text-left">
-                  Enter your domain (example.com):
-                </label>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <input
-                    type="text"
-                    placeholder="example.com"
-                    value={domain}
-                    onChange={(e) => setDomain(e.target.value)}
-                    className="flex-1 px-4 sm:px-6 py-3 sm:py-4 border-2 border-gray-300 rounded-full text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:border-teal-800 focus:ring-2 focus:ring-teal-800 focus:ring-opacity-20 font-['Poppins'] transition-all duration-300"
-                  />
+          <AnimatePresence>
+            {showSettings && (
+              <motion.div
+                className="bg-gray-50 border border-gray-100 rounded-xl mb-4 overflow-hidden"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+              >
+                <div className="flex justify-between items-center p-4 border-b border-gray-100">
+                  <h3 className="text-gray-900 font-semibold">Settings</h3>
                   <button
-                    type="submit"
-                    disabled={isLoading}
-                    className="px-6 sm:px-8 bg-gradient-to-r from-teal-800 to-teal-600 text-white border-none rounded-full font-semibold cursor-pointer transition-all duration-300 hover:opacity-90 hover:-translate-y-1 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none font-['Poppins'] py-3 sm:py-4 text-sm sm:text-base"
+                    onClick={() => setShowSettings(false)}
+                    className="text-gray-600 hover:text-gray-900"
                   >
-                    {isLoading ? (
-                      <span className="flex items-center gap-2">
-                        <FiRefreshCw className="animate-spin" />
-                        Checking...
-                      </span>
-                    ) : (
-                      'Check Authentication'
-                    )}
+                    <FiX />
                   </button>
                 </div>
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center">
+                    <label className="flex items-center gap-2 cursor-pointer text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={autoRefresh}
+                        onChange={(e) => setAutoRefresh(e.target.checked)}
+                        className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                      />
+                      Auto-refresh results
+                    </label>
+                  </div>
+                  <div className="flex items-center">
+                    <label className="flex items-center gap-2 cursor-pointer text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={darkMode}
+                        onChange={(e) => setDarkMode(e.target.checked)}
+                        className="rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                      />
+                      Dark mode
+                    </label>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <form onSubmit={handleDomainSubmit} className="max-w-2xl mx-auto">
+            <div className="flex flex-col">
+              <label className="text-gray-700 font-medium mb-2 text-left">
+                Enter your domain (example.com):
+              </label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  placeholder="example.com"
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  className="flex-1 px-4 sm:px-6 py-3 sm:py-4 border border-gray-200 rounded-full text-gray-900 bg-white placeholder-gray-400 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all duration-300"
+                />
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-6 sm:px-8 bg-orange-500 text-white border-none rounded-full font-semibold cursor-pointer transition-all duration-300 hover:bg-orange-600 hover:-translate-y-0.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none py-3 sm:py-4 text-sm sm:text-base"
+                >
+                  {isLoading ? (
+                    <span className="flex items-center gap-2">
+                      <FiRefreshCw className="animate-spin" />
+                      Checking...
+                    </span>
+                  ) : (
+                    'Check Authentication'
+                  )}
+                </button>
               </div>
-            </form>
-          </div>
+            </div>
+          </form>
         </div>
 
         {/* Overall Score */}
         {results && (
           <div className="flex justify-center mb-6 sm:mb-8">
-            <div className="bg-white border border-gray-200 rounded-2xl p-6 sm:p-8 text-center shadow-xl animate-fade-in w-full max-w-xs sm:max-w-sm font-['Poppins']">
+            <div className="bg-white border border-gray-100 rounded-xl p-6 sm:p-8 text-center shadow-lg animate-fade-in w-full max-w-xs sm:max-w-sm font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
               <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-4 sm:mb-6">Domain Health Score</h3>
               <div className="mb-4 sm:mb-6 relative flex justify-center items-center">
                 <div className="relative w-24 h-24 sm:w-32 sm:h-32">
@@ -1138,9 +1132,9 @@ const AuthenticationChecker = () => {
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     />
                     <path
-                      className={`fill-none stroke-[2.8] stroke-linecap-round transition-all duration-1000 ${getScoreClass(results.overallScore) === 'excellent' ? 'stroke-green-500' :
-                          getScoreClass(results.overallScore) === 'good' ? 'stroke-blue-500' :
-                            getScoreClass(results.overallScore) === 'fair' ? 'stroke-yellow-500' : 'stroke-red-500'
+                      className={`fill-none stroke-[2.8] stroke-linecap-round transition-all duration-1000 ${getScoreClass(results.overallScore) === 'excellent' ? 'stroke-teal-600' :
+                          getScoreClass(results.overallScore) === 'good' ? 'stroke-teal-500' :
+                            getScoreClass(results.overallScore) === 'fair' ? 'stroke-orange-500' : 'stroke-red-500'
                         }`}
                       strokeDasharray={`${results.overallScore}, 100`}
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
@@ -1156,7 +1150,7 @@ const AuthenticationChecker = () => {
               </div>
               <p className={`text-base sm:text-lg font-semibold ${getScoreClass(results.overallScore) === 'excellent' ? 'text-teal-600' :
                 getScoreClass(results.overallScore) === 'good' ? 'text-teal-500' :
-                  getScoreClass(results.overallScore) === 'fair' ? 'text-teal-400' : 'text-teal-300'
+                  getScoreClass(results.overallScore) === 'fair' ? 'text-orange-500' : 'text-red-500'
                 }`}>
                 Your email authentication is {getScoreClass(results.overallScore)}
               </p>
@@ -1165,62 +1159,62 @@ const AuthenticationChecker = () => {
         )}
 
         {/* Tabs */}
-        <div className="bg-white rounded-2xl shadow-xl overflow-hidden animate-slide-up font-['Poppins']">
-          <div className="bg-gradient-to-r from-teal-800 to-teal-600 overflow-x-auto">
+        <div className="bg-white rounded-xl shadow-lg overflow-hidden animate-slide-up font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
+          <div className="bg-white border-b border-gray-100 overflow-x-auto">
             <div className="flex min-w-max">
               <button
-                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-white/80 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-white hover:bg-white/10 relative ${activeTab === 'overview' ? 'text-white font-semibold' : ''
+                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-gray-600 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-gray-900 hover:bg-gray-50 relative ${activeTab === 'overview' ? 'text-gray-900 font-semibold' : ''
                   }`}
                 onClick={() => setActiveTab('overview')}
               >
-                <FiGlobe className="text-base sm:text-lg" />
+                <FiGlobe className="text-base sm:text-lg text-orange-500" />
                 Overview
                 {activeTab === 'overview' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white animate-expand-line"></div>
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-orange-500 animate-expand-line"></div>
                 )}
               </button>
               <button
-                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-white/80 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-white hover:bg-white/10 relative ${activeTab === 'spf' ? 'text-white font-semibold' : ''
+                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-gray-600 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-gray-900 hover:bg-gray-50 relative ${activeTab === 'spf' ? 'text-gray-900 font-semibold' : ''
                   }`}
                 onClick={() => setActiveTab('spf')}
               >
-                <FiMail className="text-base sm:text-lg" />
+                <FiMail className="text-base sm:text-lg text-orange-500" />
                 SPF
                 {activeTab === 'spf' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white animate-expand-line"></div>
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-orange-500 animate-expand-line"></div>
                 )}
               </button>
               <button
-                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-white/80 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-white hover:bg-white/10 relative ${activeTab === 'dkim' ? 'text-white font-semibold' : ''
+                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-gray-600 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-gray-900 hover:bg-gray-50 relative ${activeTab === 'dkim' ? 'text-gray-900 font-semibold' : ''
                   }`}
                 onClick={() => setActiveTab('dkim')}
               >
-                <FiLock className="text-base sm:text-lg" />
+                <FiLock className="text-base sm:text-lg text-orange-500" />
                 DKIM
                 {activeTab === 'dkim' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white animate-expand-line"></div>
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-orange-500 animate-expand-line"></div>
                 )}
               </button>
               <button
-                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-white/80 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-white hover:bg-white/10 relative ${activeTab === 'dmarc' ? 'text-white font-semibold' : ''
+                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-gray-600 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-gray-900 hover:bg-gray-50 relative ${activeTab === 'dmarc' ? 'text-gray-900 font-semibold' : ''
                   }`}
                 onClick={() => setActiveTab('dmarc')}
               >
-                <FiShield className="text-base sm:text-lg" />
+                <FiShield className="text-base sm:text-lg text-orange-500" />
                 DMARC
                 {activeTab === 'dmarc' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white animate-expand-line"></div>
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-orange-500 animate-expand-line"></div>
                 )}
               </button>
               <button
-                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-white/80 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-white hover:bg-white/10 relative ${activeTab === 'blacklist' ? 'text-white font-semibold' : ''
+                className={`px-4 sm:px-6 py-4 sm:py-5 bg-none border-none cursor-pointer font-medium text-gray-600 flex items-center gap-2 transition-all duration-300 whitespace-nowrap hover:text-gray-900 hover:bg-gray-50 relative ${activeTab === 'blacklist' ? 'text-gray-900 font-semibold' : ''
                   }`}
                 onClick={() => setActiveTab('blacklist')}
               >
-                <FiList className="text-base sm:text-lg" />
+                <FiList className="text-base sm:text-lg text-orange-500" />
                 Blacklist
                 {activeTab === 'blacklist' && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white animate-expand-line"></div>
+                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-orange-500 animate-expand-line"></div>
                 )}
               </button>
             </div>
@@ -1233,7 +1227,7 @@ const AuthenticationChecker = () => {
 
         {/* History Panel */}
         {history.length > 0 && (
-          <div className="bg-white border border-gray-200 rounded-2xl p-4 sm:p-6 mt-6 sm:mt-8 text-left shadow-sm font-['Poppins']">
+          <div className="bg-white border border-gray-100 rounded-xl p-4 sm:p-6 mt-6 sm:mt-8 text-left shadow-sm font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
             <h4 className="text-lg font-semibold text-gray-900 mb-4">Recent Checks</h4>
 
             {/* Headers */}
@@ -1247,7 +1241,7 @@ const AuthenticationChecker = () => {
               {history.map((item, index) => (
                 <div
                   key={index}
-                  className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-3 rounded-xl cursor-pointer transition-colors hover:bg-gray-50 gap-2 sm:gap-0"
+                  className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-3 rounded-xl cursor-pointer transition-colors hover:bg-gray-50 gap-2 sm:gap-0 border border-gray-100"
                   onClick={() => loadFromHistory(item.domain)}
                 >
                   {/* Domain */}
@@ -1260,9 +1254,9 @@ const AuthenticationChecker = () => {
                   <div className="flex items-center gap-2 sm:w-1/3 justify-center">
                     <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                       <div
-                        className={`h-full rounded-full transition-all duration-500 ${getScoreClass(item.score) === 'excellent' ? 'bg-green-500' :
-                            getScoreClass(item.score) === 'good' ? 'bg-green-400' :
-                              getScoreClass(item.score) === 'fair' ? 'bg-yellow-500' : 'bg-red-500'
+                        className={`h-full rounded-full transition-all duration-500 ${getScoreClass(item.score) === 'excellent' ? 'bg-teal-600' :
+                            getScoreClass(item.score) === 'good' ? 'bg-teal-500' :
+                              getScoreClass(item.score) === 'fair' ? 'bg-orange-500' : 'bg-red-500'
                           }`}
                         style={{ width: `${item.score}%` }}
                       ></div>
@@ -1274,7 +1268,7 @@ const AuthenticationChecker = () => {
             </div>
 
             <button
-              className="bg-gradient-to-r from-teal-800 to-teal-600 text-white border-none px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer text-sm font-medium transition-all duration-300 hover:opacity-90 hover:-translate-y-0.5 shadow-md w-full sm:w-auto"
+              className="bg-orange-500 text-white border-none px-4 sm:px-6 py-2 sm:py-3 rounded-full cursor-pointer text-sm font-medium transition-all duration-300 hover:bg-orange-600 hover:-translate-y-0.5 shadow-md w-full sm:w-auto"
               onClick={clearHistory}
             >
               Clear History
@@ -1286,7 +1280,7 @@ const AuthenticationChecker = () => {
         {/* Copy Notification */}
         {copied && (
           <motion.div
-            className="fixed bottom-4 right-4 bg-gradient-to-r from-teal-800 to-teal-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-full shadow-lg z-50 font-medium font-['Poppins'] text-sm sm:text-base"
+            className="fixed bottom-4 right-4 bg-orange-500 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-full shadow-lg z-50 font-medium font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif] text-sm sm:text-base"
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
