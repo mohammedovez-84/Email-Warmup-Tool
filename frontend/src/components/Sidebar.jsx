@@ -15,7 +15,7 @@ import {
     FiX,
     FiMenu
 } from "react-icons/fi";
-import logo from "../assets/image.png";
+import logo from "../assets/endbounce.svg";
 
 const Sidebar = memo(() => {
     const { currentUser, logout } = useAuth();
@@ -133,13 +133,13 @@ const Sidebar = memo(() => {
             `}>
                 <div className="flex flex-col h-full">
                     {/* Header with Logo and Close Button */}
-                    <div className="h-16 md:h-24 border-b border-teal-200/60 flex items-center justify-between px-3 md:px-6 bg-gradient-to-r from-white to-teal-50/50">
+                    <div className="h-16 md:h-24 border-b border-teal-200/60 flex items-center justify-between px-3 md:px-6 bg-gradient-to-r from-teal to-teal-50/50">
                         <Link
                             to="/dashboard"
                             className="flex items-center justify-center w-full h-full transition-transform duration-200 hover:scale-105"
                             onClick={closeMobileSidebar}
                         >
-                            <div className="w-36 md:w-52 h-10 md:h-14 flex items-center justify-center">
+                            <div className="w-6 md:w-82 h-18 md:h-68 flex items-center justify-center">
                                 <img
                                     src={logo}
                                     alt="Logo"
