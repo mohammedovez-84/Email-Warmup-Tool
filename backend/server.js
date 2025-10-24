@@ -5,10 +5,8 @@ const bodyParser = require('body-parser');
 const session = require('express-session');
 const passport = require('passport');
 
-
 require('./config/microsoftStrategy');
 const { sequelize } = require('./config/db');
-
 
 const microsoftAuthRoutes = require('./routes/microsoftAuth');
 const authRoutes = require('./routes/auth');
@@ -21,12 +19,10 @@ const userRoutes = require('./routes/users');
 const metricsRoutes = require('./routes/metricsRoutes');
 const healthRoutes = require('./routes/healthRoutes');
 
-// Import models for validation
-const GoogleUser = require('./models/GoogleUser');
-const MicrosoftUser = require('./models/MicrosoftUser');
-const SmtpAccount = require('./models/smtpAccounts');
-const { buildSenderConfig, getSenderType } = require('./utils/senderConfig');
-const { scheduleIntelligentWarmup } = require('./services/Scheduler');
+const warmupScheduler = require('./services/Scheduler');
+
+
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -56,34 +52,34 @@ app.use('/api/health', healthRoutes);
 
 
 
-
 (async () => {
     try {
         await sequelize.authenticate();
         console.log('✅ Database connection established');
         console.log('✅ Database connection verified');
 
+        await sequelize.sync({ alter: true });
 
 
-        await sequelize.sync({ alter: true })
 
-        // ✅ Start scheduler only (not worker)
+        // Start the scheduler
         setTimeout(async () => {
             try {
-                await scheduleIntelligentWarmup();
-                console.log('🧠 Intelligent Warmup Scheduler started');
+                console.log('🚀 Starting Warmup Scheduler...');
+                await warmupScheduler.scheduleWarmup();
+
+                // Reschedule every 6 hours
                 setInterval(async () => {
                     console.log('🔄 Rescheduling warmup jobs...');
-                    await scheduleIntelligentWarmup();
+                    await warmupScheduler.scheduleWarmup();
                 }, 6 * 60 * 60 * 1000);
+
+                console.log('✅ Warmup scheduler started successfully');
             } catch (error) {
                 console.error('❌ Failed to start scheduler:', error);
             }
-        }, 10000);
+        }, 5000);
 
-        // ❌ DO NOT start the worker here
-        // const worker = new IntelligentWarmupWorker();
-        // await worker.consumeWarmupJobs();
 
         app.listen(PORT, () => {
             console.log(`🚀 Server started on http://localhost:${PORT}`);
@@ -94,4 +90,3 @@ app.use('/api/health', healthRoutes);
         process.exit(1);
     }
 })();
-

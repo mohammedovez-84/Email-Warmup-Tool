@@ -1,11 +1,10 @@
 const nodemailer = require('nodemailer');
 const imaps = require('imap-simple');
-const bcrypt = require('bcrypt');
-const sequelize = require('../config/db');
-const GoogleUser = require('../models/GoogleUser');
-// const HealthCheck = require('../models/HealthCheck');
-//const UserAlert = require('../models/UserAlert');
 const { runHealthCheckInternal } = require('../services/internalhealth'); // adjust path
+const SmtpAccount = require("../models/smtpAccounts")
+const GoogleUser = require("../models/GoogleUser")
+const MicrosoftUser = require("../models/MicrosoftUser")
+const EmailPool = require("../models/EmailPool")
 
 
 
@@ -91,7 +90,40 @@ exports.addGoogleUser = async (req, res) => {
     try {
         const cleanedPassword = cleanAndValidatePassword(appPassword);
 
-        // ✅ Create or find Google user
+        // ✅ FIRST: Check if email exists in EmailPool table
+        const existingPoolAccount = await EmailPool.findOne({
+            where: { email }
+        });
+
+        if (existingPoolAccount) {
+            return res.status(409).json({
+                success: false,
+                message: 'This email already exists as a pool account',
+                details: `Email ${email} is already registered as a pool account and cannot be added as a warmup account.`,
+                conflict_type: 'pool_account_exists'
+            });
+        }
+
+        // ✅ SECOND: Check if email exists in other warmup account tables
+        const existingMicrosoftAccount = await MicrosoftUser.findOne({ where: { email } });
+        if (existingMicrosoftAccount) {
+            return res.status(409).json({
+                success: false,
+                message: 'Email already exists as Microsoft account',
+                conflict_type: 'microsoft_account_exists'
+            });
+        }
+
+        const existingSmtpAccount = await SmtpAccount.findOne({ where: { email } });
+        if (existingSmtpAccount) {
+            return res.status(409).json({
+                success: false,
+                message: 'Email already exists as SMTP account',
+                conflict_type: 'smtp_account_exists'
+            });
+        }
+
+        // ✅ THIRD: Now check/create Google user
         const [user, created] = await GoogleUser.findOrCreate({
             where: { email },
             defaults: {
@@ -102,7 +134,11 @@ exports.addGoogleUser = async (req, res) => {
         });
 
         if (!created) {
-            return res.status(409).json({ success: false, message: 'Email already exists' });
+            return res.status(409).json({
+                success: false,
+                message: 'Email already exists as Google account',
+                conflict_type: 'google_account_exists'
+            });
         }
 
         // ✅ Run domain-level health check
@@ -110,7 +146,7 @@ exports.addGoogleUser = async (req, res) => {
         const health = await runHealthCheckInternal({
             emails: [email],
             domain,
-            knownDomains: ["gmail.com", "outlook.com", "yahoo.com"], // optional known list
+            knownDomains: ["gmail.com", "outlook.com", "yahoo.com"],
         });
 
         return res.status(201).json({
