@@ -34,6 +34,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
     const [selectedProvider, setSelectedProvider] = useState(null);
     const [selectedEmail, setSelectedEmail] = useState(null);
     const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+    const [settingsPanelPosition, setSettingsPanelPosition] = useState({ top: 0, left: 0 });
     const [togglingEmails, setTogglingEmails] = useState({});
     const [emailStats, setEmailStats] = useState({});
     const [showWarmupSettings, setShowWarmupSettings] = useState(false);
@@ -49,6 +50,20 @@ const Dashboard = ({ isSidebarCollapsed }) => {
     const [emailToDelete, setEmailToDelete] = useState(null);
     const [activeFilter, setActiveFilter] = useState('all');
     const [refreshing, setRefreshing] = useState(false);
+    const [disconnectingEmail, setDisconnectingEmail] = useState(null);
+    const [isMobile, setIsMobile] = useState(false);
+
+    // Check mobile screen size
+    useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth < 768);
+        };
+
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     // Format email account data
     const formatEmailAccount = useCallback((account) => ({
@@ -59,7 +74,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         status: account.status || 'unknown',
         deliverability: account.deliverability || 0,
         provider: account.provider || 'unknown',
-        warmupStatus: account.warmupStatus || 'paused',
+        warmupStatus: account.warmupStatus || 'active',
         warmupSettings: account.warmupSettings || {
             startEmailsPerDay: 3,
             increaseByPerDay: 3,
@@ -140,10 +155,16 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         }
     }, [formatEmailAccount, handleUnauthorized]);
 
-    // Enhanced success handler
-    const handleProviderSuccess = useCallback(() => {
-        fetchWarmupEmails();
-        toast.success('🎉 Email account connected successfully! Configure warmup settings to start.');
+    // Enhanced success handler - automatically start warmup for new emails
+    const handleProviderSuccess = useCallback(async () => {
+        try {
+            // First, fetch the updated list to get the new email
+            await fetchWarmupEmails();
+            toast.success('🎉 Email account connected successfully! Warmup has been started automatically.');
+        } catch (error) {
+            console.error('Error in success handler:', error);
+            toast.success('🎉 Email account connected successfully!');
+        }
     }, [fetchWarmupEmails]);
 
     // Enhanced delete functionality
@@ -192,6 +213,135 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 handleUnauthorized();
             } else {
                 toast.error('❌ Failed to delete email account');
+            }
+        }
+    };
+
+    // Enhanced disconnect functionality
+    const showDisconnectConfirmation = (email) => {
+        setEmailToDisconnect(email);
+        setShowDisconnectModal(true);
+        closeSettingsPanel();
+    };
+
+    const handleDisconnectEmail = async () => {
+        if (!emailToDisconnect) return;
+
+        try {
+            setDisconnectingEmail(emailToDisconnect.id);
+            const token = localStorage.getItem('token');
+            if (!token) {
+                handleUnauthorized();
+                return;
+            }
+
+            // Optimistic update - remove email from UI immediately
+            setWarmupEmails(prev => prev.filter(email => email.id !== emailToDisconnect.id));
+            setEmailStats(prev => {
+                const newStats = { ...prev };
+                delete newStats[emailToDisconnect.address];
+                return newStats;
+            });
+
+            // Try multiple API endpoints for disconnect
+            let disconnectSuccessful = false;
+
+            try {
+                await axios.delete(
+                    `${API_BASE_URL}/api/accounts/disconnect/${encodeURIComponent(emailToDisconnect.id)}`,
+                    {
+                        headers: { Authorization: `Bearer ${token}` },
+                        timeout: 5000
+                    }
+                );
+                disconnectSuccessful = true;
+            } catch (deleteError) {
+                console.log('DELETE endpoint failed, trying POST endpoint...');
+
+                try {
+                    await axios.post(
+                        `${API_BASE_URL}/api/accounts/disconnect/${encodeURIComponent(emailToDisconnect.id)}`,
+                        {},
+                        {
+                            headers: { Authorization: `Bearer ${token}` },
+                            timeout: 5000
+                        }
+                    );
+                    disconnectSuccessful = true;
+                } catch (postError) {
+                    console.log('POST endpoint also failed, trying accounts data endpoint...');
+
+                    try {
+                        await axios.delete(
+                            `${API_BASE_URL}/api/accounts/data/${encodeURIComponent(emailToDisconnect.id)}`,
+                            {
+                                headers: { Authorization: `Bearer ${token}` },
+                                timeout: 5000
+                            }
+                        );
+                        disconnectSuccessful = true;
+                    } catch (finalError) {
+                        throw new Error('All disconnect methods failed');
+                    }
+                }
+            }
+
+            if (disconnectSuccessful) {
+                toast.success('✅ Email disconnected successfully');
+                setShowDisconnectModal(false);
+                setEmailToDisconnect(null);
+            }
+
+        } catch (error) {
+            console.error('Error disconnecting email:', error);
+
+            // Revert optimistic update on failure
+            fetchWarmupEmails();
+
+            if (error.response?.status === 401) {
+                handleUnauthorized();
+            } else {
+                toast.error('❌ Failed to disconnect email. Please try again.');
+            }
+        } finally {
+            setDisconnectingEmail(null);
+        }
+    };
+
+    // Enhanced warmup report
+    const handleShowWarmupReport = async (email) => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                handleUnauthorized();
+                return;
+            }
+
+            const response = await axios.get(
+                `${API_BASE_URL}/api/warmup/report/${encodeURIComponent(email.address)}`,
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 10000
+                }
+            );
+
+            setSelectedReportEmail({
+                ...email,
+                reportData: response.data
+            });
+            setShowWarmupReport(true);
+            closeSettingsPanel();
+
+        } catch (error) {
+            console.error('Error fetching warmup report:', error);
+            if (error.response?.status === 401) {
+                handleUnauthorized();
+            } else {
+                toast.error('❌ Failed to load warmup report');
+                // Fallback: show report with available data
+                setSelectedReportEmail(email);
+                setShowWarmupReport(true);
+                closeSettingsPanel();
             }
         }
     };
@@ -267,55 +417,15 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         }
     };
 
-    // Enhanced disconnect functionality
-    const showDisconnectConfirmation = (email) => {
-        setEmailToDisconnect(email);
-        setShowDisconnectModal(true);
-        closeSettingsPanel();
-    };
-
-    const handleDisconnectEmail = async () => {
-        if (!emailToDisconnect) return;
-
-        try {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                handleUnauthorized();
-                return;
-            }
-
-            await axios.post(
-                `${API_BASE_URL}/api/accounts/disconnect/${encodeURIComponent(emailToDisconnect.id)}`,
-                {},
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                    timeout: 5000
-                }
-            );
-
-            toast.success('✅ Email disconnected successfully');
-            fetchWarmupEmails();
-            setShowDisconnectModal(false);
-            setEmailToDisconnect(null);
-        } catch (error) {
-            console.error('Error disconnecting email:', error);
-            if (error.response?.status === 401) {
-                handleUnauthorized();
-            } else {
-                toast.error('❌ Failed to disconnect email');
-            }
+    // Enhanced settings panel with positioning
+    const handleSettingsClick = useCallback((email, event) => {
+        if (window.innerWidth >= 768) {
+            const buttonRect = event.currentTarget.getBoundingClientRect();
+            setSettingsPanelPosition({
+                top: buttonRect.bottom + window.scrollY + 8,
+                right: window.innerWidth - buttonRect.right
+            });
         }
-    };
-
-    // Enhanced warmup report
-    const handleShowWarmupReport = (email) => {
-        setSelectedReportEmail(email);
-        setShowWarmupReport(true);
-        closeSettingsPanel();
-    };
-
-    // Enhanced settings panel
-    const handleSettingsClick = useCallback((email) => {
         setSelectedEmail(email);
         setShowSettingsPanel(true);
         setMobileMenuOpen(false);
@@ -335,6 +445,15 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 return;
             }
 
+            // Optimistic update
+            setWarmupEmails(prev =>
+                prev.map(email =>
+                    email.address === warmupSettingsEmail.address
+                        ? { ...email, warmupSettings: settings }
+                        : email
+                )
+            );
+
             await axios.put(
                 `${API_BASE_URL}/api/warmup/emails/${encodeURIComponent(warmupSettingsEmail.address)}/settings`,
                 settings,
@@ -345,11 +464,18 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             );
 
             toast.success('✅ Warmup settings saved successfully');
-            fetchWarmupEmails();
             setShowWarmupSettings(false);
         } catch (error) {
             console.error('Error saving warmup settings:', error);
-            toast.error('❌ Failed to save warmup settings');
+
+            // Revert optimistic update
+            fetchWarmupEmails();
+
+            if (error.response?.status === 401) {
+                handleUnauthorized();
+            } else {
+                toast.error('❌ Failed to save warmup settings');
+            }
         }
     };
 
@@ -363,7 +489,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         }
     }, [fetchWarmupEmails]);
 
-    // Enhanced filtering with multiple criteria - FIXED: Stats don't change with search
+    // Enhanced filtering with multiple criteria
     const filteredEmails = useMemo(() => {
         let filtered = warmupEmails.filter(email =>
             (email.address?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
@@ -391,17 +517,17 @@ const Dashboard = ({ isSidebarCollapsed }) => {
     const getProviderIcon = useCallback((provider) => {
         switch (provider) {
             case 'google':
-                return <img src={googleLogo} alt="Google" className="w-7 h-8" />;
+                return <img src={googleLogo} alt="Google" className="w-5 h-5 sm:w-6 sm:h-6" />;
             case 'microsoft':
-                return <img src={MicrosoftLogo} alt="Microsoft" className="w-7 h-8" />;
+                return <img src={MicrosoftLogo} alt="Microsoft" className="w-5 h-5 sm:w-6 sm:h-6" />;
             case 'smtp':
-                return <img src={SmtpLogo} alt="SMTP" className="w-7 h-8" />;
+                return <img src={SmtpLogo} alt="SMTP" className="w-5 h-5 sm:w-6 sm:h-6" />;
             default:
-                return <FiServer className="w-3 h-3" />;
+                return <FiServer className="w-4 h-4" />;
         }
     }, []);
 
-    // Enhanced Statistics Cards Component - FIXED: Stats remain consistent during search
+    // Enhanced Statistics Cards Component
     const StatisticsCards = () => {
         const stats = useMemo(() => {
             const total = warmupEmails.length;
@@ -414,7 +540,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 : 0;
 
             return { total, active, paused, totalSent, totalReplied, avgDeliverability };
-        }, [warmupEmails, emailStats]); // Only depend on original data, not filtered data
+        }, [warmupEmails, emailStats]);
 
         if (warmupEmails.length === 0) return null;
 
@@ -467,42 +593,40 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         ];
 
         return (
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 mb-6">
                 {statCards.map((card, index) => (
                     <motion.div
                         key={card.label}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.1 }}
-                        className="relative bg-white rounded-xl p-4 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-300 group"
+                        className="relative bg-white rounded-xl p-3 sm:p-4 shadow-sm border border-gray-200 hover:shadow-md transition-all duration-300 group"
                     >
-                        {/* Gradient Border Effect */}
                         <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-teal-500 to-teal-600 opacity-0 group-hover:opacity-5 transition-opacity duration-300"></div>
 
                         <div className="flex items-center justify-between relative z-10">
-                            <div>
-                                <p className="text-sm text-gray-600 font-medium">{card.label}</p>
-                                <p className={`text-2xl font-bold ${card.color} mt-1`}>{card.value}</p>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs sm:text-sm text-gray-600 font-medium truncate">{card.label}</p>
+                                <p className={`text-lg sm:text-2xl font-bold ${card.color} mt-1 truncate`}>{card.value}</p>
                             </div>
-                            <div className={`w-12 h-12 ${card.bgColor} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
-                                <card.icon className={`w-6 h-6 ${card.color}`} />
+                            <div className={`w-8 h-8 sm:w-12 sm:h-12 ${card.bgColor} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 flex-shrink-0 ml-2`}>
+                                <card.icon className={`w-4 h-4 sm:w-6 sm:h-6 ${card.color}`} />
                             </div>
                         </div>
 
                         {/* Progress indicator for deliverability */}
                         {card.label === "Avg Deliverability" && (
-                            <div className="mt-3 relative z-10">
-                                <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div className="mt-2 sm:mt-3 relative z-10">
+                                <div className="w-full bg-gray-200 rounded-full h-1.5 sm:h-2">
                                     <div
-                                        className="bg-gradient-to-r from-teal-500 to-teal-600 h-2 rounded-full transition-all duration-1000 ease-out"
+                                        className="bg-gradient-to-r from-teal-500 to-teal-600 h-1.5 sm:h-2 rounded-full transition-all duration-1000 ease-out"
                                         style={{ width: `${stats.avgDeliverability}%` }}
                                     ></div>
                                 </div>
                             </div>
                         )}
 
-                        {/* Hover gradient accent */}
-                        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-500 to-teal-600 rounded-b-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                        <div className="absolute bottom-0 left-0 right-0 h-0.5 sm:h-1 bg-gradient-to-r from-teal-500 to-teal-600 rounded-b-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                     </motion.div>
                 ))}
             </div>
@@ -520,12 +644,15 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 <button
                     key={filter.key}
                     onClick={() => setActiveFilter(filter.key)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${activeFilter === filter.key
+                    className={`px-3 py-2 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all duration-200 ${activeFilter === filter.key
                         ? 'bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md'
                         : 'bg-white text-gray-600 border border-gray-300 hover:border-teal-300 hover:text-teal-700'
                         }`}
                 >
-                    {filter.label}
+                    <span className="hidden xs:inline">{filter.label}</span>
+                    <span className="xs:hidden">
+                        {filter.key === 'all' ? 'All' : filter.key === 'active' ? 'Active' : 'Paused'}
+                    </span>
                     <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${activeFilter === filter.key ? 'bg-teal-500' : 'bg-gray-200'
                         }`}>
                         {filter.count}
@@ -543,40 +670,40 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 animate={{ opacity: 1, scale: 1 }}
                 className="bg-white rounded-xl w-full max-w-md mx-auto shadow-2xl border border-gray-200"
             >
-                <div className="flex items-center gap-4 p-6 border-b border-gray-200">
-                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                        <FiAlertTriangle className="w-6 h-6 text-red-600" />
+                <div className="flex items-center gap-4 p-4 sm:p-6 border-b border-gray-200">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-red-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <FiAlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
                     </div>
-                    <div className="flex-1">
-                        <h2 className="text-xl font-bold text-gray-900">Delete Email Account</h2>
-                        <p className="text-gray-600 mt-1">This action cannot be undone. Are you sure?</p>
+                    <div className="flex-1 min-w-0">
+                        <h2 className="text-lg sm:text-xl font-bold text-gray-900">Delete Email Account</h2>
+                        <p className="text-gray-600 text-sm mt-1">This action cannot be undone. Are you sure?</p>
                     </div>
                 </div>
 
-                <div className="p-6 space-y-4">
+                <div className="p-4 sm:p-6 space-y-4">
                     <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-sm">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-xs sm:text-sm flex-shrink-0">
                                 {getInitials(emailToDelete?.name)}
                             </div>
-                            <div>
-                                <div className="font-medium text-gray-900">{emailToDelete?.name}</div>
-                                <div className="text-sm text-gray-500">{emailToDelete?.address}</div>
+                            <div className="min-w-0 flex-1">
+                                <div className="font-medium text-gray-900 text-sm sm:text-base truncate">{emailToDelete?.name}</div>
+                                <div className="text-gray-500 text-xs sm:text-sm truncate">{emailToDelete?.address}</div>
                             </div>
                         </div>
                     </div>
 
                     <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <FiAlertTriangle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
-                        <div className="text-sm text-red-800">
+                        <FiAlertTriangle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-red-800 text-xs sm:text-sm">
                             <strong>Warning:</strong> This will permanently delete the email account and all associated data including warmup progress, settings, and statistics.
                         </div>
                     </div>
                 </div>
 
-                <div className="flex gap-3 p-6 border-t border-gray-200">
+                <div className="flex gap-3 p-4 sm:p-6 border-t border-gray-200">
                     <button
-                        className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium"
+                        className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium text-sm"
                         onClick={() => {
                             setShowDeleteModal(false);
                             setEmailToDelete(null);
@@ -585,7 +712,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         Cancel
                     </button>
                     <button
-                        className="flex-1 px-4 py-2.5 bg-red-600 border border-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 font-medium flex items-center justify-center gap-2"
+                        className="flex-1 px-4 py-2.5 bg-red-600 border border-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 font-medium flex items-center justify-center gap-2 text-sm"
                         onClick={handleDeleteEmail}
                     >
                         <FiTrash2 className="w-4 h-4" />
@@ -609,40 +736,40 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     animate={{ opacity: 1, scale: 1 }}
                     className="bg-white rounded-xl w-full max-w-md mx-auto shadow-2xl border border-gray-200"
                 >
-                    <div className="flex items-center gap-4 p-6 border-b border-gray-200">
-                        <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
-                            <FiPauseCircle className="w-6 h-6 text-yellow-600" />
+                    <div className="flex items-center gap-4 p-4 sm:p-6 border-b border-gray-200">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <FiPauseCircle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600" />
                         </div>
-                        <div className="flex-1">
-                            <h2 className="text-xl font-bold text-gray-900">Pause Warmup</h2>
-                            <p className="text-gray-600 mt-1">Are you sure you want to pause warmup for this email?</p>
+                        <div className="flex-1 min-w-0">
+                            <h2 className="text-lg sm:text-xl font-bold text-gray-900">Pause Warmup</h2>
+                            <p className="text-gray-600 text-sm mt-1">Are you sure you want to pause warmup for this email?</p>
                         </div>
                     </div>
 
-                    <div className="p-6 space-y-4">
+                    <div className="p-4 sm:p-6 space-y-4">
                         <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                             <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-sm">
+                                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-xs sm:text-sm flex-shrink-0">
                                     {getInitials(email.name)}
                                 </div>
-                                <div>
-                                    <div className="font-medium text-gray-900">{email.name}</div>
-                                    <div className="text-sm text-gray-500">{email.address}</div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="font-medium text-gray-900 text-sm sm:text-base truncate">{email.name}</div>
+                                    <div className="text-gray-500 text-xs sm:text-sm truncate">{email.address}</div>
                                 </div>
                             </div>
                         </div>
 
                         <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                            <FiInfo className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                            <div className="text-sm text-blue-800">
+                            <FiInfo className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                            <div className="text-blue-800 text-xs sm:text-sm">
                                 Pausing warmup will stop all automated email sending. You can resume at any time.
                             </div>
                         </div>
                     </div>
 
-                    <div className="flex gap-3 p-6 border-t border-gray-200">
+                    <div className="flex gap-3 p-4 sm:p-6 border-t border-gray-200">
                         <button
-                            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium"
+                            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium text-sm"
                             onClick={() => {
                                 setShowPauseModal(false);
                                 setEmailToPause(null);
@@ -651,7 +778,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                             Cancel
                         </button>
                         <button
-                            className="flex-1 px-4 py-2.5 bg-yellow-600 border border-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-all duration-200 font-medium flex items-center justify-center gap-2"
+                            className="flex-1 px-4 py-2.5 bg-yellow-600 border border-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-all duration-200 font-medium flex items-center justify-center gap-2 text-sm"
                             onClick={() => performToggle(
                                 emailToPause.emailAddress,
                                 emailToPause.currentWarmupStatus,
@@ -675,53 +802,65 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 animate={{ opacity: 1, scale: 1 }}
                 className="bg-white rounded-xl w-full max-w-md mx-auto shadow-2xl border border-gray-200"
             >
-                <div className="flex items-center gap-4 p-6 border-b border-gray-200">
-                    <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                        <FiAlertTriangle className="w-6 h-6 text-red-600" />
+                <div className="flex items-center gap-4 p-4 sm:p-6 border-b border-gray-200">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <FiPower className="w-5 h-5 sm:w-6 sm:h-6 text-orange-600" />
                     </div>
-                    <div className="flex-1">
-                        <h2 className="text-xl font-bold text-gray-900">Disconnect Email Account</h2>
-                        <p className="text-gray-600 mt-1">Are you sure you want to disconnect this account?</p>
+                    <div className="flex-1 min-w-0">
+                        <h2 className="text-lg sm:text-xl font-bold text-gray-900">Disconnect Email Account</h2>
+                        <p className="text-gray-600 text-sm mt-1">Are you sure you want to disconnect this account?</p>
                     </div>
                 </div>
 
-                <div className="p-6 space-y-4">
+                <div className="p-4 sm:p-6 space-y-4">
                     <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-sm">
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-xs sm:text-sm flex-shrink-0">
                                 {getInitials(emailToDisconnect?.name)}
                             </div>
-                            <div>
-                                <div className="font-medium text-gray-900">{emailToDisconnect?.name}</div>
-                                <div className="text-sm text-gray-500">{emailToDisconnect?.address}</div>
+                            <div className="min-w-0 flex-1">
+                                <div className="font-medium text-gray-900 text-sm sm:text-base truncate">{emailToDisconnect?.name}</div>
+                                <div className="text-gray-500 text-xs sm:text-sm truncate">{emailToDisconnect?.address}</div>
+                                <div className="text-gray-400 text-xs mt-1 capitalize">{emailToDisconnect?.provider}</div>
                             </div>
                         </div>
                     </div>
 
-                    <div className="flex items-start gap-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <FiInfo className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
-                        <div className="text-sm text-yellow-800">
-                            The account will be removed from warmup but can be reconnected later.
+                    <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                        <FiInfo className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <div className="text-blue-800 text-xs sm:text-sm">
+                            <strong>Note:</strong> The account will be removed from warmup but can be reconnected later. Your email settings and warmup progress will be saved.
                         </div>
                     </div>
                 </div>
 
-                <div className="flex gap-3 p-6 border-t border-gray-200">
+                <div className="flex gap-3 p-4 sm:p-6 border-t border-gray-200">
                     <button
-                        className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium"
+                        className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium text-sm"
                         onClick={() => {
                             setShowDisconnectModal(false);
                             setEmailToDisconnect(null);
                         }}
+                        disabled={disconnectingEmail}
                     >
                         Cancel
                     </button>
                     <button
-                        className="flex-1 px-4 py-2.5 bg-red-600 border border-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 font-medium flex items-center justify-center gap-2"
+                        className="flex-1 px-4 py-2.5 bg-gradient-to-r from-orange-600 to-orange-700 border border-orange-600 text-white rounded-lg hover:from-orange-700 hover:to-orange-800 transition-all duration-200 font-medium flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                         onClick={handleDisconnectEmail}
+                        disabled={disconnectingEmail}
                     >
-                        <FiPower className="w-4 h-4" />
-                        Disconnect
+                        {disconnectingEmail ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                Disconnecting...
+                            </>
+                        ) : (
+                            <>
+                                <FiPower className="w-4 h-4" />
+                                Disconnect
+                            </>
+                        )}
                     </button>
                 </div>
             </motion.div>
@@ -736,7 +875,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 animate={{ opacity: 1, scale: 1 }}
                 className="bg-white rounded-xl w-full max-w-4xl mx-auto shadow-2xl border border-gray-200 max-h-[90vh] overflow-hidden flex flex-col"
             >
-                <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
+                <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100 flex-shrink-0">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900">Connect Email Account</h2>
                         <p className="text-gray-600 mt-1">Choose your email provider to get started</p>
@@ -749,7 +888,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-6 overflow-y-auto flex-1">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 sm:p-6 overflow-y-auto flex-1">
                     {providers.map((provider) => (
                         <motion.div
                             key={provider.id}
@@ -758,20 +897,20 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                             onClick={() => handleProviderSelect(provider)}
                             className="group cursor-pointer"
                         >
-                            <div className={`bg-white border ${provider.borderColor} rounded-lg p-5 hover:shadow-md hover:border-indigo-400 transition-all duration-200 h-full flex flex-col relative overflow-hidden`}>
+                            <div className={`bg-white border ${provider.borderColor} rounded-lg p-4 sm:p-5 hover:shadow-md hover:border-indigo-400 transition-all duration-200 h-full flex flex-col relative overflow-hidden`}>
                                 <div className={`absolute inset-0 bg-gradient-to-br ${provider.color} opacity-0 group-hover:opacity-3 transition-opacity duration-300`}></div>
 
                                 <div className="flex items-center gap-3 mb-4 relative z-10">
-                                    <div className={`w-10 h-10 rounded-lg ${provider.bgColor} flex items-center justify-center`}>
+                                    <div className={`w-10 h-10 rounded-lg ${provider.bgColor} flex items-center justify-center flex-shrink-0`}>
                                         <span className={`text-sm font-bold ${provider.iconColor}`}>
                                             {provider.icon}
                                         </span>
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <h3 className="font-semibold text-gray-900 truncate">
+                                        <h3 className="font-semibold text-gray-900 truncate text-sm sm:text-base">
                                             {provider.name}
                                         </h3>
-                                        <p className="text-gray-500 text-sm mt-1 line-clamp-2">
+                                        <p className="text-gray-500 text-xs sm:text-sm mt-1 line-clamp-2">
                                             {provider.description}
                                         </p>
                                     </div>
@@ -780,8 +919,8 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                 <div className="flex-1 mb-4 relative z-10">
                                     <ul className="space-y-2">
                                         {provider.features.map((feature, index) => (
-                                            <li key={index} className="flex items-center text-sm text-gray-600">
-                                                <FiCheck className="w-4 h-4 text-green-500 mr-2 flex-shrink-0" />
+                                            <li key={index} className="flex items-center text-xs sm:text-sm text-gray-600">
+                                                <FiCheck className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-2 flex-shrink-0" />
                                                 <span className="leading-tight">{feature}</span>
                                             </li>
                                         ))}
@@ -789,13 +928,13 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                 </div>
 
                                 <div className="flex items-center justify-between pt-3 border-t border-gray-100 relative z-10">
-                                    <div className="flex items-center text-gray-400 text-sm">
-                                        <FiShield className="w-4 h-4 text-green-500 mr-1" />
+                                    <div className="flex items-center text-gray-400 text-xs sm:text-sm">
+                                        <FiShield className="w-3 h-3 sm:w-4 sm:h-4 text-green-500 mr-1" />
                                         Secure
                                     </div>
-                                    <div className="flex items-center text-teal-600 font-medium group-hover:text-teal-700 transition-colors">
+                                    <div className="flex items-center text-teal-600 font-medium group-hover:text-teal-700 transition-colors text-xs sm:text-sm">
                                         Connect
-                                        <FiChevronRight className="ml-1 w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                                        <FiChevronRight className="ml-1 w-3 h-3 sm:w-4 sm:h-4 group-hover:translate-x-0.5 transition-transform" />
                                     </div>
                                 </div>
                             </div>
@@ -818,6 +957,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         });
 
         const [errors, setErrors] = useState({});
+        const [saving, setSaving] = useState(false);
 
         const validateSettings = () => {
             const newErrors = {};
@@ -840,8 +980,15 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
         };
 
-        const handleSave = () => {
-            if (validateSettings()) onSave(settings);
+        const handleSave = async () => {
+            if (!validateSettings()) return;
+
+            setSaving(true);
+            try {
+                await onSave(settings);
+            } finally {
+                setSaving(false);
+            }
         };
 
         const isFormValid = settings.startEmailsPerDay >= 1 &&
@@ -858,20 +1005,20 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     animate={{ opacity: 1, scale: 1 }}
                     className="bg-white rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl"
                 >
-                    <div className="flex justify-between items-center p-6 border-b border-gray-200 sticky top-0 bg-white">
-                        <div>
-                            <h2 className="text-xl font-semibold text-gray-800">Warm-up Settings</h2>
-                            <p className="text-gray-500 text-sm mt-1">{email?.address}</p>
+                    <div className="flex justify-between items-center p-4 sm:p-6 border-b border-gray-200 sticky top-0 bg-white">
+                        <div className="flex-1 min-w-0">
+                            <h2 className="text-lg sm:text-xl font-semibold text-gray-800 truncate">Warm-up Settings</h2>
+                            <p className="text-gray-500 text-xs sm:text-sm mt-1 truncate">{email?.address}</p>
                         </div>
                         <button
-                            className="text-gray-500 hover:text-gray-700 p-1"
+                            className="text-gray-500 hover:text-gray-700 p-1 flex-shrink-0 ml-2"
                             onClick={onClose}
                         >
                             <FiX className="w-5 h-5" />
                         </button>
                     </div>
 
-                    <div className="p-6 space-y-4">
+                    <div className="p-4 sm:p-6 space-y-4">
                         {[
                             { name: 'startEmailsPerDay', label: 'Start with emails/day (Recommended 3)', min: 1 },
                             { name: 'increaseByPerDay', label: 'Increase by emails every day (Recommended 3)', min: 1 },
@@ -943,10 +1090,11 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         )}
                     </div>
 
-                    <div className="flex justify-between p-6 border-t border-gray-200 gap-3">
+                    <div className="flex justify-between p-4 sm:p-6 border-t border-gray-200 gap-3">
                         <button
                             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-all flex-1"
                             onClick={onClose}
+                            disabled={saving}
                         >
                             <FiX className="w-4 h-4" />
                             Cancel
@@ -954,10 +1102,19 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         <button
                             className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-teal-600 bg-teal-600 text-white hover:bg-teal-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex-1"
                             onClick={handleSave}
-                            disabled={!isFormValid}
+                            disabled={!isFormValid || saving}
                         >
-                            <FiSave className="w-4 h-4" />
-                            Save Settings
+                            {saving ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    Saving...
+                                </>
+                            ) : (
+                                <>
+                                    <FiSave className="w-4 h-4" />
+                                    Save Settings
+                                </>
+                            )}
                         </button>
                     </div>
                 </motion.div>
@@ -975,12 +1132,12 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 className="bg-white rounded-t-2xl w-full max-w-sm mx-auto shadow-2xl"
             >
                 <div className="flex justify-between items-center p-4 border-b border-gray-200">
-                    <div>
-                        <h3 className="font-semibold text-gray-900">Account Settings</h3>
-                        <p className="text-gray-500 text-sm mt-1 truncate">{email.address}</p>
+                    <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 text-sm">Account Settings</h3>
+                        <p className="text-gray-500 text-xs mt-1 truncate">{email.address}</p>
                     </div>
                     <button
-                        className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                        className="p-1 text-gray-400 hover:text-teal-600 rounded transition-colors flex-shrink-0"
                         onClick={onClose}
                     >
                         <FiX size={20} />
@@ -1010,20 +1167,24 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         </div>
     );
 
-    // Enhanced Desktop Settings Panel
+    // Enhanced Desktop Settings Panel with proper positioning
     const DesktopSettingsPanel = () => (
         <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="fixed top-16 right-4 w-64 bg-white rounded-xl shadow-2xl border border-gray-200 z-40"
+            initial={{ opacity: 0, scale: 0.95, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="fixed bg-white rounded-xl shadow-2xl border border-gray-200 z-40 w-64"
+            style={{
+                top: `${settingsPanelPosition.top}px`,
+                right: `${settingsPanelPosition.right}px`
+            }}
         >
             <div className="flex justify-between items-center p-4 border-b border-gray-200">
-                <div>
-                    <h3 className="font-semibold text-gray-900">Account Settings</h3>
-                    <p className="text-gray-500 text-sm mt-1 truncate">{selectedEmail?.address}</p>
+                <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 text-sm">Account Settings</h3>
+                    <p className="text-gray-500 text-xs mt-1 truncate">{selectedEmail?.address}</p>
                 </div>
                 <button
-                    className="p-1 text-gray-400 hover:text-gray-600 rounded transition-colors"
+                    className="p-1 text-gray-400 hover:text-teal-600 rounded transition-colors flex-shrink-0 ml-2"
                     onClick={closeSettingsPanel}
                 >
                     <FiX size={16} />
@@ -1040,7 +1201,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         key={index}
                         className={`flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors ${item.danger
                             ? 'text-red-600 hover:bg-red-50'
-                            : 'text-gray-700 hover:bg-gray-100'
+                            : 'text-gray-700 hover:bg-teal-100'
                             }`}
                         onClick={item.action}
                     >
@@ -1058,7 +1219,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             id: 'google',
             name: "Google",
             description: "Gmail & Google Workspace",
-            icon: <img src={googleLogo} alt="Google" className="w-auto h-6" />,
+            icon: <img src={googleLogo} alt="Google" className="w-auto h-5 sm:h-6" />,
             color: "from-red-500 to-red-600",
             iconColor: "text-red-600",
             bgColor: "bg-red-50",
@@ -1070,7 +1231,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             id: 'microsoft',
             name: "Microsoft",
             description: "Exchange, O365, Outlook & Hotmail",
-            icon: <img src={MicrosoftLogo} alt="Microsoft" className="w-auto h-5" />,
+            icon: <img src={MicrosoftLogo} alt="Microsoft" className="w-auto h-3 sm:h-6" />,
             color: "from-blue-500 to-blue-600",
             iconColor: "text-blue-600",
             bgColor: "bg-blue-50",
@@ -1082,7 +1243,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             id: 'smtp',
             name: "SMTP/IMAP",
             description: "Any other Email Service provider account",
-            icon: <img src={SmtpLogo} alt="Smtp/Imap" className="w-auto h-6" />,
+            icon: <img src={SmtpLogo} alt="Smtp/Imap" className="w-auto h-5 sm:h-6" />,
             color: "from-green-500 to-green-600",
             iconColor: "text-green-600",
             bgColor: "bg-green-50",
@@ -1120,7 +1281,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         whileTap={{ scale: 0.98 }}
                         onClick={fetchWarmupEmails}
                         disabled={refreshing}
-                        className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 disabled:opacity-50"
+                        className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 disabled:opacity-50 text-sm"
                     >
                         <FiRefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                         <span className="hidden sm:inline">Refresh</span>
@@ -1139,7 +1300,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 </div>
             </div>
 
-            {/* Enhanced Statistics Cards - FIXED: Stats remain consistent during search */}
+            {/* Enhanced Statistics Cards */}
             <StatisticsCards />
 
             {/* Filter Tabs */}
@@ -1189,16 +1350,16 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: index * 0.05 }}
-                                    className="grid grid-cols-12 px-4 sm:px-6 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors group items-center gap-4"
+                                    className="grid grid-cols-12 px-4 sm:px-6 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors group items-center gap-2 sm:gap-4"
                                 >
                                     {/* Email Account */}
                                     <div className="col-span-6 lg:col-span-4 flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-sm flex-shrink-0">
+                                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-xs sm:text-sm flex-shrink-0">
                                             {getInitials(email.name)}
                                         </div>
                                         <div className="min-w-0 flex-1">
                                             <div className="font-medium text-gray-900 text-sm truncate">{email.name}</div>
-                                            <div className="text-xs text-gray-500 truncate">{email.address}</div>
+                                            <div className="text-gray-500 text-xs truncate">{email.address}</div>
                                         </div>
                                     </div>
 
@@ -1215,7 +1376,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                             ? 'bg-green-100 text-green-800 border border-green-200'
                                             : 'bg-red-100 text-red-800 border border-red-200'
                                             }`}>
-                                            {email.warmupStatus === 'active' ? 'Active' : 'Paused'}
+                                            {isMobile ? (email.warmupStatus === 'active' ? 'On' : 'Off') : (email.warmupStatus === 'active' ? 'Active' : 'Paused')}
                                         </span>
                                     </div>
 
@@ -1259,7 +1420,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                                 className="sr-only peer"
                                                 disabled={togglingEmails[email.address]}
                                             />
-                                            <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                                            <div className="w-10 h-5 sm:w-11 sm:h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 sm:after:h-5 sm:after:w-5 after:transition-all peer-checked:bg-green-500"></div>
                                             {togglingEmails[email.address] && (
                                                 <div className="absolute inset-0 flex items-center justify-center">
                                                     <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -1271,10 +1432,10 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                         <motion.button
                                             whileHover={{ scale: 1.1 }}
                                             whileTap={{ scale: 0.9 }}
-                                            className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                            onClick={() => handleSettingsClick(email)}
+                                            className="p-1.5 sm:p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors relative"
+                                            onClick={(e) => handleSettingsClick(email, e)}
                                         >
-                                            <FiSettings size={16} />
+                                            <FiSettings size={14} className="sm:w-4 sm:h-4" />
                                         </motion.button>
                                     </div>
                                 </motion.div>
@@ -1295,15 +1456,6 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                 : 'Connect your first email account to start warming up and improving deliverability.'
                             }
                         </p>
-                        <motion.button
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-teal-600 to-teal-700 text-white rounded-lg hover:from-teal-700 hover:to-teal-800 transition-all duration-200 shadow hover:shadow-md"
-                            onClick={() => setShowProviderModal(true)}
-                        >
-                            <FiPlus className="w-4 h-4" />
-                            <span className="font-medium">Add Your First Account</span>
-                        </motion.button>
                     </div>
                 )}
             </div>
@@ -1314,7 +1466,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 {showPauseModal && <PauseConfirmationModal />}
                 {showDisconnectModal && <DisconnectConfirmationModal />}
                 {showSettingsPanel && selectedEmail && (
-                    window.innerWidth >= 640 ? <DesktopSettingsPanel /> : <MobileSettingsMenu email={selectedEmail} onClose={closeSettingsPanel} />
+                    window.innerWidth >= 768 ? <DesktopSettingsPanel /> : <MobileSettingsMenu email={selectedEmail} onClose={closeSettingsPanel} />
                 )}
                 {showWarmupSettings && (
                     <WarmupSettingsPanel
