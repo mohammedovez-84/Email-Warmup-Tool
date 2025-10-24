@@ -2,15 +2,16 @@ const getChannel = require('../queues/rabbitConnection');
 const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
+const EmailPool = require('../models/EmailPool');
 const { computeEmailsToSend, computeReplyRate } = require('./warmupWorkflow');
 
-class IntelligentWarmupScheduler {
+class WarmupScheduler {
     constructor() {
         this.isRunning = false;
         this.scheduledJobs = new Map();
     }
 
-    async scheduleIntelligentWarmup() {
+    async scheduleWarmup() {
         if (this.isRunning) {
             console.log('🔄 Warmup scheduler already running...');
             return;
@@ -22,331 +23,503 @@ class IntelligentWarmupScheduler {
             const channel = await getChannel();
             await channel.assertQueue('warmup_jobs', { durable: true });
 
-            console.log('🧠 Starting intelligent warmup scheduling...');
+            console.log('🚀 Starting warmup scheduling...');
+            await this.scheduleAccountWarmup(channel);
 
-            const activeAccounts = await this.getActiveAccounts();
-
-            if (activeAccounts.length < 2) {
-                console.log('⚠️ Need at least 2 active accounts for warmup');
-                this.isRunning = false;
-                return;
-            }
-
-            console.log(`📊 Processing ${activeAccounts.length} active accounts`);
-
-            this.clearScheduledJobs();
-
-            const warmupPlan = await this.createBalancedWarmupPlan(activeAccounts);
-
-            await this.scheduleJobs(channel, warmupPlan);
-
-            console.log('✅ Intelligent warmup scheduling completed');
+            console.log('✅ Warmup scheduling completed');
 
         } catch (error) {
-            console.error('❌ Intelligent scheduling error:', error);
+            console.error('❌ Scheduling error:', error);
             this.isRunning = false;
         }
     }
 
-    async getActiveAccounts() {
-        const googleAccounts = await GoogleUser.findAll({ where: { warmupStatus: 'active' } });
-        const smtpAccounts = await SmtpAccount.findAll({ where: { warmupStatus: 'active' } });
-        const microsoftAccounts = await MicrosoftUser.findAll({ where: { warmupStatus: 'active' } });
+    async scheduleAccountWarmup(channel) {
+        console.log('📧 Scheduling ACCOUNT ↔ POOL warmup exchanges...');
 
-        console.log(`📊 Database accounts found:`);
+        const activeAccounts = await this.getActiveWarmupAccounts();
+        const activePools = await this.getActivePoolAccounts();
+
+        if (activeAccounts.length === 0) {
+            console.log('⚠️ No active warmup accounts found');
+            this.isRunning = false;
+            return;
+        }
+
+        if (activePools.length === 0) {
+            console.log('⚠️ No active pool accounts found');
+            this.isRunning = false;
+            return;
+        }
+
+        console.log(`📊 Found ${activeAccounts.length} warmup accounts and ${activePools.length} pool accounts`);
+
+        this.clearScheduledJobs();
+
+        const warmupPlan = await this.createWarmupPlan(activeAccounts, activePools);
+        await this.scheduleJobs(channel, warmupPlan);
+    }
+
+    async getActiveWarmupAccounts() {
+        const googleAccounts = await GoogleUser.findAll({
+            where: { warmupStatus: 'active', is_connected: true }
+        });
+        const smtpAccounts = await SmtpAccount.findAll({
+            where: { warmupStatus: 'active', is_connected: true }
+        });
+        const microsoftAccounts = await MicrosoftUser.findAll({
+            where: { warmupStatus: 'active', is_connected: true }
+        });
+
+        console.log(`📊 Active warmup accounts:`);
         console.log(`   Google: ${googleAccounts.length}, SMTP: ${smtpAccounts.length}, Microsoft: ${microsoftAccounts.length}`);
 
         const allAccounts = [...googleAccounts, ...smtpAccounts, ...microsoftAccounts];
 
+        // Log account details with FIXED sendLimit handling
         for (const account of allAccounts) {
             const sendLimit = await computeEmailsToSend(account);
-            console.log(`   ${account.email}: Day ${account.warmupDayCount}, Send Limit: ${sendLimit}, ReplyRate: ${account.replyRate}`);
+            // FIX: Ensure sendLimit is a number
+            const safeSendLimit = this.ensureNumber(sendLimit, 3);
+            console.log(`   ${account.email}: Day ${account.warmupDayCount || 0}, Send Limit: ${safeSendLimit}, ReplyRate: ${account.replyRate || 0.15}`);
         }
 
         return allAccounts;
     }
 
-    async createBalancedWarmupPlan(accounts) {
-        console.log(`🎯 Creating BALANCED warmup plan for ${accounts.length} accounts`);
+    async getActivePoolAccounts() {
+        const poolAccounts = await EmailPool.findAll({
+            where: { isActive: true }
+        });
+
+        console.log(`🏊 Active pool accounts: ${poolAccounts.length}`);
+        poolAccounts.forEach(pool => {
+            console.log(`   ${pool.email} (${pool.providerType})`);
+        });
+
+        return poolAccounts;
+    }
+
+    async createWarmupPlan(warmupAccounts, poolAccounts) {
+        console.log(`🎯 Creating warmup plan for ${warmupAccounts.length} accounts with ${poolAccounts.length} pool emails`);
 
         const plan = {
             timeSlots: new Map(),
             totalEmails: 0,
-            accountStats: new Map()
+            accountStats: new Map(),
+            poolStats: new Map()
         };
 
-        // Calculate individual sending limits
+        // Calculate individual sending limits for warmup accounts
         const accountSendLimits = new Map();
         const accountSentCounts = new Map();
-        const accountReceivedCounts = new Map();
+        const poolReceiveCounts = new Map();
 
-        for (const account of accounts) {
+        // Initialize counts - ensure ALL accounts are initialized
+        for (const account of warmupAccounts) {
             const sendLimit = await computeEmailsToSend(account);
-            accountSendLimits.set(account.email, sendLimit);
+            // FIX: Ensure sendLimit is a number
+            const safeSendLimit = this.ensureNumber(sendLimit, 3);
+            accountSendLimits.set(account.email, safeSendLimit);
             accountSentCounts.set(account.email, 0);
-            accountReceivedCounts.set(account.email, 0);
             plan.accountStats.set(account.email, { sent: 0, received: 0 });
         }
 
-        console.log('📊 Individual Send Limits:');
+        for (const pool of poolAccounts) {
+            poolReceiveCounts.set(pool.email, 0);
+            plan.poolStats.set(pool.email, { received: 0, replied: 0 });
+        }
+
+        console.log('📊 Warmup Account Send Limits:');
         for (const [email, limit] of accountSendLimits) {
-            console.log(`   ${email}: ${limit} emails to SEND`);
+            console.log(`   ${email}: ${limit} emails to SEND to pool`);
         }
 
         // Create balanced pairs
         const allPairs = await this.createBalancedPairs(
-            accounts,
+            warmupAccounts,
+            poolAccounts,
             accountSendLimits,
             accountSentCounts,
-            accountReceivedCounts
+            poolReceiveCounts
         );
+
+        // Initialize stats for any accounts that might have been missed
+        this.initializeAllStats(plan, allPairs);
 
         // Distribute to time slots
         await this.distributeToTimeSlots(allPairs, plan);
 
         // Final validation
-        this.validateDistribution(accounts, accountSentCounts, accountReceivedCounts, accountSendLimits);
+        this.validateDistribution(warmupAccounts, poolAccounts, accountSentCounts, poolReceiveCounts, accountSendLimits);
 
         return plan;
     }
 
-    async createBalancedPairs(accounts, sendLimits, sentCounts, receivedCounts) {
-        console.log(`\n🔄 Creating OPTIMIZED round-robin pairs...`);
+    initializeAllStats(plan, allPairs) {
+        const allSenders = new Set();
+        const allReceivers = new Set();
 
-        const allPairs = [];
+        allPairs.forEach(round => {
+            round.pairs.forEach(pair => {
+                allSenders.add(pair.senderEmail);
+                allReceivers.add(pair.receiverEmail);
+            });
+        });
 
-        // Reset counts for fresh calculation
-        for (const account of accounts) {
+        allSenders.forEach(email => {
+            if (!plan.accountStats.has(email)) {
+                console.log(`⚠️  Initializing missing account stats for: ${email}`);
+                plan.accountStats.set(email, { sent: 0, received: 0 });
+            }
+        });
+
+        allReceivers.forEach(email => {
+            if (!plan.poolStats.has(email)) {
+                console.log(`⚠️  Initializing missing pool stats for: ${email}`);
+                plan.poolStats.set(email, { received: 0, replied: 0 });
+            }
+        });
+    }
+
+    async createBalancedPairs(warmupAccounts, poolAccounts, sendLimits, sentCounts, poolReceiveCounts) {
+        console.log(`\n🔄 Creating time-based warmup schedule`);
+
+        const rounds = [];
+        const now = new Date();
+
+        // Reset counts
+        for (const account of warmupAccounts) {
             sentCounts.set(account.email, 0);
-            receivedCounts.set(account.email, 0);
+        }
+        for (const pool of poolAccounts) {
+            poolReceiveCounts.set(pool.email, 0);
         }
 
-        // Create complete round-robin: each account sends to every other account
-        for (const sender of accounts) {
-            const senderEmail = sender.email;
-            const senderLimit = sendLimits.get(senderEmail);
+        // STEP 1: Immediate Pool → Warmup (First emails within 2 minutes)
+        console.log(`\n📥 ROUND 1: Immediate Pool → Warmup (First emails in 2 minutes)`);
+        const round1Pairs = [];
 
-            console.log(`\n   🔄 Processing sender: ${senderEmail} (limit: ${senderLimit})`);
+        for (const warmupAccount of warmupAccounts) {
+            const warmupEmail = warmupAccount.email;
+            const warmupReplyRate = await computeReplyRate(warmupAccount) || 0.25;
+            const warmupSendLimit = sendLimits.get(warmupEmail);
+            const warmupDayCount = warmupAccount.warmupDayCount || 0;
 
-            // Find all other accounts to send to
-            const otherAccounts = accounts.filter(acc => acc.email !== senderEmail);
+            console.log(`   🔄 ${warmupEmail}: Day ${warmupDayCount} - Send Limit: ${warmupSendLimit}`);
 
-            for (const receiver of otherAccounts) {
-                // Check if sender has reached their daily limit
-                if (sentCounts.get(senderEmail) >= senderLimit) {
-                    console.log(`     ⚠️  ${senderEmail} reached daily limit, skipping remaining sends`);
-                    break;
+            // DAY 0 LOGIC: Only receive, no sending
+            if (warmupDayCount === 0) {
+                const initialReceiveEmails = Math.min(4, Math.max(3, poolAccounts.length));
+                console.log(`     📥 Day 0 Strategy: Receiving ${initialReceiveEmails} emails (NO SENDING)`);
+
+                for (let i = 0; i < initialReceiveEmails; i++) {
+                    const poolAccount = poolAccounts[i % poolAccounts.length];
+
+                    const pair = {
+                        sender: poolAccount,
+                        senderEmail: poolAccount.email,
+                        senderType: 'pool',
+                        receiver: warmupAccount,
+                        receiverEmail: warmupEmail,
+                        receiverType: this.getSenderType(warmupAccount),
+                        replyRate: warmupReplyRate,
+                        warmupDay: warmupDayCount,
+                        round: 1,
+                        isInitialEmail: true,
+                        direction: 'POOL_TO_WARMUP',
+                        scheduleDelay: 2 * 60 * 1000
+                    };
+
+                    round1Pairs.push(pair);
+                    poolReceiveCounts.set(poolAccount.email, (poolReceiveCounts.get(poolAccount.email) || 0) + 1);
+                    console.log(`       📥 ${poolAccount.email} → ${warmupEmail} (receive ${i + 1}/${initialReceiveEmails})`);
                 }
+            }
+            // DAY 1+ LOGIC: Balanced sending and receiving
+            else {
+                const receiveEmails = Math.min(3, Math.floor(warmupSendLimit * 0.6));
+                console.log(`     🔄 Day ${warmupDayCount}+ Strategy: Receive ${receiveEmails}, Send ${warmupSendLimit}`);
 
-                const replyRate = await computeReplyRate(sender);
+                for (let i = 0; i < receiveEmails; i++) {
+                    const poolAccount = poolAccounts[i % poolAccounts.length];
 
-                allPairs.push({
-                    sender,
-                    receiver,
-                    senderEmail: senderEmail,
-                    receiverEmail: receiver.email,
-                    replyRate: replyRate,
-                    warmupDay: sender.warmupDayCount,
-                    senderType: this.getSenderType(sender),
-                    round: 1
-                });
+                    const pair = {
+                        sender: poolAccount,
+                        senderEmail: poolAccount.email,
+                        senderType: 'pool',
+                        receiver: warmupAccount,
+                        receiverEmail: warmupEmail,
+                        receiverType: this.getSenderType(warmupAccount),
+                        replyRate: warmupReplyRate,
+                        warmupDay: warmupDayCount,
+                        round: 1,
+                        isInitialEmail: true,
+                        direction: 'POOL_TO_WARMUP',
+                        scheduleDelay: 2 * 60 * 1000
+                    };
 
-                // Update counts
-                sentCounts.set(senderEmail, sentCounts.get(senderEmail) + 1);
-                receivedCounts.set(receiver.email, receivedCounts.get(receiver.email) + 1);
-
-                console.log(`     📤 ${senderEmail} → ${receiver.email} (${sentCounts.get(senderEmail)}/${senderLimit})`);
+                    round1Pairs.push(pair);
+                    poolReceiveCounts.set(poolAccount.email, (poolReceiveCounts.get(poolAccount.email) || 0) + 1);
+                    console.log(`       📥 ${poolAccount.email} → ${warmupEmail} (receive ${i + 1}/${receiveEmails})`);
+                }
             }
         }
 
-        // If we still have capacity, create additional exchanges
-        let additionalRound = 2;
-        let hasCapacity = true;
+        rounds.push({
+            roundNumber: 1,
+            pairs: round1Pairs,
+            type: 'IMMEDIATE_RECEIVE',
+            scheduleDelay: 2 * 60 * 1000
+        });
 
-        while (hasCapacity && additionalRound <= 3) { // Max 3 rounds
-            hasCapacity = false;
-            const roundPairs = [];
+        // STEP 2: Warmup Replies (30-60 minutes after receiving)
+        console.log(`\n📨 ROUND 2: Warmup Replies (30-60 minutes after receiving)`);
+        const round2Pairs = [];
 
-            for (const sender of accounts) {
-                const senderEmail = sender.email;
-                const currentSent = sentCounts.get(senderEmail);
-                const senderLimit = sendLimits.get(senderEmail);
+        for (const pair of round1Pairs) {
+            if (Math.random() < pair.replyRate) {
+                const replyPair = {
+                    sender: pair.receiver,
+                    senderEmail: pair.receiverEmail,
+                    senderType: pair.receiverType,
+                    receiver: pair.sender,
+                    receiverEmail: pair.senderEmail,
+                    receiverType: 'pool',
+                    replyRate: 1.0,
+                    warmupDay: pair.warmupDay,
+                    round: 2,
+                    isInitialEmail: false,
+                    direction: 'WARMUP_REPLY',
+                    originalPair: pair,
+                    scheduleDelay: (30 + Math.random() * 30) * 60 * 1000
+                };
 
-                if (currentSent < senderLimit) {
-                    hasCapacity = true;
+                round2Pairs.push(replyPair);
+                sentCounts.set(pair.receiverEmail, (sentCounts.get(pair.receiverEmail) || 0) + 1);
+                console.log(`     📨 ${pair.receiverEmail} → ${pair.senderEmail} (reply in 30-60 mins)`);
+            }
+        }
 
-                    // Find a receiver who has received fewer emails
-                    const potentialReceivers = accounts
-                        .filter(acc => acc.email !== senderEmail)
-                        .sort((a, b) => receivedCounts.get(a.email) - receivedCounts.get(b.email));
+        rounds.push({
+            roundNumber: 2,
+            pairs: round2Pairs,
+            type: 'WARMUP_REPLIES',
+            scheduleDelay: 45 * 60 * 1000
+        });
 
-                    if (potentialReceivers.length > 0) {
-                        const receiver = potentialReceivers[0];
-                        const replyRate = await computeReplyRate(sender);
+        // STEP 3: Warmup → Pool New Emails (2-4 hours later) - ONLY FOR DAY 1+
+        console.log(`\n📤 ROUND 3: Warmup → Pool New Emails (2-4 hours later)`);
+        const round3Pairs = [];
 
-                        roundPairs.push({
-                            sender,
-                            receiver,
-                            senderEmail: senderEmail,
-                            receiverEmail: receiver.email,
-                            replyRate: replyRate,
-                            warmupDay: sender.warmupDayCount,
-                            senderType: this.getSenderType(sender),
-                            round: additionalRound
-                        });
+        for (const warmupAccount of warmupAccounts) {
+            const warmupEmail = warmupAccount.email;
+            const warmupSendLimit = sendLimits.get(warmupEmail);
+            const warmupDayCount = warmupAccount.warmupDayCount || 0;
 
-                        sentCounts.set(senderEmail, currentSent + 1);
-                        receivedCounts.set(receiver.email, receivedCounts.get(receiver.email) + 1);
+            // FIX: Only send new emails if it's day 1 or later
+            if (warmupDayCount >= 1) {
+                const repliesSent = round2Pairs.filter(pair => pair.senderEmail === warmupEmail).length;
+                const remainingSendCapacity = Math.max(0, warmupSendLimit - repliesSent);
 
-                        console.log(`     📤 [Round ${additionalRound}] ${senderEmail} → ${receiver.email} (${currentSent + 1}/${senderLimit})`);
+                if (remainingSendCapacity > 0) {
+                    console.log(`   🔄 ${warmupEmail}: Day ${warmupDayCount} - Sending ${remainingSendCapacity} new emails (limit: ${warmupSendLimit}, replies: ${repliesSent})`);
+
+                    for (let i = 0; i < remainingSendCapacity; i++) {
+                        const poolAccount = poolAccounts[(repliesSent + i) % poolAccounts.length];
+
+                        const pair = {
+                            sender: warmupAccount,
+                            senderEmail: warmupEmail,
+                            senderType: this.getSenderType(warmupAccount),
+                            receiver: poolAccount,
+                            receiverEmail: poolAccount.email,
+                            receiverType: 'pool',
+                            replyRate: 0.1,
+                            warmupDay: warmupDayCount,
+                            round: 3,
+                            isInitialEmail: true,
+                            direction: 'WARMUP_TO_POOL',
+                            scheduleDelay: (120 + Math.random() * 120) * 60 * 1000
+                        };
+
+                        round3Pairs.push(pair);
+                        sentCounts.set(warmupEmail, (sentCounts.get(warmupEmail) || 0) + 1);
+                        console.log(`     📤 ${warmupEmail} → ${poolAccount.email} (new email in 2-4 hours)`);
                     }
                 }
-            }
-
-            if (roundPairs.length > 0) {
-                allPairs.push(...roundPairs);
-                additionalRound++;
+            } else {
+                console.log(`   🔄 ${warmupEmail}: Day 0 - No new emails to send (receiving only phase)`);
             }
         }
 
-        console.log(`\n   ✅ Created ${allPairs.length} total pairs across ${additionalRound - 1} rounds`);
+        rounds.push({
+            roundNumber: 3,
+            pairs: round3Pairs,
+            type: 'WARMUP_SEND_NEW',
+            scheduleDelay: 180 * 60 * 1000
+        });
 
-        // Group by rounds for time slot distribution
-        const rounds = [];
-        const pairsPerRound = Math.max(1, Math.floor(allPairs.length / 3)); // Distribute across 3 rounds max
+        // STEP 4: Additional Pool → Warmup (Spread throughout day)
+        console.log(`\n📥 ROUND 4: Additional Pool → Warmup (Spread throughout day)`);
+        const round4Pairs = [];
 
-        for (let i = 0; i < allPairs.length; i += pairsPerRound) {
-            const roundPairs = allPairs.slice(i, i + pairsPerRound);
-            if (roundPairs.length > 0) {
-                rounds.push({
-                    roundNumber: rounds.length + 1,
-                    pairs: roundPairs,
-                    emailCount: roundPairs.length
-                });
+        for (const warmupAccount of warmupAccounts) {
+            const warmupEmail = warmupAccount.email;
+            const warmupDayCount = warmupAccount.warmupDayCount || 0;
+            const initialReceived = round1Pairs.filter(p => p.receiverEmail === warmupEmail).length;
+
+            // Different strategy based on warmup day
+            let additionalNeeded;
+            if (warmupDayCount === 0) {
+                // Day 0: Get more engagement
+                additionalNeeded = Math.max(0, 2 - initialReceived);
+            } else {
+                // Day 1+: Balanced approach
+                additionalNeeded = Math.max(0, Math.min(2, 4 - initialReceived));
+            }
+
+            if (additionalNeeded > 0) {
+                console.log(`   🔄 ${warmupEmail}: Receiving ${additionalNeeded} additional emails (had ${initialReceived})`);
+
+                for (let i = 0; i < additionalNeeded; i++) {
+                    const poolAccount = poolAccounts[(initialReceived + i) % poolAccounts.length];
+
+                    const pair = {
+                        sender: poolAccount,
+                        senderEmail: poolAccount.email,
+                        senderType: 'pool',
+                        receiver: warmupAccount,
+                        receiverEmail: warmupEmail,
+                        receiverType: this.getSenderType(warmupAccount),
+                        replyRate: warmupAccount.replyRate || 0.25,
+                        warmupDay: warmupDayCount,
+                        round: 4,
+                        isInitialEmail: true,
+                        direction: 'POOL_TO_WARMUP',
+                        scheduleDelay: (180 + (i * 60)) * 60 * 1000
+                    };
+
+                    round4Pairs.push(pair);
+                    poolReceiveCounts.set(poolAccount.email, (poolReceiveCounts.get(poolAccount.email) || 0) + 1);
+                    console.log(`     📥 ${poolAccount.email} → ${warmupEmail} (additional in ${3 + i} hours)`);
+                }
             }
         }
+
+        rounds.push({
+            roundNumber: 4,
+            pairs: round4Pairs,
+            type: 'ADDITIONAL_RECEIVE',
+            scheduleDelay: 360 * 60 * 1000
+        });
+
+        const totalEmails = rounds.reduce((total, round) => total + round.pairs.length, 0);
+        console.log(`\n   ✅ Created complete warmup schedule with ${totalEmails} total emails`);
 
         return rounds;
     }
 
-    findOptimalReceiver(sender, accounts, receivedCounts, sentCounts) {
-        const senderEmail = sender.email;
-
-        // Create list of potential receivers (excluding sender)
-        const potentialReceivers = accounts
-            .filter(account => account.email !== senderEmail)
-            .map(receiver => {
-                const received = receivedCounts.get(receiver.email);
-                const sent = sentCounts.get(receiver.email);
-
-                // Calculate balance score (prefer receivers who have received fewer emails)
-                const balanceScore = -received; // Negative because we want lower received counts
-
-                return { receiver, received, sent, balanceScore };
-            })
-            .sort((a, b) => b.balanceScore - a.balanceScore); // Sort by balance (ascending received count)
-
-        return potentialReceivers.length > 0 ? potentialReceivers[0].receiver : null;
-    }
-
     async distributeToTimeSlots(rounds, plan) {
-        if (rounds.length === 0) {
+        if (!rounds || rounds.length === 0) {
             console.log('⚠️ No rounds to distribute');
             return;
         }
 
-        console.log(`\n📅 Distributing ${rounds.length} rounds to time slots...`);
+        console.log(`\n📅 Distributing emails from ${rounds.length} rounds to time slots...`);
 
-        const timeSlots = this.calculateOptimalTimeSlots(rounds.length);
+        const now = new Date();
+        let totalScheduled = 0;
 
-        rounds.forEach((round, index) => {
-            if (index < timeSlots.length) {
-                const slot = timeSlots[index];
-                const timeKey = slot.time.toISOString();
-
-                if (!plan.timeSlots.has(timeKey)) {
-                    plan.timeSlots.set(timeKey, []);
-                }
-
-                // Add all pairs from this round to the time slot
+        rounds.forEach(round => {
+            if (round.pairs && Array.isArray(round.pairs)) {
                 round.pairs.forEach(pair => {
+                    const delay = pair.scheduleDelay || round.scheduleDelay || 0;
+                    const slotTime = new Date(now.getTime() + delay);
+                    const timeKey = slotTime.toISOString();
+
+                    if (!plan.timeSlots.has(timeKey)) {
+                        plan.timeSlots.set(timeKey, []);
+                    }
+
                     plan.timeSlots.get(timeKey).push(pair);
                     plan.totalEmails++;
+                    totalScheduled++;
 
-                    // Update account stats
+                    // FIX: Initialize stats if missing
+                    if (!plan.accountStats.has(pair.senderEmail)) {
+                        plan.accountStats.set(pair.senderEmail, { sent: 0, received: 0 });
+                    }
+                    if (!plan.poolStats.has(pair.receiverEmail)) {
+                        plan.poolStats.set(pair.receiverEmail, { received: 0, replied: 0 });
+                    }
+
                     const senderStats = plan.accountStats.get(pair.senderEmail);
                     const receiverStats = plan.accountStats.get(pair.receiverEmail);
-                    senderStats.sent++;
-                    receiverStats.received++;
-                });
+                    const poolStats = plan.poolStats.get(pair.receiverEmail);
 
-                console.log(`   🕐 ${slot.time.toLocaleTimeString()} - Round ${round.roundNumber} (${round.pairs.length} emails)`);
+                    // FIX: Correct stats counting based on direction
+                    if (pair.direction === 'POOL_TO_WARMUP') {
+                        // Pool sends, warmup receives
+                        if (senderStats) senderStats.sent++; // Pool account sent
+                        if (receiverStats) receiverStats.received++; // Warmup account received
+                    } else if (pair.direction === 'WARMUP_REPLY' || pair.direction === 'WARMUP_TO_POOL') {
+                        // Warmup sends, pool receives
+                        if (senderStats) senderStats.sent++; // Warmup account sent
+                        if (poolStats) poolStats.received++; // Pool account received
+                    }
+
+                    const delayMinutes = Math.round(delay / (60 * 1000));
+                    console.log(`   🕐 ${slotTime.toLocaleTimeString()} (in ${delayMinutes} mins): ${pair.senderEmail} → ${pair.receiverEmail} [${pair.direction}]`);
+                });
             }
         });
 
-        console.log(`✅ Distributed ${plan.totalEmails} emails across ${plan.timeSlots.size} time slots`);
-
-        // Log final distribution
-        console.log('\n📊 FINAL DISTRIBUTION:');
-        for (const [email, stats] of plan.accountStats) {
-            console.log(`   ${email}: Sent ${stats.sent}, Received ${stats.received}`);
-        }
+        console.log(`✅ Successfully scheduled ${totalScheduled} emails with proper delays`);
     }
-
-    calculateOptimalTimeSlots(totalRounds) {
-        const timeSlots = [];
-        const now = new Date();
-
-        console.log(`   ⏱️ Scheduling ${totalRounds} rounds with proper spacing`);
-
-        for (let i = 0; i < totalRounds; i++) {
-            // ✅ IMPROVED: Better timing for email sending
-            // Start first round in 2 minutes, then space out by 5-10 minutes
-            const baseDelay = 2 * 60 * 1000; // 2 minutes for first round
-            const additionalDelay = i * 8 * 60 * 1000; // 8 minutes between rounds
-
-            const slotTime = new Date(now.getTime() + baseDelay + additionalDelay);
-
-            timeSlots.push({ time: slotTime, round: i + 1 });
-
-            const minutesFromNow = Math.round((baseDelay + additionalDelay) / (60 * 1000));
-            console.log(`   🚀 Round ${i + 1}: ${slotTime.toLocaleTimeString()} (in ${minutesFromNow} minutes)`);
-        }
-
-        return timeSlots;
-    }
-
-    validateDistribution(accounts, sentCounts, receivedCounts, sendLimits) {
+    validateDistribution(warmupAccounts, poolAccounts, sentCounts, poolReceiveCounts, sendLimits) {
         console.log('\n📊 DISTRIBUTION VALIDATION:');
         console.log('='.repeat(50));
 
-        let totalSent = 0;
-        let totalReceived = 0;
+        let totalWarmupSent = 0;
+        let totalWarmupReceived = 0;
+        let totalPoolSent = 0;
         let allLimitsMet = true;
 
-        for (const account of accounts) {
+        console.log('🔥 WARMUP ACCOUNTS:');
+        for (const account of warmupAccounts) {
             const email = account.email;
-            const sent = sentCounts.get(email);
-            const received = receivedCounts.get(email);
+            const sent = sentCounts.get(email) || 0;
+            const received = poolReceiveCounts.get(email) || 0;
             const limit = sendLimits.get(email);
 
-            totalSent += sent;
-            totalReceived += received;
+            totalWarmupSent += sent;
+            totalWarmupReceived += received;
 
-            const status = sent >= limit ? '✅' : '❌';
+            const sentStatus = sent >= limit ? '✅' : '❌';
+            const receivedStatus = received >= 2 ? '✅' : '❌';
+
             console.log(`   ${email}:`);
-            console.log(`     Sent: ${sent}/${limit} ${status}`);
-            console.log(`     Received: ${received}`);
+            console.log(`     Sent: ${sent}/${limit} ${sentStatus}`);
+            console.log(`     Received: ${received} ${receivedStatus}`);
 
-            if (sent < limit) {
+            if (sent < limit || received < 2) {
                 allLimitsMet = false;
             }
         }
 
+        console.log('\n🏊 POOL ACCOUNTS:');
+        for (const pool of poolAccounts) {
+            const sent = poolReceiveCounts.get(pool.email) || 0;
+            totalPoolSent += sent;
+            console.log(`   ${pool.email}: Sent ${sent} emails`);
+        }
+
         console.log(`\n📈 SYSTEM SUMMARY:`);
-        console.log(`   Total Sent: ${totalSent}`);
-        console.log(`   Total Received: ${totalReceived}`);
-        console.log(`   Balance: ${Math.abs(totalSent - totalReceived)} difference`);
+        console.log(`   Warmup Accounts Sent: ${totalWarmupSent}`);
+        console.log(`   Warmup Accounts Received: ${totalWarmupReceived}`);
+        console.log(`   Pool Accounts Sent: ${totalPoolSent}`);
+        console.log(`   Balance Check: ${totalWarmupSent === totalWarmupReceived ? '✅' : '❌'}`);
         console.log(`   All Limits Met: ${allLimitsMet ? '✅ YES' : '❌ NO'}`);
         console.log('='.repeat(50));
     }
@@ -354,9 +527,20 @@ class IntelligentWarmupScheduler {
     async scheduleJobs(channel, warmupPlan) {
         let totalScheduled = 0;
 
+        if (!warmupPlan.timeSlots || warmupPlan.timeSlots.size === 0) {
+            console.log('⚠️  No time slots to schedule');
+            this.isRunning = false;
+            return;
+        }
+
         console.log(`\n🕐 Scheduling ${warmupPlan.timeSlots.size} time slots...`);
 
         for (const [timeString, pairs] of warmupPlan.timeSlots) {
+            if (!pairs || pairs.length === 0) {
+                console.log(`⚠️  Skipping empty time slot: ${timeString}`);
+                continue;
+            }
+
             const scheduledTime = new Date(timeString);
             const now = new Date();
             const delay = scheduledTime.getTime() - now.getTime();
@@ -364,33 +548,25 @@ class IntelligentWarmupScheduler {
             if (delay > 0) {
                 console.log(`   📅 ${scheduledTime.toLocaleTimeString()} - ${pairs.length} emails`);
 
-                // ✅ FIX: Include round information in the job
                 const job = {
                     timeSlot: timeString,
-                    pairs: pairs.map(pair => ({
-                        senderEmail: pair.senderEmail,
-                        senderType: pair.senderType,
-                        receiverEmail: pair.receiverEmail,
-                        replyRate: pair.replyRate,
-                        warmupDay: pair.warmupDay,
-                        round: pair.round // ✅ Make sure round is included
-                    })),
+                    pairs: pairs,
                     timestamp: new Date().toISOString(),
                     coordinated: true,
-                    round: pairs[0]?.round || 1 // ✅ Include overall round for the time slot
+                    round: pairs[0]?.round || 1
                 };
 
                 const timeoutId = setTimeout(async () => {
                     try {
                         console.log(`\n🎯 EXECUTING TIME SLOT: ${scheduledTime.toLocaleTimeString()}`);
-                        console.log(`   Processing ${pairs.length} emails in round ${job.round}...`);
+                        console.log(`   Processing ${pairs.length} emails...`);
 
                         await channel.sendToQueue('warmup_jobs', Buffer.from(JSON.stringify(job)), {
                             persistent: true,
                             priority: 5
                         });
 
-                        console.log(`   ✅ Job queued successfully for round ${job.round}`);
+                        console.log(`   ✅ Job queued successfully`);
                     } catch (error) {
                         console.error('❌ Error queuing job:', error);
                     }
@@ -398,104 +574,18 @@ class IntelligentWarmupScheduler {
 
                 this.scheduledJobs.set(timeString, timeoutId);
                 totalScheduled += pairs.length;
+            } else {
+                console.log(`   ⏩ Skipping past time slot: ${scheduledTime.toLocaleTimeString()}`);
             }
         }
 
-        console.log(`\n✅ Successfully scheduled ${totalScheduled} emails across ${warmupPlan.timeSlots.size} time slots`);
+        if (totalScheduled === 0) {
+            console.log('⚠️  No jobs scheduled - all time slots were in the past');
+        } else {
+            console.log(`\n✅ Successfully scheduled ${totalScheduled} emails across ${warmupPlan.timeSlots.size} time slots`);
+        }
+
         this.isRunning = false;
-    }
-
-    // ✅ NEW: Build sender config for coordinated jobs
-    buildSenderConfigForCoordinated(sender, senderType) {
-        const base = {
-            userId: sender.userId || sender.user_id,
-            name: sender.name || sender.sender_name || sender.email,
-            email: sender.email,
-            type: senderType,
-            startEmailsPerDay: sender.startEmailsPerDay,
-            increaseEmailsPerDay: sender.increaseEmailsPerDay,
-            maxEmailsPerDay: sender.maxEmailsPerDay,
-            replyRate: sender.replyRate,
-            warmupDayCount: sender.warmupDayCount,
-            industry: sender.industry
-        };
-
-        if (senderType === 'google') {
-            return {
-                ...base,
-                smtpHost: 'smtp.gmail.com',
-                smtpPort: 587,
-                smtpUser: sender.email,
-                smtpPass: sender.app_password,
-                smtpEncryption: 'TLS',
-                imapHost: 'imap.gmail.com',
-                imapPort: 993,
-                imapUser: sender.email,
-                imapPass: sender.app_password,
-                imapEncryption: 'SSL',
-            };
-        }
-
-        if (senderType === 'microsoft') {
-            return {
-                ...base,
-                smtpHost: 'smtp.office365.com',
-                smtpPort: 587,
-                smtpUser: sender.email,
-                smtpPass: sender.access_token || sender.app_password,
-                smtpEncryption: 'STARTTLS',
-                imapHost: 'outlook.office365.com',
-                imapPort: 993,
-                imapUser: sender.email,
-                imapPass: sender.access_token || sender.app_password,
-                imapEncryption: 'SSL',
-            };
-        }
-
-        // SMTP account
-        return {
-            ...base,
-            smtpHost: sender.smtp_host,
-            smtpPort: sender.smtp_port || 587,
-            smtpUser: sender.smtp_user || sender.email,
-            smtpPass: sender.smtp_pass,
-            smtpEncryption: sender.smtp_encryption || 'TLS',
-            imapHost: sender.imap_host,
-            imapPort: sender.imap_port || 993,
-            imapUser: sender.imap_user || sender.email,
-            imapPass: sender.imap_pass || sender.smtp_pass,
-            imapEncryption: sender.imap_encryption || 'SSL',
-        };
-    }
-
-    async getSender(senderType, email) {
-        try {
-            let senderModel;
-            switch (senderType) {
-                case 'google':
-                    senderModel = GoogleUser;
-                    break;
-                case 'microsoft':
-                    senderModel = MicrosoftUser;
-                    break;
-                case 'smtp':
-                    senderModel = SmtpAccount;
-                    break;
-                default:
-                    throw new Error(`Unknown sender type: ${senderType}`);
-            }
-
-            const sender = await senderModel.findOne({ where: { email } });
-            if (!sender) {
-                console.error(`❌ Sender not found: ${email} for type: ${senderType}`);
-                return null;
-            }
-
-            return sender;
-        } catch (error) {
-            console.error(`❌ Error fetching sender ${email} for type ${senderType}:`, error.message);
-            return null;
-        }
     }
 
     getSenderType(sender) {
@@ -519,12 +609,12 @@ class IntelligentWarmupScheduler {
     stopScheduler() {
         this.clearScheduledJobs();
         this.isRunning = false;
-        console.log('🛑 Intelligent warmup scheduler stopped');
+        console.log('🛑 Warmup scheduler stopped');
     }
 
     async incrementWarmupDayCount() {
         try {
-            const activeAccounts = await this.getActiveAccounts();
+            const activeAccounts = await this.getActiveWarmupAccounts();
             for (const account of activeAccounts) {
                 const newDayCount = (account.warmupDayCount || 0) + 1;
 
@@ -551,13 +641,45 @@ class IntelligentWarmupScheduler {
         }
     }
 
+    async triggerImmediateScheduling() {
+        try {
+            console.log('🚀 TRIGGER: Immediate scheduling requested...');
+
+            if (this.isRunning) {
+                console.log('🔄 Scheduler already running, waiting for current cycle to complete...');
+                return;
+            }
+
+            this.clearScheduledJobs();
+            await this.scheduleWarmup();
+
+            console.log('✅ TRIGGER: Immediate scheduling completed successfully');
+        } catch (error) {
+            console.error('❌ TRIGGER: Immediate scheduling failed:', error);
+            throw error;
+        }
+    }
+
+    // NEW: Helper function to ensure values are numbers
+    ensureNumber(value, defaultValue = 3) {
+        if (typeof value === 'number' && !isNaN(value)) {
+            return value;
+        }
+        if (typeof value === 'string') {
+            const parsed = parseInt(value, 10);
+            if (!isNaN(parsed)) return parsed;
+        }
+        console.log(`⚠️  Converting non-number value to default: ${defaultValue}`);
+        return defaultValue;
+    }
 }
 
 // Create singleton instance
-const schedulerInstance = new IntelligentWarmupScheduler();
+const schedulerInstance = new WarmupScheduler();
 
 module.exports = {
-    scheduleIntelligentWarmup: () => schedulerInstance.scheduleIntelligentWarmup(),
-    stopIntelligentScheduler: () => schedulerInstance.stopScheduler(),
-    IntelligentWarmupScheduler
+    scheduleWarmup: () => schedulerInstance.scheduleWarmup(),
+    stopScheduler: () => schedulerInstance.stopScheduler(),
+    WarmupScheduler,
+    triggerImmediateScheduling: () => schedulerInstance.triggerImmediateScheduling(),
 };
