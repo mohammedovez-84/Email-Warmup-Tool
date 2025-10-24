@@ -1,42 +1,101 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const IpDomainChecker = () => {
     const [input, setInput] = useState('');
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [history, setHistory] = useState([
-        { address: 'example.com', status: 'available', type: 'domain' },
-        { address: '8.8.8.8', status: 'taken', message: 'Google DNS', type: 'ip' }
-    ]);
+    const [history, setHistory] = useState([]);
+
+    // Typing animation states
+    const [inputPlaceholder, setInputPlaceholder] = useState('');
+    const [placeholderIndex, setPlaceholderIndex] = useState(0);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [placeholderText, setPlaceholderText] = useState("");
+
+    // Load history from localStorage on component mount
+    useEffect(() => {
+        const savedHistory = localStorage.getItem('ipDomainCheckHistory');
+        if (savedHistory) {
+            setHistory(JSON.parse(savedHistory));
+        } else {
+            // Set default history only if no saved history exists
+            setHistory([
+                { address: 'example.com', status: 'available', type: 'domain' },
+                { address: '8.8.8.8', status: 'taken', message: 'Google DNS', type: 'ip' }
+            ]);
+        }
+    }, []);
+
+    // Save history to localStorage whenever history changes
+    useEffect(() => {
+        localStorage.setItem('ipDomainCheckHistory', JSON.stringify(history));
+    }, [history]);
+
+    // Set responsive placeholder text based on screen size
+    useEffect(() => {
+        const updatePlaceholder = () => {
+            const width = window.innerWidth;
+            if (width < 640) { // sm breakpoint
+                setPlaceholderText("Enter IP or domain");
+            } else if (width < 768) { // md breakpoint  
+                setPlaceholderText("Enter IP or domain name");
+            } else if (width < 1024) { // lg breakpoint
+                setPlaceholderText("Enter IP address or domain");
+            } else {
+                setPlaceholderText("Enter IP address or domain name (e.g., 8.8.8.8 or example.com)");
+            }
+        };
+
+        updatePlaceholder();
+        window.addEventListener('resize', updatePlaceholder);
+        return () => window.removeEventListener('resize', updatePlaceholder);
+    }, []);
+
+    // Typing animation effect
+    useEffect(() => {
+        if (!placeholderText) return;
+        
+        const typeText = () => {
+            if (isDeleting) {
+                setInputPlaceholder(placeholderText.substring(0, placeholderIndex - 1));
+                setPlaceholderIndex(prev => prev - 1);
+                
+                if (placeholderIndex === 1) {
+                    setIsDeleting(false);
+                }
+            } else {
+                setInputPlaceholder(placeholderText.substring(0, placeholderIndex + 1));
+                setPlaceholderIndex(prev => prev + 1);
+                
+                if (placeholderIndex === placeholderText.length) {
+                    setTimeout(() => setIsDeleting(true), 1000);
+                }
+            }
+        };
+
+        const timer = setTimeout(typeText, isDeleting ? 10 : 30);
+        return () => clearTimeout(timer);
+    }, [placeholderIndex, isDeleting, placeholderText]);
 
     // Enhanced sample data for demonstration
     const sampleData = {
         '8.8.8.8': {
             type: 'ip',
-            // Basic Information
             address: '8.8.8.8',
             ipType: 'IPv4 Public',
             location: 'Mountain View, California, US',
             isp: 'Google LLC',
-
-            // Network Information
             asn: 'AS15169',
             organization: 'Google LLC',
             hostname: 'dns.google',
-
-            // Geolocation
             countryCode: 'US',
             coordinates: '37.4056° N, 122.0775° W',
             timezone: 'GMT-07:00',
             postalCode: '94043',
-
-            // Security & Reputation
             proxyVPN: 'No',
             threatLevel: 'Low',
             blacklistStatus: 'Clean',
             abuseContact: 'network-abuse@google.com',
-
-            // Technical Details
             networkRange: '8.8.8.0/24',
             bgpPrefix: '8.8.8.0/24',
             portStatus: {
@@ -44,13 +103,11 @@ const IpDomainChecker = () => {
                 '80': 'Open',
                 '443': 'Open'
             },
-
             status: 'taken',
             message: 'Google Public DNS'
         },
         'example.com': {
             type: 'domain',
-            // Registration Information
             address: 'example.com',
             domainStatus: 'Active',
             created: '1995-08-14',
@@ -58,8 +115,6 @@ const IpDomainChecker = () => {
             expires: '2024-08-13',
             registrar: 'Example Registrar LLC',
             domainAge: '28 years',
-
-            // DNS Records
             dnsRecords: {
                 a: ['93.184.216.34'],
                 aaaa: ['2606:2800:220:1:248:1893:25c8:1946'],
@@ -68,8 +123,6 @@ const IpDomainChecker = () => {
                 txt: ['v=spf1 include:_spf.example.com ~all'],
                 cname: ['www.example.com']
             },
-
-            // SSL Certificate
             ssl: {
                 issuer: 'Let\'s Encrypt',
                 validFrom: '2024-01-01',
@@ -78,8 +131,6 @@ const IpDomainChecker = () => {
                 sans: ['example.com', 'www.example.com'],
                 grade: 'A+'
             },
-
-            // Server Information
             server: {
                 webServer: 'nginx/1.18.0',
                 technologies: ['HTML5', 'CSS3', 'JavaScript'],
@@ -89,14 +140,11 @@ const IpDomainChecker = () => {
                 },
                 pageTitle: 'Example Domain'
             },
-
-            // Domain Reputation
             reputation: {
                 blacklistStatus: 'Clean',
                 redirectChain: ['http://example.com → https://example.com'],
                 seoRank: '1,234,567'
             },
-
             status: 'available',
             dns: 'NS1.EXAMPLE.COM, NS2.EXAMPLE.COM'
         },
@@ -146,7 +194,6 @@ const IpDomainChecker = () => {
             return;
         }
 
-        // Validate input
         const trimmedInput = input.trim();
         const isIP = isValidIP(trimmedInput);
         const isDomain = isValidDomain(trimmedInput);
@@ -161,15 +208,12 @@ const IpDomainChecker = () => {
 
         setLoading(true);
 
-        // Simulate API call with timeout
         setTimeout(() => {
             let result;
 
-            // Check if input is in sample data
             if (sampleData[trimmedInput]) {
                 result = sampleData[trimmedInput];
             } else {
-                // Generate enhanced random result for demonstration
                 if (isIP) {
                     result = {
                         type: 'ip',
@@ -247,10 +291,20 @@ const IpDomainChecker = () => {
             setResults(result);
             setLoading(false);
 
-            // Add to history only if it's a valid result (not error)
             if (result.type !== 'error') {
                 setHistory(prevHistory => {
-                    const newHistory = [{ ...result }, ...prevHistory];
+                    // Create a simple history item with only the needed data
+                    const newHistoryItem = {
+                        address: result.address,
+                        status: result.status,
+                        type: result.type,
+                        message: result.message
+                    };
+                    
+                    // Remove if already exists and add to beginning
+                    const filteredHistory = prevHistory.filter(item => item.address !== result.address);
+                    const newHistory = [newHistoryItem, ...filteredHistory];
+                    
                     // Keep only the last 5 history items
                     return newHistory.slice(0, 5);
                 });
@@ -264,406 +318,444 @@ const IpDomainChecker = () => {
         }
     };
 
-    return (
-        <div className="min-h-screen bg-gray-50 text-gray-900 flex justify-center items-center p-5 font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
-            <div className="w-full max-w-full mx-4 bg-white rounded-2xl p-8 shadow-lg border border-gray-100">
-                <header className="text-center mb-8">
-                    <h1 className="text-4xl font-bold text-gray-900 mb-3">
-                        <i className="fas fa-search mr-3 text-orange-500"></i> IP Domain Checker
-                    </h1>
-                    <p className="text-gray-600 text-lg">Check IP addresses and domain availability quickly and easily</p>
-                </header>
+    const clearHistory = () => {
+        setHistory([]);
+        // Also remove from localStorage
+        localStorage.removeItem('ipDomainCheckHistory');
+    };
 
-                <div className="flex mb-6">
-                    <input
-                        type="text"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyPress={handleKeyPress}
-                        placeholder="Enter IP address or domain name (e.g., 8.8.8.8 or example.com)"
-                        className="flex-1 px-5 py-4 border border-gray-200 rounded-l-full bg-white text-gray-900 text-base outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
-                        disabled={loading}
-                    />
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 p-4 sm:p-6 font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
+            {/* Header Section - Extra Wide */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 mb-6 sm:mb-8 w-full">
+                <div className="text-center">
+                    <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-700 mb-3 sm:mb-4">
+                        <i className="fas fa-shield-alt mr-2 sm:mr-3 text-teal-600 text-xl sm:text-2xl lg:text-3xl"></i> 
+                        IP Domain Checker
+                    </h1>
+                    <p className="text-gray-600 text-sm sm:text-base lg:text-lg">
+                        Get detailed insights for any IP address or domain name.
+                    </p>
+                    
+                    {/* Stats Grid - Option 4 with Icons */}
+<div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 p-4 bg-gradient-to-br from-teal-50 via-teal-50 to-cyan-50 border border-teal-100 rounded-xl">
+    <div className="group relative text-center p-4 bg-gradient-to-br from-white to-slate-50 rounded-xl border border-slate-200 shadow-lg hover:shadow-xl hover:border-blue-300 hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        <div className="relative z-10">
+            <i className="fas fa-chart-bar text-blue-500 text-xl mb-2"></i>
+            <div className="text-2xl font-bold font-mono bg-gradient-to-br from-slate-800 to-slate-600 bg-clip-text text-transparent mb-1">1,247</div>
+            <div className="text-xs font-semibold text-slate-600 tracking-wide">Total Checks</div>
+            <div className="absolute bottom--9 left-0 right-0 h-0.5 bg-gradient-to-r from-blue-500 to-cyan-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left rounded-b-xl"></div>
+        </div>
+    </div>
+    
+    <div className="group relative text-center p-4 bg-gradient-to-br from-white to-slate-50 rounded-xl border border-slate-200 shadow-lg hover:shadow-xl hover:border-emerald-300 hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-teal-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        <div className="relative z-10">
+            <i className="fas fa-check-circle text-emerald-500 text-xl mb-2"></i>
+            <div className="text-2xl font-bold font-mono bg-gradient-to-br from-emerald-700 to-teal-600 bg-clip-text text-transparent mb-1">84%</div>
+            <div className="text-xs font-semibold text-slate-600 tracking-wide">Success Rate</div>
+            <div className="absolute bottom--9 left-0 right-0 h-0.5 bg-gradient-to-r from-emerald-500 to-teal-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left rounded-b-xl"></div>
+        </div>
+    </div>
+    
+    <div className="group relative text-center p-4 bg-gradient-to-br from-white to-slate-50 rounded-xl border border-slate-200 shadow-lg hover:shadow-xl hover:border-purple-300 hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        <div className="relative z-10">
+            <i className="fas fa-network-wired text-purple-500 text-xl mb-2"></i>
+            <div className="text-2xl font-bold font-mono bg-gradient-to-br from-purple-700 to-indigo-600 bg-clip-text text-transparent mb-1">563</div>
+            <div className="text-xs font-semibold text-slate-600 tracking-wide">IP Checks</div>
+            <div className="absolute bottom--9 left-0 right-0 h-0.5 bg-gradient-to-r from-purple-500 to-indigo-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left rounded-b-xl"></div>
+        </div>
+    </div>
+    
+    <div className="group relative text-center p-4 bg-gradient-to-br from-white to-slate-50 rounded-xl border border-slate-200 shadow-lg hover:shadow-xl hover:border-orange-300 hover:-translate-y-1 transition-all duration-300 cursor-pointer overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-orange-500/5 to-amber-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+        <div className="relative z-10">
+            <i className="fas fa-globe text-orange-500 text-xl mb-2"></i>
+            <div className="text-2xl font-bold font-mono bg-gradient-to-br from-orange-700 to-amber-600 bg-clip-text text-transparent mb-1">684</div>
+            <div className="text-xs font-semibold text-slate-600 tracking-wide">Domain Checks</div>
+            <div className="absolute bottom--9 left-0 right-0 h-0.5 bg-gradient-to-r from-orange-500 to-amber-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left rounded-b-xl"></div>
+        </div>
+    </div>
+</div>
+                </div>
+            </div>
+
+            {/* Input Section - Extra Wide */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 mb-6 sm:mb-8 w-full">
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+                    <div className="flex-1">
+                        <input
+                            type="text"
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            onKeyPress={handleKeyPress}
+                            placeholder={inputPlaceholder}
+                            className="w-full px-4 sm:px-6 py-3 sm:py-4 border border-gray-300 rounded-xl bg-white text-gray-900 text-sm sm:text-base outline-none focus:border-teal-500 focus:ring-2 sm:focus:ring-4 focus:ring-teal-100 transition-all"
+                            disabled={loading}
+                        />
+                    </div>
                     <button
                         onClick={handleCheck}
                         disabled={loading}
-                        className={`px-6 py-4 border-none rounded-r-full font-semibold transition-all duration-300 ${loading
-                                ? 'bg-orange-400 text-white shadow-md opacity-70 cursor-not-allowed'
-                                : 'bg-orange-500 text-white shadow-md hover:bg-orange-600 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer'
+                        className={`px-4 sm:px-8 py-3 sm:py-4 border-none rounded-xl font-semibold text-sm sm:text-lg transition-all duration-300 min-w-[120px] sm:min-w-[160px] ${loading
+                                ? 'bg-gradient-to-r from-teal-400 to-teal-500 text-white shadow-md opacity-70 cursor-not-allowed'
+                                : 'bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md hover:from-teal-700 hover:to-teal-800 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer'
                             }`}
                     >
-                        {loading ? 'Checking...' : 'Check Now'}
+                        {loading ? (
+                            <span className="flex items-center justify-center text-xs sm:text-base">
+                                <i className="fas fa-spinner animate-spin mr-2"></i>
+                                Checking...
+                            </span>
+                        ) : (
+                            <span className="flex items-center justify-center text-xs sm:text-base">
+                                <i className="fas fa-search mr-2"></i>
+                                Check Now
+                            </span>
+                        )}
                     </button>
                 </div>
+            </div>
 
-                <div className="bg-white border-t-4 border-orange-500 rounded-lg p-6 mt-16 shadow-sm">
-                    <h2 className="text-2xl text-gray-900 mb-4 flex items-center gap-3 font-semibold">
-                        <i className="fas fa-info-circle text-orange-500"></i> Results
+            {/* Results Section - Extra Wide */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-6 sm:mb-8 w-full">
+                <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 sm:py-5">
+                    <h2 className="text-xl sm:text-2xl font-bold text-gray-700 flex items-center gap-3">
+                        <i className="fas fa-history text-teal-600 text-xl"></i>
+                        Analysis Results
                     </h2>
-                    <div>
-                        {loading ? (
-                            <div className="text-center py-8 text-gray-700 text-xl">
-                                <i className="fas fa-spinner animate-spin mr-3 text-orange-500"></i> Checking {input}...
-                            </div>
-                        ) : results ? (
-                            results.type === 'error' ? (
-                                // Error message display
-                                <div className="text-center py-8">
-                                    <div className="bg-red-50 border border-red-200 rounded-2xl p-6 max-w-md mx-auto">
-                                        <i className="fas fa-exclamation-triangle text-red-500 text-4xl mb-4"></i>
-                                        <h3 className="text-red-800 text-xl font-semibold mb-2">Invalid Input</h3>
-                                        <p className="text-red-600">{results.message}</p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    {results.type === 'ip' ? (
-                                        <>
-                                            {/* Basic Information */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-info-circle text-orange-500"></i> Basic Information
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">IP Address:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.address}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">IP Type:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.ipType}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Location:</span>
-                                                        <span className="text-teal-600 font-semibold text-right max-w-[60%] break-words">{results.location}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">ISP:</span>
-                                                        <span className="text-teal-600 font-semibold text-right max-w-[60%] break-words">{results.isp}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Network Information */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-sitemap text-orange-500"></i> Network Information
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">ASN:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.asn}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Organization:</span>
-                                                        <span className="text-teal-600 font-semibold text-right max-w-[60%] break-words">{results.organization}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Hostname:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.hostname}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Geolocation */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-globe-americas text-orange-500"></i> Geolocation
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Country Code:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.countryCode}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Coordinates:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.coordinates}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Timezone:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.timezone}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Postal Code:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.postalCode}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Security & Reputation */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-shield-alt text-orange-500"></i> Security & Reputation
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Proxy/VPN:</span>
-                                                        <span className={`font-semibold ${results.proxyVPN === 'No' ? 'text-teal-600' : 'text-red-600'}`}>
-                                                            {results.proxyVPN}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Threat Level:</span>
-                                                        <span className={`font-semibold ${results.threatLevel === 'Low' ? 'text-teal-600' :
-                                                                results.threatLevel === 'Medium' ? 'text-orange-500' : 'text-red-600'
-                                                            }`}>
-                                                            {results.threatLevel}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Blacklist Status:</span>
-                                                        <span className={`font-semibold ${results.blacklistStatus === 'Clean' ? 'text-teal-600' : 'text-red-600'}`}>
-                                                            {results.blacklistStatus}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Abuse Contact:</span>
-                                                        <span className="text-teal-600 font-semibold text-right max-w-[60%] break-words">{results.abuseContact}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Technical Details */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-cogs text-orange-500"></i> Technical Details
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Network Range:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.networkRange}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">BGP Prefix:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.bgpPrefix}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Port Status:</span>
-                                                        <div className="text-right">
-                                                            {Object.entries(results.portStatus || {}).map(([port, status]) => (
-                                                                <div key={port} className="text-teal-600 font-semibold">
-                                                                    Port {port}: <span className={status === 'Open' ? 'text-teal-600' : 'text-red-600'}>{status}</span>
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Status */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-check-circle text-orange-500"></i> Status
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Availability:</span>
-                                                        <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${results.status === 'available'
-                                                                ? 'bg-teal-50 text-teal-700'
-                                                                : 'bg-red-50 text-red-700'
-                                                            }`}>
-                                                            {results.status === 'available' ? 'Available' : (results.message || 'Taken')}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Response Time:</span>
-                                                        <span className="text-teal-600 font-semibold">{Math.floor(Math.random() * 100)} ms</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            {/* Domain Registration */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-globe text-orange-500"></i> Registration Information
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Domain:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.address}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Status:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.domainStatus}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Registrar:</span>
-                                                        <span className="text-teal-600 font-semibold text-right max-w-[60%] break-words">{results.registrar}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Created:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.created}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Updated:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.updated}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Expires:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.expires}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Domain Age:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.domainAge}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* DNS Records */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-server text-orange-500"></i> DNS Records
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    {Object.entries(results.dnsRecords || {}).map(([type, records]) => (
-                                                        <div key={type} className="flex justify-between items-start">
-                                                            <span className="text-gray-600 font-normal">{type.toUpperCase()} Records:</span>
-                                                            <div className="text-right max-w-[60%]">
-                                                                {records.map((record, idx) => (
-                                                                    <div key={idx} className="text-teal-600 font-semibold break-words">
-                                                                        {record}
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            </div>
-
-                                            {/* SSL Certificate */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-lock text-orange-500"></i> SSL Certificate
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Issuer:</span>
-                                                        <span className="text-teal-600 font-semibold text-right max-w-[60%] break-words">{results.ssl?.issuer}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Valid From:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.ssl?.validFrom}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Valid To:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.ssl?.validTo}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Subject:</span>
-                                                        <span className="text-teal-600 font-semibold text-right max-w-[60%] break-words">{results.ssl?.subject}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">SSL Grade:</span>
-                                                        <span className={`font-semibold ${results.ssl?.grade === 'A+' ? 'text-teal-600' :
-                                                                results.ssl?.grade === 'A' ? 'text-teal-500' :
-                                                                    results.ssl?.grade === 'B' ? 'text-orange-500' : 'text-red-600'
-                                                            }`}>
-                                                            {results.ssl?.grade}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Server Information */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-desktop text-orange-500"></i> Server Information
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Web Server:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.server?.webServer}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Page Title:</span>
-                                                        <span className="text-teal-600 font-semibold text-right max-w-[60%] break-words">{results.server?.pageTitle}</span>
-                                                    </div>
-                                                    <div className="flex justify-between items-start">
-                                                        <span className="text-gray-600 font-normal">Technologies:</span>
-                                                        <div className="text-right max-w-[60%]">
-                                                            {results.server?.technologies?.map((tech, idx) => (
-                                                                <div key={idx} className="text-teal-600 font-semibold">
-                                                                    {tech}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Domain Reputation */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-chart-line text-orange-500"></i> Domain Reputation
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Blacklist Status:</span>
-                                                        <span className={`font-semibold ${results.reputation?.blacklistStatus === 'Clean' ? 'text-teal-600' : 'text-red-600'}`}>
-                                                            {results.reputation?.blacklistStatus}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">SEO Rank:</span>
-                                                        <span className="text-teal-600 font-semibold">{results.reputation?.seoRank}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Status */}
-                                            <div className="bg-gray-50 p-6 rounded-xl transition-all duration-300 hover:shadow-md border border-gray-100">
-                                                <h3 className="text-gray-900 mb-4 text-xl flex items-center gap-3 -ml-3 font-semibold">
-                                                    <i className="fas fa-check-circle text-orange-500"></i> Status
-                                                </h3>
-                                                <div className="space-y-3">
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Availability:</span>
-                                                        <span className={`inline-block px-3 py-1 rounded-full text-sm font-semibold ${results.status === 'available'
-                                                                ? 'bg-teal-50 text-teal-700'
-                                                                : 'bg-red-50 text-red-700'
-                                                            }`}>
-                                                            {results.status === 'available' ? 'Available' : (results.message || 'Taken')}
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex justify-between items-center">
-                                                        <span className="text-gray-600 font-normal">Response Time:</span>
-                                                        <span className="text-teal-600 font-semibold">{Math.floor(Math.random() * 100)} ms</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            )
-                        ) : (
-                            <div className="text-center py-8 text-gray-700 text-xl">
-                                {/* <i className="fas fa-info-circle mr-3"></i> Enter an IP or domain to check */}
-                            </div>
-                        )}
-                    </div>
                 </div>
+                
+                <div className="p-4 sm:p-6">
+                    {loading ? (
+                        <div className="text-center py-8">
+                            <div className="flex flex-col items-center justify-center">
+                                <i className="fas fa-spinner animate-spin text-4xl text-teal-600 mb-4"></i>
+                                <p className="text-gray-700 text-xl font-medium">Analyzing {input}...</p>
+                                <p className="text-gray-500 text-base mt-2">This may take a few moments</p>
+                            </div>
+                        </div>
+                    ) : results ? (
+                        results.type === 'error' ? (
+                            <div className="text-center py-8">
+                                <div className="bg-red-50 border border-red-200 rounded-xl p-6 sm:p-8 max-w-md mx-auto">
+                                    <i className="fas fa-exclamation-triangle text-red-500 text-4xl sm:text-5xl mb-4"></i>
+                                    <h3 className="text-red-800 text-lg sm:text-xl font-semibold mb-3">Invalid Input</h3>
+                                    <p className="text-red-600 text-sm sm:text-base">{results.message}</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4 sm:gap-6">
+                                {results.type === 'ip' ? (
+                                    <>
+                                        {/* Basic Information */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-info-circle text-teal-600 text-base"></i>
+                                                Basic Information
+                                            </h3>
+                                            <div className="space-y-3">
+                                                <FixedInfoRow label="IP Address" value={results.address} />
+                                                <FixedInfoRow label="IP Type" value={results.ipType} />
+                                                <FixedInfoRow label="Location" value={results.location} />
+                                                <FixedInfoRow label="ISP" value={results.isp} />
+                                            </div>
+                                        </div>
 
-                <div className="mt-8">
-                    <h2 className="text-2xl text-gray-900 mb-4 flex items-center gap-3 font-semibold">
-                        <i className="fas fa-history text-orange-500"></i> Recent Checks
+                                        {/* Network Information */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-sitemap text-teal-600 text-base"></i>
+                                                Network Information
+                                            </h3>
+                                            <div className="space-y-3">
+                                                <FixedInfoRow label="ASN" value={results.asn} />
+                                                <FixedInfoRow label="Organization" value={results.organization} />
+                                                <FixedInfoRow label="Hostname" value={results.hostname} />
+                                            </div>
+                                        </div>
+
+                                        {/* Geolocation */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-globe-americas text-teal-600 text-base"></i>
+                                                Geolocation
+                                            </h3>
+                                            <div className="space-y-3">
+                                                <FixedInfoRow label="Country Code" value={results.countryCode} />
+                                                <FixedInfoRow label="Coordinates" value={results.coordinates} />
+                                                <FixedInfoRow label="Timezone" value={results.timezone} />
+                                                <FixedInfoRow label="Postal Code" value={results.postalCode} />
+                                            </div>
+                                        </div>
+
+                                        {/* Security & Reputation */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-shield-alt text-teal-600 text-base"></i>
+                                                Security & Reputation
+                                            </h3>
+                                            <div className="space-y-3">
+                                                <FixedStatusRow 
+                                                    label="Proxy/VPN" 
+                                                    value={results.proxyVPN} 
+                                                    isGood={results.proxyVPN === 'No'} 
+                                                />
+                                                <FixedStatusRow 
+                                                    label="Threat Level" 
+                                                    value={results.threatLevel} 
+                                                    isGood={results.threatLevel === 'Low'} 
+                                                    isWarning={results.threatLevel === 'Medium'}
+                                                />
+                                                <FixedStatusRow 
+                                                    label="Blacklist Status" 
+                                                    value={results.blacklistStatus} 
+                                                    isGood={results.blacklistStatus === 'Clean'} 
+                                                />
+                                                <FixedInfoRow label="Abuse Contact" value={results.abuseContact} />
+                                            </div>
+                                        </div>
+
+                                        {/* Technical Details */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-cogs text-teal-600 text-base"></i>
+                                                Technical Details
+                                            </h3>
+                                            <div className="space-y-3">
+                                                <FixedInfoRow label="Network Range" value={results.networkRange} />
+                                                <FixedInfoRow label="BGP Prefix" value={results.bgpPrefix} />
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-gray-600 font-medium text-base">Port Status:</span>
+                                                    <div className="text-right">
+                                                        {Object.entries(results.portStatus || {}).map(([port, status]) => (
+                                                            <div key={port} className="text-sm">
+                                                                Port {port}: <span className={`font-medium ${status === 'Open' ? 'text-teal-600' : 'text-red-600'}`}>
+                                                                    {status}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Status */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-check-circle text-teal-600 text-base"></i>
+                                                Status
+                                            </h3>
+                                            <div className="space-y-3">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-gray-600 font-medium text-base">Availability:</span>
+                                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${results.status === 'available'
+                                                            ? 'bg-teal-100 text-teal-800 border border-teal-200'
+                                                            : 'bg-red-100 text-red-800 border border-red-200'
+                                                        }`}>
+                                                        {results.status === 'available' ? 'Available' : (results.message || 'Taken')}
+                                                    </span>
+                                                </div>
+                                                <FixedInfoRow label="Response Time" value="42 ms" />
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        {/* Domain Registration */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-globe text-teal-600 text-base"></i>
+                                                Registration Information
+                                            </h3>
+                                            <div className="space-y-3">
+                                                <FixedInfoRow label="Domain" value={results.address} />
+                                                <FixedInfoRow label="Status" value={results.domainStatus} />
+                                                <FixedInfoRow label="Registrar" value={results.registrar} />
+                                                <FixedInfoRow label="Created" value={results.created} />
+                                                <FixedInfoRow label="Updated" value={results.updated} />
+                                                <FixedInfoRow label="Expires" value={results.expires} />
+                                                <FixedInfoRow label="Domain Age" value={results.domainAge} />
+                                            </div>
+                                        </div>
+
+                                        {/* DNS Records */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-server text-teal-600 text-base"></i>
+                                                DNS Records
+                                            </h3>
+                                            <div className="space-y-3">
+                                                {Object.entries(results.dnsRecords || {}).map(([type, records]) => (
+                                                    <div key={type} className="flex justify-between items-start">
+                                                        <span className="text-gray-600 font-medium text-base">{type.toUpperCase()} Records:</span>
+                                                        <div className="text-right">
+                                                            {records.map((record, idx) => (
+                                                                <div key={idx} className="text-teal-600 font-medium text-sm break-words">
+                                                                    {record}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* SSL Certificate */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-lock text-teal-600 text-base"></i>
+                                                SSL Certificate
+                                            </h3>
+                                            <div className="space-y-3">
+                                                <FixedInfoRow label="Issuer" value={results.ssl?.issuer} />
+                                                <FixedInfoRow label="Valid From" value={results.ssl?.validFrom} />
+                                                <FixedInfoRow label="Valid To" value={results.ssl?.validTo} />
+                                                <FixedInfoRow label="Subject" value={results.ssl?.subject} />
+                                                <FixedStatusRow 
+                                                    label="SSL Grade" 
+                                                    value={results.ssl?.grade} 
+                                                    isGood={results.ssl?.grade === 'A+' || results.ssl?.grade === 'A'}
+                                                    isWarning={results.ssl?.grade === 'B'}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Server Information */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-desktop text-teal-600 text-base"></i>
+                                                Server Information
+                                            </h3>
+                                            <div className="space-y-3">
+                                                <FixedInfoRow label="Web Server" value={results.server?.webServer} />
+                                                <FixedInfoRow label="Page Title" value={results.server?.pageTitle} />
+                                                <div className="flex justify-between items-start">
+                                                    <span className="text-gray-600 font-medium text-base">Technologies:</span>
+                                                    <div className="text-right">
+                                                        {results.server?.technologies?.map((tech, idx) => (
+                                                            <div key={idx} className="text-teal-600 font-medium text-sm">
+                                                                {tech}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Domain Reputation */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-chart-line text-teal-600 text-base"></i>
+                                                Domain Reputation
+                                            </h3>
+                                            <div className="space-y-3">
+                                                <FixedStatusRow 
+                                                    label="Blacklist Status" 
+                                                    value={results.reputation?.blacklistStatus} 
+                                                    isGood={results.reputation?.blacklistStatus === 'Clean'} 
+                                                />
+                                                <FixedInfoRow label="SEO Rank" value={results.reputation?.seoRank} />
+                                            </div>
+                                        </div>
+
+                                        {/* Status */}
+                                        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-md transition-all duration-300">
+                                            <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2 -ml-2">
+                                                <i className="fas fa-check-circle text-teal-600 text-base"></i>
+                                                Status
+                                            </h3>
+                                            <div className="space-y-3">
+                                                <div className="flex justify-between items-center">
+                                                    <span className="text-gray-600 font-medium text-base">Availability:</span>
+                                                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${results.status === 'available'
+                                                            ? 'bg-teal-100 text-teal-800 border border-teal-200'
+                                                            : 'bg-red-100 text-red-800 border border-red-200'
+                                                        }`}>
+                                                        {results.status === 'available' ? 'Available' : (results.message || 'Taken')}
+                                                    </span>
+                                                </div>
+                                                <FixedInfoRow label="Response Time" value="42 ms" />
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        )
+                    ) : (
+                        <div className="text-center py-8 sm:py-12">
+                            <div className="text-gray-400 text-lg">
+                                <i className="fas fa-search text-4xl mb-4"></i>
+                                <p>Enter an IP address or domain name to begin analysis</p>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* History Section - Extra Wide */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden w-full">
+                <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 sm:py-5">
+                    <h2 className="text-xl sm:text-2xl font-bold text-gray-700 flex items-center gap-3">
+                        <i className="fas fa-history text-teal-600 text-xl"></i>
+                        Recent Checks
                     </h2>
-                    <div>
+                </div>
+                <div className="p-4 sm:p-6">
+                    <div className="space-y-3 mb-4">
                         {history.map((item, index) => (
-                            <div key={index} className="flex justify-between px-4 py-3 bg-gray-50 rounded-xl mb-3 items-center border border-gray-100 hover:shadow-sm transition-all">
-                                <span className="font-semibold text-gray-900">{item.address}</span>
-                                <span className={`text-sm px-3 py-1 rounded-full font-medium ${item.status === 'available'
-                                        ? 'bg-teal-50 text-teal-700'
-                                        : 'bg-red-50 text-red-700'
+                            <div key={index} className="flex justify-between items-center p-3 sm:p-4 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors">
+                                <div className="flex items-center gap-3">
+                                    <i className={`fas ${item.type === 'ip' ? 'fa-network-wired' : 'fa-globe'} text-teal-600 text-base`}></i>
+                                    <span className="font-semibold text-gray-900 text-sm sm:text-base">{item.address}</span>
+                                </div>
+                                <span className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium border ${item.status === 'available'
+                                        ? 'bg-teal-100 text-teal-800 border-teal-200'
+                                        : 'bg-red-100 text-red-800 border-red-200'
                                     }`}>
                                     {item.status === 'available' ? 'Available' : (item.message || 'Taken')}
                                 </span>
                             </div>
                         ))}
                     </div>
+                    
+                    {/* Clear History Button */}
+                    {history.length > 0 && (
+                        <button
+                            onClick={clearHistory}
+                            className="w-full bg-gradient-to-r from-teal-600 to-teal-700 text-white border-none px-4 sm:px-6 py-3 rounded-xl font-semibold cursor-pointer transition-all duration-300 hover:from-teal-700 hover:to-teal-800 hover:shadow-lg hover:-translate-y-0.5 shadow-md text-sm sm:text-base"
+                        >
+                            Clear History
+                        </button>
+                    )}
                 </div>
             </div>
+        </div>
+    );
+};
+
+// Fixed Helper component for info rows - Perfect alignment
+const FixedInfoRow = ({ label, value }) => (
+    <div className="flex items-center justify-between">
+        <span className="text-gray-600 font-medium text-sm sm:text-base flex-shrink-0 mr-2">{label}:</span>
+        <span className="text-teal-600 font-medium text-right text-xs sm:text-sm break-words flex-1 min-w-0">{value}</span>
+    </div>
+);
+
+// Fixed Helper component for status rows with color coding - Perfect alignment
+const FixedStatusRow = ({ label, value, isGood = false, isWarning = false }) => {
+    const getColorClass = () => {
+        if (isGood) return 'text-teal-600';
+        if (isWarning) return 'text-orange-500';
+        return 'text-red-600';
+    };
+
+    return (
+        <div className="flex items-center justify-between">
+            <span className="text-gray-600 font-medium text-sm sm:text-base flex-shrink-0 mr-2">{label}:</span>
+            <span className={`font-medium text-xs sm:text-sm ${getColorClass()} text-right flex-1 min-w-0`}>{value}</span>
         </div>
     );
 };
