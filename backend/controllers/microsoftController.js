@@ -6,7 +6,10 @@
 
 const axios = require('axios');
 require('dotenv').config();
-const MicrosoftUser = require('../models/MicrosoftUser'); // Your Sequelize model
+const SmtpAccount = require("../models/smtpAccounts")
+const GoogleUser = require("../models/GoogleUser")
+const MicrosoftUser = require("../models/MicrosoftUser")
+const EmailPool = require("../models/EmailPool")
 const { Op } = require('sequelize');
 
 
@@ -19,6 +22,27 @@ async function saveMicrosoftUser(profile, refreshToken, accessToken, expiresIn, 
     const microsoftId = profile.id;
     const expiresAt = Date.now() + expiresIn * 1000; // milliseconds
 
+    // ✅ FIRST: Check if email exists in EmailPool table
+    const existingPoolAccount = await EmailPool.findOne({
+        where: { email }
+    });
+
+    if (existingPoolAccount) {
+        throw new Error(`Email ${email} is already registered as a pool account and cannot be added as a warmup account.`);
+    }
+
+    // ✅ SECOND: Check if email exists in other warmup account tables
+    const existingGoogleAccount = await GoogleUser.findOne({ where: { email } });
+    if (existingGoogleAccount) {
+        throw new Error(`Email ${email} already exists as a Google warmup account.`);
+    }
+
+    const existingSmtpAccount = await SmtpAccount.findOne({ where: { email } });
+    if (existingSmtpAccount) {
+        throw new Error(`Email ${email} already exists as an SMTP warmup account.`);
+    }
+
+    // ✅ THIRD: Now handle Microsoft user creation/update
     const existingUser = await MicrosoftUser.findOne({
         where: {
             [Op.or]: [
@@ -33,8 +57,10 @@ async function saveMicrosoftUser(profile, refreshToken, accessToken, expiresIn, 
             name,
             refresh_token: refreshToken,
             access_token: accessToken,
-            expires_at: expiresAt
+            expires_at: expiresAt,
+            user_id: userId
         });
+        console.log(`✅ Updated existing Microsoft user: ${email}`);
     } else {
         await MicrosoftUser.create({
             name,
@@ -43,10 +69,13 @@ async function saveMicrosoftUser(profile, refreshToken, accessToken, expiresIn, 
             refresh_token: refreshToken,
             access_token: accessToken,
             expires_at: expiresAt,
-            user_id: userId, // static for now, set dynamically if needed
-            warmupStatus: 'active'
+            user_id: userId,
+            warmupStatus: 'paused' // Default to paused instead of active for safety
         });
+        console.log(`✅ Created new Microsoft user: ${email}`);
     }
+
+    return { success: true, email, isNew: !existingUser };
 }
 
 // Automatically refresh access token using refresh token

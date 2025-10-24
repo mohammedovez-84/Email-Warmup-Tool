@@ -55,8 +55,7 @@ const SmtpAccount = sequelize.define('smtpimap_accounts', {
   },
   replyRate: {
     type: DataTypes.FLOAT,
-    defaultValue: 1.0,
-    allowNull: false,
+    defaultValue: 0.15,
   },
   warmupDayCount: {
     type: DataTypes.INTEGER,
@@ -68,27 +67,12 @@ const SmtpAccount = sequelize.define('smtpimap_accounts', {
     defaultValue: 0,
   },
   description: DataTypes.TEXT,
-  warmupStartTime: {
-    type: DataTypes.TIME,
-    defaultValue: '09:00:00'
-  },
-  warmupEndTime: {
-    type: DataTypes.TIME,
-    defaultValue: '18:00:00'
-  },
-  timezone: {
-    type: DataTypes.STRING,
-    defaultValue: 'UTC'
-  },
-  preferredSendInterval: {
-    type: DataTypes.INTEGER,
-    defaultValue: 120
-  },
   is_connected: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
     defaultValue: true,
-  }
+  },
+
 }, {
   tableName: 'smtpimap_accounts',
   timestamps: false

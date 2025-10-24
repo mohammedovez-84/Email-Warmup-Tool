@@ -1,6 +1,6 @@
 import { useAuth } from '../../context/AuthContext';
-import { Card, StatCard } from '../../components/Cards';
-import { BarChart, PieChart } from '../../components/Charts';
+// import { Card, StatCard } from '../../components/Cards';
+// import { BarChart, PieChart } from '../../components/Charts';
 
 export default function SuperDashboard() {
     const { user } = useAuth();
@@ -41,7 +41,7 @@ export default function SuperDashboard() {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-bold text-gray-900">Super Admin Dashboard</h1>
+            {/* <h1 className="text-2xl font-bold text-gray-900">Super Admin Dashboard</h1>
             <p className="text-gray-600">Welcome back, {user?.name}</p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -80,7 +80,7 @@ export default function SuperDashboard() {
                         </tbody>
                     </table>
                 </div>
-            </Card>
+            </Card> */}
         </div>
     );
 }
