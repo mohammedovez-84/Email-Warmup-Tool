@@ -3,8 +3,21 @@ import { CSSTransition } from 'react-transition-group';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import axios from 'axios';
-import { FiUser, FiLock, FiTrash2, FiShield, FiMail, FiClock, FiSave, FiPhone, FiCheck, FiX } from 'react-icons/fi';
-import QRCode from 'react-qr-code';
+import {
+    FiUser,
+    FiLock,
+    FiTrash2,
+    FiShield,
+    FiMail,
+    FiClock,
+    FiSave,
+    FiPhone,
+    FiCheck,
+    FiX,
+    FiEye,
+    FiEyeOff,
+    FiArrowLeft
+} from 'react-icons/fi';
 
 const API_BASE_URL = 'http://localhost:5000';
 
@@ -13,7 +26,6 @@ const SettingsPage = () => {
     const [activeTab, setActiveTab] = useState('profile');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-    const [qrCode, setQrCode] = useState(null);
 
     const [userData, setUserData] = useState({
         name: '',
@@ -28,10 +40,14 @@ const SettingsPage = () => {
         newPassword: '',
         confirmPassword: '',
     });
+    const [showPassword, setShowPassword] = useState({
+        oldPassword: false,
+        newPassword: false,
+        confirmPassword: false
+    });
     const [twoFactorAuth, setTwoFactorAuth] = useState({
-        // enabled: userData?.two_fa_enabled || false,
         enabled: false,
-        method: null, // 'app' or 'email'
+        method: null,
         secret: '',
         qrCodeUrl: '',
         verificationCode: '',
@@ -46,8 +62,21 @@ const SettingsPage = () => {
     const [otpVerification, setOtpVerification] = useState({
         otpSent: false,
         code: '',
-        resendTimer: 60, // seconds before user can resend OTP
+        resendTimer: 60,
     });
+
+    const [saveStatus, setSaveStatus] = useState({
+        show: false,
+        message: '',
+        type: ''
+    });
+
+    const [passwordError, setPasswordError] = useState({
+        oldPassword: '',
+        confirmPassword: ''
+    });
+    const [passwordSuccess, setPasswordSuccess] = useState(false);
+
     useEffect(() => {
         let timer;
         if (otpVerification.otpSent && otpVerification.resendTimer > 0) {
@@ -61,7 +90,6 @@ const SettingsPage = () => {
         return () => clearTimeout(timer);
     }, [otpVerification.otpSent, otpVerification.resendTimer]);
 
-    // Fetch user data on component mount
     useEffect(() => {
         const fetchUserData = async () => {
             try {
@@ -93,14 +121,7 @@ const SettingsPage = () => {
                     enabled: is2FAEnabled,
                     showSetup: false,
                     verificationCode: '',
-
                 }));
-                setUserData(prev => ({
-                    ...prev,
-                    two_fa_enabled: response.data.two_fa_enabled || false
-                }));
-
-
 
             } catch (error) {
                 console.error('Error fetching user data:', error);
@@ -122,11 +143,6 @@ const SettingsPage = () => {
         navigate('/login');
         toast.info('Session expired. Please login again.');
     };
-    const [saveStatus, setSaveStatus] = useState({
-        show: false,
-        message: '',
-        type: '' // 'success' or 'error'
-    });
 
     const handleProfileUpdate = async (e) => {
         e.preventDefault();
@@ -144,7 +160,6 @@ const SettingsPage = () => {
                 type: 'success'
             });
 
-            // Hide the message after 3 seconds
             setTimeout(() => {
                 setSaveStatus(prev => ({ ...prev, show: false }));
             }, 60000);
@@ -162,23 +177,30 @@ const SettingsPage = () => {
         }
     };
 
-    const [passwordError, setPasswordError] = useState({
-        oldPassword: '',
-        confirmPassword: ''
-    });
-    const [passwordSuccess, setPasswordSuccess] = useState(false);
+    const togglePasswordVisibility = (field) => {
+        setShowPassword(prev => ({
+            ...prev,
+            [field]: !prev[field]
+        }));
+    };
 
     const handlePasswordChange = async (e) => {
         e.preventDefault();
 
-        // Reset all messages
         setPasswordError({ oldPassword: '', confirmPassword: '' });
         setPasswordSuccess(false);
 
-        // Client-side validation
         if (passwordData.newPassword !== passwordData.confirmPassword) {
             setPasswordError({
                 confirmPassword: 'Passwords do not match',
+                oldPassword: ''
+            });
+            return;
+        }
+
+        if (passwordData.newPassword.length < 8) {
+            setPasswordError({
+                confirmPassword: 'Password must be at least 8 characters long',
                 oldPassword: ''
             });
             return;
@@ -194,14 +216,12 @@ const SettingsPage = () => {
                 headers: { Authorization: `Bearer ${token}` }
             });
 
-            // Success case
             setPasswordData({ oldPassword: '', newPassword: '', confirmPassword: '' });
             setPasswordSuccess(true);
             toast.success('Password changed successfully');
         } catch (error) {
             console.error('Password change error:', error);
 
-            // Check if this is a wrong password error
             if (error.response?.status === 400) {
                 const errorMsg = error.response.data?.message?.toLowerCase() || '';
 
@@ -211,14 +231,12 @@ const SettingsPage = () => {
                         confirmPassword: ''
                     });
                 } else {
-                    // For other 400 errors, show the message from the server
                     setPasswordError({
                         oldPassword: error.response.data?.message || 'Password change failed',
                         confirmPassword: ''
                     });
                 }
             } else {
-                // For other errors, show a generic message
                 setPasswordError({
                     oldPassword: 'Failed to change password. Please try again.',
                     confirmPassword: ''
@@ -229,25 +247,20 @@ const SettingsPage = () => {
         }
     };
 
-
-
     const toggleTwoFactorAuth = async (method) => {
         try {
             const token = localStorage.getItem("token");
 
             if (userData.two_fa_enabled) {
-                // Disable 2FA
                 await axios.post(
                     `${API_BASE_URL}/api/auth/2fa/disable`,
                     { email: userData.email },
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
 
-
-                // Update local state
                 setTwoFactorAuth({
                     enabled: false,
-                    method: null,       // reset method
+                    method: null,
                     secret: '',
                     qrCodeUrl: '',
                     verificationCode: '',
@@ -256,20 +269,19 @@ const SettingsPage = () => {
                 setUserData(prev => ({ ...prev, two_fa_enabled: false }));
                 toast.success("Two-Factor Authentication disabled");
             } else {
-                // Enable 2FA
-                await initiate2FASetup(method);  // send method here
+                await initiate2FASetup(method);
             }
         } catch (err) {
             console.error("2FA toggle error:", err.response?.data || err.message);
             toast.error("Failed to toggle 2FA");
         }
     };
+
     const initiate2FASetup = async (method) => {
         try {
             const token = localStorage.getItem("token");
 
             if (method === "app") {
-                // Authenticator app setup
                 const response = await axios.post(
                     `${API_BASE_URL}/api/auth/2fa/setup`,
                     { email: userData.email, method },
@@ -287,7 +299,6 @@ const SettingsPage = () => {
                 toast.success("Scan QR or enter secret in your Authenticator app.");
 
             } else if (method === "email") {
-                // Use the dedicated sendLoginOTP endpoint for email 2FA
                 await axios.post(
                     `${API_BASE_URL}/api/auth/2fa/send-otp`,
                     {
@@ -312,6 +323,7 @@ const SettingsPage = () => {
             toast.error(err.response?.data?.message || "Failed to initiate 2FA setup");
         }
     };
+
     const verify2FA = async () => {
         if (!twoFactorAuth.verificationCode) {
             toast.error("Enter the verification code first");
@@ -327,8 +339,6 @@ const SettingsPage = () => {
                 method: twoFactorAuth.method
             };
 
-            console.log("2FA verification payload:", payload);
-
             const response = await axios.post(
                 `${API_BASE_URL}/api/auth/2fa/verify`,
                 payload,
@@ -340,9 +350,6 @@ const SettingsPage = () => {
                 }
             );
 
-            console.log("2FA verify response:", response.data);
-
-            // save JWT returned from server
             if (response.data.token) {
                 localStorage.setItem("token", response.data.token);
             }
@@ -360,9 +367,7 @@ const SettingsPage = () => {
 
         } catch (err) {
             console.error("2FA verification error:", err);
-            console.error("Error response:", err.response?.data);
 
-            // More specific error handling
             if (err.response?.status === 400) {
                 if (err.response.data?.message === "Invalid 2FA token") {
                     toast.error("Invalid verification code. Please check and try again.");
@@ -380,7 +385,7 @@ const SettingsPage = () => {
             }
         }
     };
-    // Disable 2FA
+
     const disable2FA = async () => {
         if (!window.confirm("Are you sure you want to disable 2FA?")) return;
 
@@ -417,24 +422,19 @@ const SettingsPage = () => {
         }
     };
 
-
-
-    // Step 1: Show confirmation form
     const confirmAccountDeletion = () => {
         setDeleteConfirm({ ...deleteConfirm, showConfirmation: true });
     };
 
-    // Step 2: Cancel deletion
     const cancelAccountDeletion = () => {
         setDeleteConfirm({
             password: '',
             confirmText: '',
             showConfirmation: false,
         });
-        setOtpVerification({ otpSent: false, code: '' });
+        setOtpVerification({ otpSent: false, code: '', resendTimer: 60 });
     };
 
-    // Step 3: Send OTP after confirmation text & password are entered
     const sendDeletionOtp = async () => {
         if (deleteConfirm.confirmText.toLowerCase() !== 'delete my account') {
             toast.error('Please type "delete my account" to confirm.');
@@ -450,14 +450,13 @@ const SettingsPage = () => {
             setLoading(true);
             const token = localStorage.getItem('token');
 
-            // Send OTP to user email
             await axios.post(`${API_BASE_URL}/api/users/send-delete-otp`, {
                 password: deleteConfirm.password,
             }, {
                 headers: { Authorization: `Bearer ${token}` },
             });
 
-            setOtpVerification({ otpSent: true, code: '' });
+            setOtpVerification({ otpSent: true, code: '', resendTimer: 60 });
             toast.info('OTP sent to your email. Enter it below to confirm deletion.');
         } catch (err) {
             console.error('Send OTP error:', err.response?.data || err.message);
@@ -467,7 +466,6 @@ const SettingsPage = () => {
         }
     };
 
-    // Step 4: Verify OTP & delete account
     const verifyOtpAndDeleteAccount = async () => {
         if (!otpVerification.code) {
             toast.error('Please enter the OTP sent to your email.');
@@ -486,7 +484,6 @@ const SettingsPage = () => {
 
             toast.success('OTP verified! Deleting your account...');
 
-            // Delete account after OTP verification
             await axios.delete(`${API_BASE_URL}/api/users/me`, {
                 data: { password: deleteConfirm.password },
                 headers: { Authorization: `Bearer ${token}` },
@@ -516,7 +513,7 @@ const SettingsPage = () => {
             });
 
             toast.info('A new OTP has been sent to your email.');
-            setOtpVerification(prev => ({ ...prev, resendTimer: 60 })); // reset countdown
+            setOtpVerification(prev => ({ ...prev, resendTimer: 60 }));
         } catch (err) {
             console.error('Resend OTP error:', err.response?.data || err.message);
             toast.error(err.response?.data?.message || 'Failed to resend OTP.');
@@ -525,1062 +522,575 @@ const SettingsPage = () => {
         }
     };
 
-
     return (
-        <div className="settings-container">
-            <style jsx>{`
-                .settings-container {
-                    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-                    max-width: 1500px;
-                    margin: 0 auto;
-                    padding: 20px 30px;
-                    color: #333;
-                    background-color: #f8fafc;
-                    min-height: 100vh;
-                    width: calc(100% - 240px);
-                    margin-left: 240px;
-                }
-
-                .settings-header {
-                    text-align: center;
-                    margin-bottom: 2rem;
-                }
-
-                .settings-title {
-                    font-size: 2rem;
-                    font-weight: 600;
-                    color: #3d51d7;
-                    margin-bottom: 0.5rem;
-                }
-
-                .settings-tabs {
-                    display: flex;
-                    justify-content: center;
-                    margin-bottom: 2rem;
-                    border-bottom: 1px solid #e2e8f0;
-                }
-
-                .settings-tab {
-                    padding: 0.75rem 1.5rem;
-                    cursor: pointer;
-                    font-weight: 500;
-                    color: #3d51d7;
-                    border-bottom: 2px solid transparent;
-                    transition: all 0.3s ease;
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                }
-
-                .settings-tab:hover {
-                    color: #3d51d7;
-                }
-
-                .settings-tab.active {
-                    color: #3d51d7;
-                    border-bottom-color: #3d51d7;
-                }
-
-                .settings-content {
-                    background-color: white;
-                    border-radius: 0.75rem;
-                    padding: 2rem;
-                    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-                    animation: fadeIn 0.5s ease;
-                }
-
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(10px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-
-                .section-title {
-                    font-size: 1.25rem;
-                    font-weight: 600;
-                    color: #1e293b;
-                    margin-bottom: 1.5rem;
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                }
-
-                .form-group {
-                    margin-bottom: 1.5rem;
-                }
-
-                .form-row {
-                    display: flex;
-                    gap: 1rem;
-                    margin-bottom: 1rem;
-                }
-
-                .form-label {
-                    display: block;
-                    margin-bottom: 0.5rem;
-                    font-weight: 500;
-                    color: #475569;
-                }
-
-                .form-input {
-                    width: 100%;
-                    padding: 0.75rem 1rem;
-                    border: 1px solid #e2e8f0;
-                    border-radius: 0.5rem;
-                    font-size: 1rem;
-                    transition: all 0.2s ease;
-                }
-
-                .form-input:focus {
-                    outline: none;
-                    border-color: #3d51d7;
-                    box-shadow: 0 0 0 3px rgba(61, 81, 215, 0.1);
-                }
-
-                .btn {
-                    display: inline-flex;
-                    align-items: center;
-                    justify-content: center;
-                    padding: 0.75rem 1.5rem;
-                    border-radius: 0.5rem;
-                    font-size: 1rem;
-                    font-weight: 500;
-                    cursor: pointer;
-                    transition: all 0.2s ease;
-                    gap: 0.5rem;
-                    border: none;
-                }
-
-                .btn-primary {
-                    background: linear-gradient(135deg, #3d51d7 0%, #3d51d7 70%);
-                    color: white;
-                }
-
-                .btn-primary:hover {
-                    opacity: 0.9;
-                }
-
-                .btn-outline {
-                    background: white;
-                    border: 1px solid #e2e8f0;
-                    color: #64748b;
-                }
-
-                .btn-outline:hover {
-                    background-color: #f8fafc;
-                }
-
-                .btn-danger {
-                    background: #ef4444;
-                    color: white;
-                }
-
-                .btn-danger:hover {
-                    background: #dc2626;
-                }
-
-                .btn:disabled {
-                    opacity: 0.6;
-                    cursor: not-allowed;
-                }
-
-                .two-factor-box {
-                    background-color: #f8fafc;
-                    border-radius: 0.75rem;
-                    padding: 1.5rem;
-                    margin-bottom: 2rem;
-                }
-
-                .two-factor-status {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    margin-bottom: 1rem;
-                }
-
-                .status-badge {
-                    display: inline-flex;
-                    align-items: center;
-                    padding: 0.25rem 0.75rem;
-                    border-radius: 9999px;
-                    font-size: 0.875rem;
-                    font-weight: 500;
-                }
-
-                .status-active {
-                    background-color: #dcfce7;
-                    color: #166534;
-                }
-
-                .status-inactive {
-                    background-color: #fee2e2;
-                    color: #991b1b;
-                }
-
-                .qrcode-container {
-                    display: flex;
-                    flex-direction: column;
-                    align-items: center;
-                    margin: 1.5rem 0;
-                    padding: 1.5rem;
-                    background-color: white;
-                    border-radius: 0.5rem;
-                    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-                }
-
-                .secret-key {
-                    font-family: monospace;
-                    background-color: #f1f5f9;
-                    padding: 0.5rem 1rem;
-                    border-radius: 0.25rem;
-                    margin: 1rem 0;
-                    word-break: break-all;
-                }
-
-                .delete-confirmation {
-                    background-color: #fee2e2;
-                    border-radius: 0.75rem;
-                    padding: 1.5rem;
-                    margin-top: 2rem;
-                }
-
-                .delete-warning {
-                    color: #991b1b;
-                    margin-bottom: 1rem;
-                }
-
-                .loading-spinner {
-                    width: 1.5rem;
-                    height: 1.5rem;
-                    border: 3px solid rgba(61, 81, 215, 0.2);
-                    border-top-color: #3d51d7;
-                    border-radius: 50%;
-                    animation: spin 1s linear infinite;
-                    margin: 0 auto;
-                }
-
-                @keyframes spin {
-                    to { transform: rotate(360deg); }
-                }
-
-                @media (max-width: 768px) {
-                    .settings-container {
-                        padding: 1rem;
-                    }
-
-                    .settings-tabs {
-                        flex-wrap: wrap;
-                    }
-
-                    .settings-content {
-                        padding: 1.5rem;
-                    }
-
-                    .form-row {
-                        flex-direction: column;
-                        gap: 0;
-                    }
-                }
-
-                .save-status {
-        margin-top: 0.75rem;
-        padding: 0.75rem 1rem;
-        border-radius: 0.5rem;
-        font-size: 0.875rem;
-        font-weight: 500;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        transition: all 0.3s ease;
-        transform-origin: top;
-        overflow: hidden;
-    }
-
-    .save-status.success {
-        background-color: #f0fdf4;
-        color: #16a34a;
-        border: 1px solid #86efac;
-    }
-
-    .save-status.error {
-        background-color: #fef2f2;
-        color: #dc2626;
-        border: 1px solid #fca5a5;
-    }
-
-    .save-status-enter {
-        opacity: 0;
-        transform: translateY(-10px);
-        max-height: 0;
-    }
-
-    .save-status-enter-active {
-        opacity: 1;
-        transform: translateY(0);
-        max-height: 100px;
-        transition: all 0.3s ease;
-    }
-
-    .save-status-exit {
-        opacity: 1;
-        transform: translateY(0);
-        max-height: 100px;
-    }
-
-    .save-status-exit-active {
-        opacity: 0;
-        transform: translateY(-10px);
-        max-height: 0;
-        transition: all 0.3s ease;
-    }
-
-    .status-icon {
-        font-size: 1.1rem;
-        flex-shrink: 0;
-    }
-        .error-message {
-    color: #dc2626;
-    font-size: 0.875rem;
-    margin-top: 0.25rem;
-}
-
-.success-message {
-    margin-top: 1rem;
-    padding: 0.75rem 1rem;
-    border-radius: 0.5rem;
-    background-color: #f0fdf4;
-    color: #16a34a;
-    border: 1px solid #86efac;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-    .input-error {
-    border-color: #dc2626 !important;
-    box-shadow: 0 0 0 1px #dc2626 !important;
-}
-
-.error-message {
-    color: #dc2626;
-    font-size: 0.875rem;
-    margin-top: 0.25rem;
-    display: flex;
-    align-items: center;
-}
-    .two-factor-box {
-    background-color: white;
-    border-radius: 0.75rem;
-    padding: 1.5rem;
-    margin-bottom: 2rem;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
-
-.two-factor-box h3 {
-    font-size: 1.1rem;
-    margin-bottom: 1rem;
-    color: #1e293b;
-}
-    <QRCode
-    value={twoFactorAuth.qrCodeUrl}
-    size={160}
-    level="H"
-    includeMargin={false}
-    style={{ margin: '0 auto 12px' }}
-/>
-            `}</style>
-
-            <div className="settings-header">
-                <h1 className="settings-title">Settings</h1>
-            </div>
-
-            <div className="settings-tabs">
-                <div
-                    className={`settings-tab ${activeTab === 'profile' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('profile')}
-                >
-                    <FiUser /> Profile
-                </div>
-                <div
-                    className={`settings-tab ${activeTab === 'password' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('password')}
-                >
-                    <FiLock /> Password
-                </div>
-                <div
-                    className={`settings-tab ${activeTab === 'security' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('security')}
-                >
-                    <FiShield /> Security
-                </div>
-                <div
-                    className={`settings-tab ${activeTab === 'danger' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('danger')}
-                >
-                    <FiTrash2 /> Danger Zone
+        <div className="min-h-screen bg-gray-50 xl:ml-2 w-full lg:w-[calc(100%)] xl:w-[calc(100%)] relative overflow-hidden font-sans">
+            {/* Header Section */}
+            <div className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
+                    <div>
+                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Settings</h1>
+                        <p className="text-gray-600 mt-1 text-sm sm:text-base">Manage your account settings and preferences</p>
+                    </div>
                 </div>
             </div>
 
-            <div className="settings-content">
-                {loading && (
-                    <div className="loading-spinner"></div>
-                )}
-
-                {!loading && activeTab === 'profile' && (
-                    <form onSubmit={handleProfileUpdate}>
-                        <h2 className="section-title">
-                            <FiUser /> Profile Information
-                        </h2>
-
-                        <div className="form-row">
-                            <div className="form-group" style={{ flex: 1 }}>
-                                <label className="form-label">First Name</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    value={userData.name || ''}
-                                    onChange={(e) => setUserData({ ...userData, name: e.target.value })}
-                                    required
-                                />
-                            </div>
-
-                            <div className="form-group" style={{ flex: 1 }}>
-                                <label className="form-label">Last Name</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    value={userData.lastname || ''}
-                                    onChange={(e) => setUserData({ ...userData, lastname: e.target.value })}
-                                    required
-                                />
-                            </div>
-
-                            <div className="form-group" style={{ flex: 1 }}>
-                                <label className="form-label">Phone No</label>
-                                <input
-                                    type="tel"
-                                    className="form-input"
-                                    value={userData.phone || ''}
-                                    onChange={(e) => {
-                                        const digitsOnly = e.target.value.replace(/\D/g, ''); // remove non-digits
-                                        setUserData({ ...userData, phone: digitsOnly });
-                                    }}
-                                    required
-                                />
-                            </div>
-
-                            <div className="form-group" style={{ flex: 1 }}>
-                                <label className="form-label">Title</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    value={userData.title || ''}
-                                    onChange={(e) => setUserData({ ...userData, title: e.target.value })}
-                                    required
-                                />
-                            </div>
-
-                            <div className="form-group" style={{ flex: 1 }}>
-                                <label className="form-label">Industry</label>
-                                <input
-                                    type="text"
-                                    className="form-input"
-                                    value={userData.industry || ''}
-                                    onChange={(e) => setUserData({ ...userData, industry: e.target.value })}
-                                    required
-                                />
-                            </div>
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Email Address</label>
-                            <input
-                                type="email"
-                                className="form-input"
-                                value={userData.email}
-                                onChange={(e) => setUserData({ ...userData, email: e.target.value })}
-                                required
-                                disabled
-                            />
-                        </div>
-
-
-                        <button type="submit" className="btn btn-primary">
-                            <FiSave /> Save Changes
-                        </button>
-
-                        <CSSTransition
-                            in={saveStatus.show}
-                            timeout={300}
-                            classNames="save-status"
-                            unmountOnExit
-                        >
-                            <div className={`save-status ${saveStatus.type}`}>
-                                {saveStatus.type === 'success' ? (
-                                    <FiCheck className="status-icon" />
-                                ) : (
-                                    <FiX className="status-icon" />
-                                )}
-                                {saveStatus.message}
-                            </div>
-                        </CSSTransition>
-                    </form>
-                )}
-
-                {!loading && activeTab === 'password' && (
-                    <form onSubmit={handlePasswordChange}>
-                        <h2 className="section-title">
-                            <FiLock /> Change Password
-                        </h2>
-                        <div className="form-group">
-                            <label className="form-label">Old Password</label>
-                            <input
-                                type="password"
-                                className={`form-input ${passwordError.oldPassword ? 'input-error' : ''}`}
-                                value={passwordData.oldPassword}
-                                onChange={(e) => setPasswordData({ ...passwordData, oldPassword: e.target.value })}
-                                required
-                                autoComplete="current-password"
-                            />
-                            {passwordError.oldPassword && (
-                                <div className="error-message">
-                                    <FiX size={14} style={{ marginRight: '4px' }} />
-                                    {passwordError.oldPassword}
-                                </div>
-                            )}
-
-                        </div>
-                        <div className="form-group">
-                            <label className="form-label">New Password</label>
-                            <input
-                                type="password"
-                                className="form-input"
-                                value={passwordData.newPassword}
-                                onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                                required
-                                minLength="8"
-                                autoComplete="new-password"
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <label className="form-label">Confirm New Password</label>
-                            <input
-                                type="password"
-                                className="form-input"
-                                value={passwordData.confirmPassword}
-                                onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                                required
-                                autoComplete="new-password"
-                            />
-                            {passwordError.confirmPassword && (
-                                <div className="error-message">
-                                    {passwordError.confirmPassword}
-                                </div>
-                            )}
-                        </div>
-
-                        <button type="submit" className="btn btn-primary">
-                            <FiSave /> Change Password
-                        </button>
-
-                        {passwordSuccess ? (
-                            <div className="success-message">
-                                <FiCheck />
-                                Password changed successfully for {userData.email}
-                            </div>
-                        ) : null}
-
-                        <div className="form-group" style={{ marginTop: '1rem' }}>
-                            <a href="/forgot-password" style={{ color: '#3d51d7', textDecoration: 'none' }}>
-                                Forgot Password?
-                            </a>
-                        </div>
-                    </form>
-                )}
-                {!loading && activeTab === 'security' && (
-                    <div style={{
-                        fontFamily: 'Inter, sans-serif',
-                        maxWidth: '800px',
-                        margin: '0 auto',
-                        fontSize: '16px' // Increased base font size
-                    }}>
-                        <h2 style={{
-                            fontSize: '24px', // Increased size
-                            fontWeight: 600,
-                            color: '#111827',
-                            marginBottom: '28px', // Increased spacing
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '10px' // Increased gap
-                        }}>
-                            <FiShield size={24} /> Security Settings
-                        </h2>
-
-                        {/* Two-Factor Authentication Card */}
-                        <div style={{
-                            backgroundColor: 'white',
-                            borderRadius: '12px', // Slightly larger radius
-                            border: '1px solid #E5E7EB',
-                            padding: '28px', // Increased padding
-                            marginBottom: '28px', // Increased spacing
-                            fontSize: '16px' // Increased font size
-                        }}>
-                            <h3 style={{
-                                fontSize: '20px', // Increased size
-                                fontWeight: 600,
-                                color: '#111827',
-                                marginBottom: '12px' // Increased spacing
-                            }}>
-                                Two-Factor Authentication
-                            </h3>
-                            <p style={{
-                                fontSize: '16px', // Increased size
-                                color: '#6B7280',
-                                marginBottom: '20px' // Increased spacing
-                            }}>
-                                Add an extra layer of security to your account
-                            </p>
-
-                            {/* Status indicator - becomes a button when enabled */}
-                            <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                marginBottom: '24px', // Increased spacing
-                                paddingBottom: '24px', // Increased spacing
-                                borderBottom: '1px solid #E5E7EB'
-                            }}>
-                                {userData.two_fa_enabled ? (
+            <div className="p-4 sm:p-6 lg:p-8">
+                <div className="max-w-9xl mx-auto">
+                    {/* Tabs */}
+                    <div className="flex justify-center mb-8 border-b border-gray-200">
+                        <div className="flex space-x-4 sm:space-x-8 overflow-x-auto">
+                            {[
+                                { id: 'profile', icon: FiUser, label: 'Profile' },
+                                { id: 'password', icon: FiLock, label: 'Password' },
+                                { id: 'security', icon: FiShield, label: 'Security' },
+                                { id: 'danger', icon: FiTrash2, label: 'Danger Zone' }
+                            ].map((tab) => {
+                                const Icon = tab.icon;
+                                return (
                                     <button
-                                        onClick={disable2FA}
-                                        style={{
-                                            backgroundColor: 'transparent',
-                                            color: '#DC2626',
-                                            border: 'none',
-                                            fontSize: '16px', // Increased size
-                                            fontWeight: 500,
-                                            cursor: 'pointer',
-                                            padding: '8px 12px', // Increased padding
-                                            borderRadius: '6px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '6px' // Increased gap
-                                        }}
-                                        onMouseOver={(e) => {
-                                            e.target.style.backgroundColor = '#F3F4F6';
-                                            e.target.style.color = '#DC2626';
-                                        }}
-                                        onMouseOut={(e) => {
-                                            e.target.style.backgroundColor = 'transparent';
-                                            e.target.style.color = '#DC2626';
-                                        }}
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`flex items-center space-x-2 pb-4 px-1 border-b-2 transition-colors whitespace-nowrap ${activeTab === tab.id
+                                            ? 'border-teal-600 text-teal-600'
+                                            : 'border-transparent text-gray-500 hover:text-gray-700'
+                                            }`}
                                     >
-                                        <FiCheck size={16} /> Disable
+                                        <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+                                        <span className="font-medium text-sm sm:text-base">{tab.label}</span>
                                     </button>
-                                ) : (
-                                    <span style={{
-                                        fontSize: '16px', // Increased size
-                                        color: '#6B7280',
-                                        fontWeight: 500,
-                                        padding: '8px 12px' // Increased padding
-                                    }}>
-                                        Not Enabled
-                                    </span>
-                                )}
-
-                                {!userData.two_fa_enabled && (
-                                    <button
-                                        onClick={() => setTwoFactorAuth({
-                                            ...twoFactorAuth,
-                                            showSetup: true,
-                                            method: null
-                                        })}
-                                        style={{
-                                            backgroundColor: '#2563EB',
-                                            color: 'white',
-                                            border: 'none',
-                                            borderRadius: '8px', // Slightly larger radius
-                                            padding: '10px 20px', // Increased padding
-                                            fontSize: '16px', // Increased size
-                                            fontWeight: 500,
-                                            cursor: 'pointer'
-                                        }}
-                                    >
-                                        Enable
-                                    </button>
-                                )}
-                            </div>
-
-                            {/* Authentication methods list - REMOVED THE EXTRA BUTTONS */}
-
+                                );
+                            })}
                         </div>
+                    </div>
 
-                        {/* 2FA Setup Modal/Popup */}
-                        {twoFactorAuth.showSetup && (
-                            <div style={{
-                                position: 'fixed',
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                bottom: 0,
-                                backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                zIndex: 1000
-                            }}>
-                                <div style={{
-                                    backgroundColor: 'white',
-                                    borderRadius: '12px',
-                                    padding: '28px', // Increased padding
-                                    width: '90%',
-                                    maxWidth: '520px', // Slightly wider
-                                    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
-                                    fontSize: '16px' // Increased font size
-                                }}>
-                                    {/* Back button at the top */}
-                                    <div style={{ marginBottom: '20px' }}> {/* Increased spacing */}
-                                        <button
-                                            onClick={() => setTwoFactorAuth({
-                                                ...twoFactorAuth,
-                                                showSetup: false,
-                                                method: null
-                                            })}
-                                            style={{
-                                                backgroundColor: 'transparent',
-                                                border: 'none',
-                                                color: '#6B7280',
-                                                cursor: 'pointer',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: '8px',
-                                                fontSize: '16px', // Increased size
-                                                padding: 0
-                                            }}
-                                        >
-                                            <FiX size={18} /> Back {/* Increased size */}
-                                        </button>
+                    {/* Content */}
+                    <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8">
+                        {loading && (
+                            <div className="flex justify-center py-8">
+                                <div className="w-8 h-8 border-3 border-teal-200 border-t-teal-600 rounded-full animate-spin"></div>
+                            </div>
+                        )}
+
+                        {/* Profile Tab */}
+                        {!loading && activeTab === 'profile' && (
+                            <form onSubmit={handleProfileUpdate}>
+                                <div className="flex items-center space-x-3 mb-6">
+                                    <FiUser className="w-6 h-6 text-gray-700" />
+                                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">Profile Information</h2>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mb-6">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+                                        <input
+                                            type="text"
+                                            value={userData.name || ''}
+                                            onChange={(e) => setUserData({ ...userData, name: e.target.value })}
+                                            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
+                                            required
+                                        />
                                     </div>
 
-                                    <h3 style={{
-                                        fontSize: '20px', // Increased size
-                                        fontWeight: 600,
-                                        color: '#111827',
-                                        marginBottom: '20px' // Increased spacing
-                                    }}>
-                                        Set Up Two-Factor Authentication
-                                    </h3>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+                                        <input
+                                            type="text"
+                                            value={userData.lastname || ''}
+                                            onChange={(e) => setUserData({ ...userData, lastname: e.target.value })}
+                                            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
+                                            required
+                                        />
+                                    </div>
 
-                                    {!twoFactorAuth.method ? (
-                                        // Method selection
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Phone No</label>
+                                        <input
+                                            type="tel"
+                                            value={userData.phone || ''}
+                                            onChange={(e) => {
+                                                const digitsOnly = e.target.value.replace(/\D/g, '');
+                                                setUserData({ ...userData, phone: digitsOnly });
+                                            }}
+                                            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
+                                            required
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+                                        <input
+                                            type="text"
+                                            value={userData.title || ''}
+                                            onChange={(e) => setUserData({ ...userData, title: e.target.value })}
+                                            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
+                                            required
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Industry</label>
+                                        <input
+                                            type="text"
+                                            value={userData.industry || ''}
+                                            onChange={(e) => setUserData({ ...userData, industry: e.target.value })}
+                                            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+                                    <input
+                                        type="email"
+                                        value={userData.email}
+                                        className="w-full px-3 sm:px-4 py-2.5 sm:py-3 border border-gray-300 rounded-lg bg-gray-50 cursor-not-allowed"
+                                        disabled
+                                    />
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white px-6 py-3 rounded-lg font-medium transition-all duration-300 shadow-md hover:shadow-lg flex items-center space-x-2"
+                                >
+                                    <FiSave className="w-5 h-5" />
+                                    <span>Save Changes</span>
+                                </button>
+
+                                <CSSTransition
+                                    in={saveStatus.show}
+                                    timeout={300}
+                                    classNames="fade"
+                                    unmountOnExit
+                                >
+                                    <div className={`mt-4 p-4 rounded-lg border ${saveStatus.type === 'success'
+                                        ? 'bg-green-50 border-green-200 text-green-800'
+                                        : 'bg-red-50 border-red-200 text-red-800'
+                                        }`}>
+                                        <div className="flex items-center space-x-2">
+                                            {saveStatus.type === 'success' ? (
+                                                <FiCheck className="w-5 h-5" />
+                                            ) : (
+                                                <FiX className="w-5 h-5" />
+                                            )}
+                                            <span>{saveStatus.message}</span>
+                                        </div>
+                                    </div>
+                                </CSSTransition>
+                            </form>
+                        )}
+
+                        {/* Password Tab */}
+                        {!loading && activeTab === 'password' && (
+                            <div className="min-h-screen flex items-center justify-center  px-4 sm:px-2 lg:px-3">
+                                <div className="w-full max-w-xl  rounded-2xl p-8 sm:p-10">
+                                    <form onSubmit={handlePasswordChange} className="space-y-6">
+                                        {/* Heading */}
+                                        <div className="flex items-center justify-center space-x-3 mb-6">
+                                            <FiLock className="w-7  h-7 text-teal-600" />
+                                            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 text-center">
+                                                Change Password
+                                            </h2>
+                                        </div>
+
+                                        {/* Old Password */}
                                         <div>
-                                            <p style={{ marginBottom: '24px', color: '#6B7280', fontSize: '16px' }}> {/* Increased size */}
-                                                Choose your preferred 2FA method:
-                                            </p>
-
-                                            <div style={{ marginBottom: '24px' }}> {/* Increased spacing */}
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Old Password
+                                            </label>
+                                            <div className="relative">
+                                                <input
+                                                    type={showPassword.oldPassword ? 'text' : 'password'}
+                                                    value={passwordData.oldPassword}
+                                                    onChange={(e) =>
+                                                        setPasswordData({ ...passwordData, oldPassword: e.target.value })
+                                                    }
+                                                    className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-teal-500 transition-all duration-300 pr-10 ${passwordError.oldPassword
+                                                        ? 'border-red-500 focus:border-red-500'
+                                                        : 'border-gray-300 focus:border-teal-500'
+                                                        }`}
+                                                    required
+                                                    autoComplete="current-password"
+                                                />
                                                 <button
-                                                    onClick={() => initiate2FASetup('app')}
-                                                    style={{
-                                                        width: '100%',
-                                                        padding: '16px 20px', // Increased padding
-                                                        marginBottom: '16px', // Increased spacing
-                                                        backgroundColor: 'white',
-                                                        border: '1px solid #E5E7EB',
-                                                        borderRadius: '8px',
-                                                        textAlign: 'left',
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '12px',
-                                                        fontSize: '16px' // Increased size
-                                                    }}
+                                                    type="button"
+                                                    onClick={() => togglePasswordVisibility('oldPassword')}
+                                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-teal-600"
                                                 >
-                                                    <FiShield size={22} /> {/* Increased size */}
-                                                    <div>
-                                                        <div style={{ fontWeight: 500 }}>Authenticator App</div>
-                                                        <div style={{ fontSize: '14px', color: '#6B7280' }}>Use Microsoft Authenticator or similar</div>
-                                                    </div>
+                                                    {showPassword.oldPassword ? (
+                                                        <FiEyeOff className="w-5 h-5" />
+                                                    ) : (
+                                                        <FiEye className="w-5 h-5" />
+                                                    )}
                                                 </button>
+                                            </div>
+                                            {passwordError.oldPassword && (
+                                                <div className="flex items-center space-x-1 mt-2 text-red-600 text-sm">
+                                                    <FiX className="w-4 h-4" />
+                                                    <span>{passwordError.oldPassword}</span>
+                                                </div>
+                                            )}
+                                        </div>
 
+                                        {/* New Password */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                New Password
+                                            </label>
+                                            <div className="relative">
+                                                <input
+                                                    type={showPassword.newPassword ? 'text' : 'password'}
+                                                    value={passwordData.newPassword}
+                                                    onChange={(e) =>
+                                                        setPasswordData({ ...passwordData, newPassword: e.target.value })
+                                                    }
+                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all duration-300 pr-10"
+                                                    required
+                                                    minLength="8"
+                                                    autoComplete="new-password"
+                                                />
                                                 <button
-                                                    onClick={() => initiate2FASetup('email')}
-                                                    style={{
-                                                        width: '100%',
-                                                        padding: '16px 20px', // Increased padding
-                                                        backgroundColor: 'white',
-                                                        border: '1px solid #E5E7EB',
-                                                        borderRadius: '8px',
-                                                        textAlign: 'left',
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '12px',
-                                                        fontSize: '16px' // Increased size
-                                                    }}
+                                                    type="button"
+                                                    onClick={() => togglePasswordVisibility('newPassword')}
+                                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-teal-600"
                                                 >
-                                                    <FiMail size={22} /> {/* Increased size */}
-                                                    <div>
-                                                        <div style={{ fontWeight: 500 }}>Email Verification</div>
-                                                        <div style={{ fontSize: '14px', color: '#6B7280' }}>Receive one-time passcodes via email</div>
-                                                    </div>
+                                                    {showPassword.newPassword ? (
+                                                        <FiEyeOff className="w-5 h-5" />
+                                                    ) : (
+                                                        <FiEye className="w-5 h-5" />
+                                                    )}
                                                 </button>
                                             </div>
                                         </div>
-                                    ) : (
-                                        // Method-specific setup
+
+                                        {/* Confirm New Password */}
                                         <div>
-                                            {twoFactorAuth.method === 'app' ? (
-                                                <div style={{
-                                                    backgroundColor: '#F9FAFB',
-                                                    borderRadius: '8px', // Slightly larger radius
-                                                    padding: '20px', // Increased padding
-                                                    marginBottom: '20px', // Increased spacing
-                                                    textAlign: 'center'
-                                                }}>
-                                                    <p style={{ fontSize: '16px', color: '#6B7280', marginBottom: '16px' }}> {/* Increased size */}
-                                                        Scan this QR code with your authenticator app:
-                                                    </p>
-
-                                                    {twoFactorAuth.qrCodeUrl && (
-                                                        <img
-                                                            src={twoFactorAuth.qrCodeUrl}
-                                                            alt="2FA QR Code"
-                                                            style={{
-                                                                width: 180, // Increased size
-                                                                height: 180, // Increased size
-                                                                margin: '0 auto 16px', // Increased spacing
-                                                                display: 'block'
-                                                            }}
-                                                        />
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                Confirm New Password
+                                            </label>
+                                            <div className="relative">
+                                                <input
+                                                    type={showPassword.confirmPassword ? 'text' : 'password'}
+                                                    value={passwordData.confirmPassword}
+                                                    onChange={(e) =>
+                                                        setPasswordData({
+                                                            ...passwordData,
+                                                            confirmPassword: e.target.value,
+                                                        })
+                                                    }
+                                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all duration-300 pr-10"
+                                                    required
+                                                    autoComplete="new-password"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => togglePasswordVisibility('confirmPassword')}
+                                                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-teal-600"
+                                                >
+                                                    {showPassword.confirmPassword ? (
+                                                        <FiEyeOff className="w-5 h-5" />
+                                                    ) : (
+                                                        <FiEye className="w-5 h-5" />
                                                     )}
-
-                                                    <p style={{ fontSize: '16px', color: '#6B7280', marginBottom: '12px' }}> {/* Increased size */}
-                                                        Or enter this secret key manually:
-                                                    </p>
-                                                    <div style={{
-                                                        fontFamily: 'monospace',
-                                                        backgroundColor: '#F3F4F6',
-                                                        padding: '12px 16px', // Increased padding
-                                                        borderRadius: '6px', // Slightly larger radius
-                                                        fontSize: '16px', // Increased size
-                                                        wordBreak: 'break-all',
-                                                        margin: '0 auto',
-                                                        maxWidth: '85%' // Slightly wider
-                                                    }}>
-                                                        {twoFactorAuth.secret}
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div style={{
-                                                    backgroundColor: '#F9FAFB',
-                                                    borderRadius: '8px', // Slightly larger radius
-                                                    padding: '20px', // Increased padding
-                                                    marginBottom: '20px', // Increased spacing
-                                                    textAlign: 'center'
-                                                }}>
-                                                    <p style={{ fontSize: '16px', color: '#6B7280', marginBottom: '16px' }}> {/* Increased size */}
-                                                        We've sent a verification code to your email address.
-                                                    </p>
+                                                </button>
+                                            </div>
+                                            {passwordError.confirmPassword && (
+                                                <div className="mt-2 text-red-600 text-sm">
+                                                    {passwordError.confirmPassword}
                                                 </div>
                                             )}
+                                        </div>
 
-                                            <div style={{ marginBottom: '20px' }}> {/* Increased spacing */}
-                                                <label style={{
-                                                    display: 'block',
-                                                    fontSize: '16px', // Increased size
-                                                    fontWeight: 500,
-                                                    color: '#374151',
-                                                    marginBottom: '8px' // Increased spacing
-                                                }}>
-                                                    Verification Code
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={twoFactorAuth.verificationCode}
-                                                    onChange={(e) => setTwoFactorAuth({ ...twoFactorAuth, verificationCode: e.target.value })}
-                                                    placeholder="Enter 6-digit code"
-                                                    style={{
-                                                        width: '100%',
-                                                        padding: '12px 16px', // Increased padding
-                                                        border: '1px solid #D1D5DB',
-                                                        borderRadius: '8px', // Slightly larger radius
-                                                        fontSize: '16px' // Increased size
-                                                    }}
-                                                />
+                                        {/* Submit Button */}
+                                        <button
+                                            type="submit"
+                                            className="w-full bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white px-6 py-3 rounded-lg font-semibold transition-all duration-300 shadow-md hover:shadow-lg flex items-center justify-center space-x-2"
+                                        >
+                                            <FiSave className="w-5 h-5" />
+                                            <span>Change Password</span>
+                                        </button>
+
+                                        {/* Success Message */}
+                                        {passwordSuccess && (
+                                            <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-green-800 flex items-center justify-center space-x-2">
+                                                <FiCheck className="w-5 h-5" />
+                                                <span>Password changed successfully for {userData.email}</span>
                                             </div>
+                                        )}
 
-                                            <div style={{ display: 'flex', gap: '16px' }}> {/* Increased spacing */}
+                                        {/* Forgot Password Link */}
+                                        <div className="text-center pt-4">
+                                            <a
+                                                href="/forgot-password"
+                                                className="text-teal-600 hover:text-teal-700 font-medium"
+                                            >
+                                                Forgot Password?
+                                            </a>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+
+
+                        {/* Security Tab */}
+                        {!loading && activeTab === 'security' && (
+                            <div>
+                                <div className="flex items-center space-x-3 mb-6">
+                                    <FiShield className="w-6 h-6 text-gray-700" />
+                                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">Security Settings</h2>
+                                </div>
+
+                                {/* Two-Factor Authentication Card */}
+                                <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+                                    <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3">Two-Factor Authentication</h3>
+                                    <p className="text-gray-600 mb-5">
+                                        Add an extra layer of security to your account
+                                    </p>
+
+                                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-5 border-b border-gray-200 mb-5">
+                                        <div>
+                                            {userData.two_fa_enabled ? (
+                                                <div className="flex items-center space-x-2 text-green-600">
+                                                    <FiCheck className="w-5 h-5" />
+                                                    <span className="font-medium">Enabled ({twoFactorAuth.method})</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-gray-600 font-medium">Not Enabled</span>
+                                            )}
+                                        </div>
+
+                                        {!userData.two_fa_enabled ? (
+                                            <button
+                                                onClick={() => setTwoFactorAuth({
+                                                    ...twoFactorAuth,
+                                                    showSetup: true,
+                                                    method: null
+                                                })}
+                                                className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white px-5 py-2.5 rounded-lg font-medium transition-all duration-300 shadow-md hover:shadow-lg"
+                                            >
+                                                Enable 2FA
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={disable2FA}
+                                                className="text-red-600 hover:text-red-700 font-medium flex items-center space-x-2 px-4 py-2.5 rounded-lg hover:bg-red-50 transition-colors border border-red-200"
+                                            >
+                                                <FiX className="w-5 h-5" />
+                                                <span>Disable 2FA</span>
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* 2FA Setup Modal */}
+                                {twoFactorAuth.showSetup && (
+                                    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4" style={{ margin: 0 }}>
+                                        <div className="bg-white rounded-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+                                            {/* Back Button */}
+                                            <div className="mb-5">
                                                 <button
-                                                    type="button"
-                                                    onClick={verify2FA}
-                                                    style={{
-                                                        backgroundColor: '#2563EB',
-                                                        color: 'white',
-                                                        border: 'none',
-                                                        borderRadius: '8px', // Slightly larger radius
-                                                        padding: '12px 20px', // Increased padding
-                                                        fontSize: '16px', // Increased size
-                                                        fontWeight: 500,
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '8px'
-                                                    }}
-                                                >
-                                                    <FiCheck size={18} /> Verify and Enable {/* Increased size */}
-                                                </button>
-                                                <button
-                                                    type="button"
                                                     onClick={() => setTwoFactorAuth({
                                                         ...twoFactorAuth,
                                                         showSetup: false,
                                                         method: null
                                                     })}
-                                                    style={{
-                                                        backgroundColor: 'white',
-                                                        color: '#374151',
-                                                        border: '1px solid #D1D5DB',
-                                                        borderRadius: '8px', // Slightly larger radius
-                                                        padding: '12px 20px', // Increased padding
-                                                        fontSize: '16px', // Increased size
-                                                        fontWeight: 500,
-                                                        cursor: 'pointer',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        gap: '8px'
-                                                    }}
+                                                    className="text-gray-600 hover:text-gray-700 flex items-center space-x-2 transition-colors"
                                                 >
-                                                    <FiX size={18} /> Cancel {/* Increased size */}
+                                                    <FiArrowLeft className="w-5 h-5" />
+                                                    <span>Back</span>
                                                 </button>
                                             </div>
+
+                                            <h3 className="text-xl font-semibold text-gray-900 mb-5">
+                                                Set Up Two-Factor Authentication
+                                            </h3>
+
+                                            {!twoFactorAuth.method ? (
+                                                // Method Selection
+                                                <div>
+                                                    <p className="text-gray-600 mb-6">
+                                                        Choose your preferred 2FA method:
+                                                    </p>
+
+                                                    <div className="space-y-4">
+                                                        <button
+                                                            onClick={() => initiate2FASetup('app')}
+                                                            className="w-full p-5 border border-gray-300 rounded-lg text-left hover:border-teal-500 transition-colors flex items-center space-x-4"
+                                                        >
+                                                            <FiShield className="w-6 h-6 text-teal-600" />
+                                                            <div>
+                                                                <div className="font-medium text-gray-900">Authenticator App</div>
+                                                                <div className="text-sm text-gray-600">Use Microsoft Authenticator or similar</div>
+                                                            </div>
+                                                        </button>
+
+                                                        <button
+                                                            onClick={() => initiate2FASetup('email')}
+                                                            className="w-full p-5 border border-gray-300 rounded-lg text-left hover:border-teal-500 transition-colors flex items-center space-x-4"
+                                                        >
+                                                            <FiMail className="w-6 h-6 text-teal-600" />
+                                                            <div>
+                                                                <div className="font-medium text-gray-900">Email Verification</div>
+                                                                <div className="text-sm text-gray-600">Receive one-time passcodes via email</div>
+                                                            </div>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                // Method-specific Setup
+                                                <div>
+                                                    {twoFactorAuth.method === 'app' ? (
+                                                        <div className="bg-gray-50 rounded-lg p-5 mb-5 text-center">
+                                                            <p className="text-gray-600 mb-4">
+                                                                Scan this QR code with your authenticator app:
+                                                            </p>
+
+                                                            {twoFactorAuth.qrCodeUrl && (
+                                                                <img
+                                                                    src={twoFactorAuth.qrCodeUrl}
+                                                                    alt="2FA QR Code"
+                                                                    className="w-48 h-48 mx-auto mb-4"
+                                                                />
+                                                            )}
+
+                                                            <p className="text-gray-600 mb-3">
+                                                                Or enter this secret key manually:
+                                                            </p>
+                                                            <div className="bg-gray-100 px-4 py-3 rounded-lg font-mono text-sm break-all">
+                                                                {twoFactorAuth.secret}
+                                                            </div>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="bg-gray-50 rounded-lg p-5 mb-5 text-center">
+                                                            <p className="text-gray-600">
+                                                                We've sent a verification code to your email address.
+                                                            </p>
+                                                        </div>
+                                                    )}
+
+                                                    <div className="mb-5">
+                                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                            Verification Code
+                                                        </label>
+                                                        <input
+                                                            type="text"
+                                                            value={twoFactorAuth.verificationCode}
+                                                            onChange={(e) => setTwoFactorAuth({ ...twoFactorAuth, verificationCode: e.target.value })}
+                                                            placeholder="Enter 6-digit code"
+                                                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-colors"
+                                                        />
+                                                    </div>
+
+                                                    <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
+                                                        <button
+                                                            onClick={verify2FA}
+                                                            className="bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 text-white px-5 py-2.5 rounded-lg font-medium flex items-center space-x-2 transition-all duration-300 shadow-md hover:shadow-lg flex-1 justify-center"
+                                                        >
+                                                            <FiCheck className="w-5 h-5" />
+                                                            <span>Verify and Enable</span>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setTwoFactorAuth({
+                                                                ...twoFactorAuth,
+                                                                showSetup: false,
+                                                                method: null
+                                                            })}
+                                                            className="bg-white border border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg font-medium flex items-center space-x-2 hover:bg-gray-50 transition-colors flex-1 justify-center"
+                                                        >
+                                                            <FiX className="w-5 h-5" />
+                                                            <span>Cancel</span>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
                             </div>
                         )}
-                    </div>
-                )} {!loading && activeTab === 'danger' && (
-                    <div>
-                        <h2 className="section-title">
-                            <FiTrash2 /> Danger Zone
-                        </h2>
 
-                        {!deleteConfirm.showConfirmation ? (
-                            // Step 1: Initial delete prompt
-                            <div className="delete-confirmation">
-                                <h3 className="delete-warning">Delete Your Account</h3>
-                                <p>
-                                    Warning: This action is irreversible. Deleting your account will permanently remove all your
-                                    personal data, settings, and history associated with this account.
-                                </p>
-                                <button
-                                    type="button"
-                                    className="btn btn-danger"
-                                    onClick={confirmAccountDeletion}
-                                >
-                                    <FiTrash2 /> Delete Account
-                                </button>
-                            </div>
-                        ) : !otpVerification.otpSent ? (
-                            // Step 2: Confirm deletion form (password + type "delete my account")
-                            <form onSubmit={(e) => e.preventDefault()}>
-                                <div className="delete-confirmation">
-                                    <h3 className="delete-warning">Email Verification Required</h3>
-                                    <p>
-                                        An OTP has been sent to your registered email. Enter it below to verify your identity and permanently
-                                        delete your account. This ensures your account cannot be deleted accidentally or by someone else.
-                                    </p>
+                        {/* Danger Zone Tab */}
+                        {!loading && activeTab === 'danger' && (
+                            <div>
+                                <div className="flex items-center space-x-3 mb-6">
+                                    <FiTrash2 className="w-6 h-6 text-gray-700" />
+                                    <h2 className="text-xl sm:text-2xl font-semibold text-gray-900">Danger Zone</h2>
+                                </div>
 
-                                    <div className="form-group">
-                                        <label className="form-label">Enter OTP</label>
-                                        <input
-                                            type="text"
-                                            className="form-input"
-                                            value={otpVerification.code}
-                                            onChange={(e) => setOtpVerification({ ...otpVerification, code: e.target.value })}
-                                            required
-                                        />
+                                {!deleteConfirm.showConfirmation ? (
+                                    // Initial Delete Prompt
+                                    <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+                                        <h3 className="text-red-800 font-semibold mb-3">Delete Your Account</h3>
+                                        <p className="text-red-700 mb-4">
+                                            Warning: This action is irreversible. Deleting your account will permanently remove all your
+                                            personal data, settings, and history associated with this account.
+                                        </p>
+                                        <button
+                                            onClick={confirmAccountDeletion}
+                                            className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg font-medium flex items-center space-x-2 transition-colors shadow-md hover:shadow-lg"
+                                        >
+                                            <FiTrash2 className="w-5 h-5" />
+                                            <span>Delete Account</span>
+                                        </button>
                                     </div>
+                                ) : (
+                                    // OTP Verification
+                                    <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+                                        <h3 className="text-red-800 font-semibold mb-3">Email Verification Required</h3>
+                                        <p className="text-red-700 mb-4">
+                                            An OTP has been sent to your registered email. Enter it below to verify your identity and permanently
+                                            delete your account. This ensures your account cannot be deleted accidentally or by someone else.
+                                        </p>
 
-                                    <button
-                                        type="button"
-                                        className="btn btn-danger"
-                                        onClick={verifyOtpAndDeleteAccount}
-                                    >
-                                        <FiTrash2 /> Verify OTP & Delete Account
-                                    </button>
+                                        <div className="mb-4">
+                                            <label className="block text-sm font-medium text-red-700 mb-2">Enter OTP</label>
+                                            <input
+                                                type="text"
+                                                value={otpVerification.code}
+                                                onChange={(e) => setOtpVerification({ ...otpVerification, code: e.target.value })}
+                                                className="w-full px-4 py-3 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-colors"
+                                                required
+                                            />
+                                        </div>
 
-                                    <button
-                                        type="button"
-                                        className="btn btn-outline"
-                                        style={{ marginLeft: '0.5rem' }}
-                                        onClick={cancelAccountDeletion}
-                                    >
-                                        <FiX /> Cancel
-                                    </button>
-
-                                    {/* Resend OTP section */}
-                                    <div style={{ marginTop: '1rem' }}>
-                                        {otpVerification.resendTimer > 0 ? (
-                                            <p style={{ fontSize: '0.9rem', color: '#555' }}>
-                                                You can resend OTP in {otpVerification.resendTimer}s
-                                            </p>
-                                        ) : (
+                                        <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
                                             <button
-                                                type="button"
-                                                className="btn btn-outline"
-                                                onClick={resendDeletionOtp}
+                                                onClick={verifyOtpAndDeleteAccount}
+                                                className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg font-medium flex items-center space-x-2 transition-colors shadow-md hover:shadow-lg flex-1 justify-center"
                                             >
-                                                Resend OTP
+                                                <FiTrash2 className="w-5 h-5" />
+                                                <span>Verify OTP & Delete Account</span>
                                             </button>
-                                        )}
+                                            <button
+                                                onClick={cancelAccountDeletion}
+                                                className="bg-white border border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg font-medium flex items-center space-x-2 hover:bg-gray-50 transition-colors flex-1 justify-center"
+                                            >
+                                                <FiX className="w-5 h-5" />
+                                                <span>Cancel</span>
+                                            </button>
+                                        </div>
+
+                                        <div className="mt-4">
+                                            {otpVerification.resendTimer > 0 ? (
+                                                <p className="text-sm text-red-600">
+                                                    You can resend OTP in {otpVerification.resendTimer}s
+                                                </p>
+                                            ) : (
+                                                <button
+                                                    onClick={resendDeletionOtp}
+                                                    className="text-red-600 hover:text-red-700 font-medium text-sm"
+                                                >
+                                                    Resend OTP
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            </form>
-                        ) : (
-                            // Step 3: OTP verification form
-                            <form onSubmit={(e) => e.preventDefault()}>
-                                <div className="delete-confirmation">
-                                    <h3 className="delete-warning">Email Verification Required</h3>
-                                    <p>
-                                        An OTP has been sent to your registered email address. Enter the OTP below to verify your
-                                        identity and permanently delete your account. This is a security measure to protect your
-                                        account from accidental deletion.
-                                    </p>
-
-                                    <div className="form-group">
-                                        <label className="form-label">Enter OTP</label>
-                                        <input
-                                            type="text"
-                                            className="form-input"
-                                            value={otpVerification.code}
-                                            onChange={(e) => setOtpVerification({ ...otpVerification, code: e.target.value })}
-                                            required
-                                        />
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        className="btn btn-danger"
-                                        onClick={verifyOtpAndDeleteAccount}
-                                    >
-                                        <FiTrash2 /> Verify OTP & Delete Account
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        className="btn btn-outline"
-                                        style={{ marginLeft: '0.5rem' }}
-                                        onClick={cancelAccountDeletion}
-                                    >
-                                        <FiX /> Cancel
-                                    </button>
-                                </div>
-                            </form>
+                                )}
+                            </div>
                         )}
                     </div>
-                )}
+                </div>
             </div>
         </div>
     );

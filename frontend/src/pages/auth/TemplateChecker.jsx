@@ -1,5 +1,23 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FiAlertTriangle, FiCheckCircle, FiCopy, FiEdit2, FiSend, FiChevronDown, FiChevronUp, FiBold, FiItalic, FiUnderline } from 'react-icons/fi';
+import {
+  FiAlertTriangle,
+  FiCheckCircle,
+  FiCopy,
+  FiEdit2,
+  FiSend,
+  FiChevronDown,
+  FiChevronUp,
+  FiBold,
+  FiItalic,
+  FiUnderline,
+  FiBarChart2,
+  FiFileText,
+  FiSettings,
+  FiShield,
+  FiClock,
+  FiLink,
+  FiUser
+} from 'react-icons/fi';
 
 const TemplateCheckerPage = () => {
   const [emailSubject, setEmailSubject] = useState('Problem with emails going to SPAM');
@@ -16,7 +34,7 @@ Best regards,
 
   const [analysisResults, setAnalysisResults] = useState([]);
   const [activeTab, setActiveTab] = useState('editor');
-  const [fontFamily, setFontFamily] = useState('Tahoma');
+  const [fontFamily, setFontFamily] = useState('Inter');
   const [fontSize, setFontSize] = useState('14px');
   const [showMetrics, setShowMetrics] = useState(true);
   const [isBold, setIsBold] = useState(false);
@@ -29,12 +47,14 @@ Best regards,
   const calculateMetrics = () => {
     const words = emailContent.split(/\s+/).filter(word => word.length > 0);
     const sentences = emailContent.split(/[.!?]+/).filter(s => s.length > 0);
+    const paragraphs = emailContent.split(/\n\s*\n/).filter(p => p.trim().length > 0);
 
     return {
       subjectLength: emailSubject.length,
       contentLength: emailContent.length,
       wordCount: words.length,
       sentenceCount: sentences.length,
+      paragraphCount: paragraphs.length,
       avgWordsPerSentence: words.length / Math.max(sentences.length, 1),
       readingTime: Math.ceil(words.length / 200) + ' min',
       linkCount: (emailContent.match(/https?:\/\/[^\s]+/g) || []).length,
@@ -53,8 +73,8 @@ Best regards,
   }, [emailSubject, emailContent]);
 
   const fonts = [
-    'Tahoma', 'Arial', 'Verdana', 'Helvetica', 'Times New Roman',
-    'Courier New', 'Georgia', 'Palatino', 'Garamond', 'Comic Sans MS'
+    'Inter', 'Arial', 'Helvetica', 'Georgia', 'Times New Roman',
+    'Verdana', 'Tahoma', 'Segoe UI', 'Roboto', 'SF Pro Display'
   ];
 
   const handleAnalyze = () => {
@@ -68,10 +88,11 @@ Best regards,
     if (spamWords.length > 0) {
       newResults.push({
         id: 1,
-        issue: 'Spam trigger words detected',
+        issue: 'Spam Trigger Words Detected',
         severity: 'High',
         found: spamWords.join(', '),
-        suggestion: `Consider using alternative phrasing for: ${spamWords.map(w => `"${w}"`).join(', ')}`
+        suggestion: `Replace spammy words with professional alternatives. Consider: ${spamWords.map(w => `"${w}"`).join(', ')}`,
+        icon: FiShield
       });
     }
 
@@ -79,10 +100,11 @@ Best regards,
     if (personalizationTags.length > 0) {
       newResults.push({
         id: 2,
-        issue: 'Personalization tags not filled',
+        issue: 'Personalization Tags Not Filled',
         severity: 'Medium',
         found: personalizationTags.join(', '),
-        suggestion: 'Ensure all personalization tags are replaced with actual values before sending'
+        suggestion: 'Replace all personalization tags with actual recipient data before sending',
+        icon: FiUser
       });
     }
 
@@ -90,10 +112,11 @@ Best regards,
     if (uppercaseWords.length > 3) {
       newResults.push({
         id: 3,
-        issue: 'Excessive uppercase text',
+        issue: 'Excessive Uppercase Text',
         severity: 'Medium',
         found: `${uppercaseWords.length} uppercase words/phrases`,
-        suggestion: 'Avoid excessive uppercase text as it may trigger spam filters'
+        suggestion: 'Reduce uppercase usage. Excessive capitalization triggers spam filters',
+        icon: FiFileText
       });
     }
 
@@ -101,10 +124,11 @@ Best regards,
     if (linkCount > 3) {
       newResults.push({
         id: 4,
-        issue: 'Too many links',
+        issue: 'Too Many Links',
         severity: 'Medium',
         found: `${linkCount} links detected`,
-        suggestion: 'Consider reducing the number of links to improve deliverability'
+        suggestion: 'Limit to 2-3 relevant links. Multiple links can affect deliverability',
+        icon: FiLink
       });
     }
 
@@ -112,10 +136,11 @@ Best regards,
     if (emailSubject.length > 50) {
       newResults.push({
         id: 5,
-        issue: 'Subject line too long',
+        issue: 'Subject Line Too Long',
         severity: 'Medium',
         found: `${emailSubject.length} characters (recommended max: 50)`,
-        suggestion: 'Shorten your subject line to improve open rates'
+        suggestion: 'Shorten subject line to 50 characters for better open rates',
+        icon: FiBarChart2
       });
     }
 
@@ -123,10 +148,11 @@ Best regards,
     if (!emailContent.includes('Best regards') && !emailContent.includes('Sincerely') && !emailContent.includes('Thank you')) {
       newResults.push({
         id: 6,
-        issue: 'Professional closing missing',
+        issue: 'Professional Closing Missing',
         severity: 'Low',
         found: 'No professional closing detected',
-        suggestion: 'Add a professional closing like "Best regards" or "Sincerely"'
+        suggestion: 'Add a professional closing like "Best regards" or "Sincerely"',
+        icon: FiFileText
       });
     }
 
@@ -134,10 +160,11 @@ Best regards,
     if (newResults.length === 0) {
       newResults.push({
         id: 7,
-        issue: 'No major issues detected',
+        issue: 'Template Quality Excellent',
         severity: 'None',
-        found: 'Your email template looks good',
-        suggestion: 'Continue following email best practices for optimal deliverability'
+        found: 'All checks passed successfully',
+        suggestion: 'Your email template follows best practices for optimal deliverability',
+        icon: FiCheckCircle
       });
     }
 
@@ -149,13 +176,13 @@ Best regards,
     if (textareaRef.current) {
       textareaRef.current.select();
       document.execCommand('copy');
-      showNotification('Copied to clipboard!');
+      showNotification('Email template copied to clipboard!');
     }
   };
 
   const showNotification = (message) => {
     setNotification(message);
-    setTimeout(() => setNotification(null), 2000);
+    setTimeout(() => setNotification(null), 3000);
   };
 
   const toggleMetrics = () => {
@@ -175,7 +202,7 @@ Best regards,
       case 'bold':
         if (selectedText) {
           newText = emailContent.substring(0, start) +
-            `<strong>${selectedText}</strong>` +
+            `**${selectedText}**` +
             emailContent.substring(end);
           setIsBold(!isBold);
         }
@@ -183,7 +210,7 @@ Best regards,
       case 'italic':
         if (selectedText) {
           newText = emailContent.substring(0, start) +
-            `<em>${selectedText}</em>` +
+            `*${selectedText}*` +
             emailContent.substring(end);
           setIsItalic(!isItalic);
         }
@@ -191,7 +218,7 @@ Best regards,
       case 'underline':
         if (selectedText) {
           newText = emailContent.substring(0, start) +
-            `<u>${selectedText}</u>` +
+            `_${selectedText}_` +
             emailContent.substring(end);
           setIsUnderline(!isUnderline);
         }
@@ -220,39 +247,41 @@ Best regards,
     if (metrics.uppercaseCount > 3) score -= (metrics.uppercaseCount - 3) * 3;
     if (metrics.linkCount > 3) score -= (metrics.linkCount - 3) * 4;
     if (emailSubject.length > 50) score -= 5;
+    if (metrics.wordCount < 50) score -= 10; // Too short
+    if (metrics.wordCount > 500) score -= 5; // Too long
 
     return Math.max(0, Math.min(100, score));
   };
 
   const score = getScore();
-  const scoreColor = score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : '#EF4444';
+  const scoreColor = score >= 80 ? '#0D9488' : score >= 60 ? '#D97706' : '#DC2626';
 
   const CircularScore = ({ score, color }) => {
-    const radius = 24;
+    const radius = 30;
     const circumference = 2 * Math.PI * radius;
     const strokeDasharray = `${(score / 100) * circumference} ${circumference}`;
 
     return (
-      <div className="relative w-14 h-14">
+      <div className="relative w-16 h-16">
         <svg className="w-full h-full transform -rotate-90">
           <circle
-            cx="28"
-            cy="28"
+            cx="32"
+            cy="32"
             r={radius}
             stroke="#E5E7EB"
             strokeWidth="4"
             fill="none"
           />
           <circle
-            cx="28"
-            cy="28"
+            cx="32"
+            cy="32"
             r={radius}
             stroke={color}
             strokeWidth="4"
             fill="none"
             strokeLinecap="round"
             strokeDasharray={strokeDasharray}
-            className="transition-all duration-500 ease-out"
+            className="transition-all duration-1000 ease-out"
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
@@ -263,311 +292,445 @@ Best regards,
   };
 
   return (
-    <div className="h-full bg-gray-50 p-4 font-sans">
-      {/* Main Content */}
-      <div className="h-full">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden h-full flex flex-col">
-          {/* Editor/Results Tabs */}
-          {activeTab === 'editor' ? (
-            <div className="flex-1 overflow-auto p-4">
-              {/* Header */}
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4 space-y-2 lg:space-y-0">
-                <h2 className="text-lg font-bold text-gray-900">Email Template Editor</h2>
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-teal-100/30 to-teal-50/30 p-6 font-sans">
+      {/* Animated Background Elements */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
+        <div className="absolute top-20 left-10 w-64 h-64 bg-teal-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float-slow"></div>
+        <div className="absolute top-40 right-10 w-80 h-80 bg-teal-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float-medium"></div>
+        <div className="absolute bottom-20 left-1/3 w-72 h-72 bg-teal-400 rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-float-slow"></div>
+      </div>
 
-                <div className="flex flex-col sm:flex-row gap-2">
-                  {/* Formatting Options */}
-                  <div className="flex items-center gap-1 bg-gray-50 p-1 rounded-lg">
-                    <select
-                      value={fontFamily}
-                      onChange={(e) => setFontFamily(e.target.value)}
-                      className="px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-transparent"
-                    >
-                      {fonts.map(font => (
-                        <option key={font} value={font}>{font}</option>
-                      ))}
-                    </select>
+      {/* Main Container */}
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2 bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent">
+            Email Template Analyzer
+          </h1>
+          <p className="text-gray-600 text-lg max-w-2xl mx-auto">
+            Optimize your email templates for better deliverability and engagement
+          </p>
+        </div>
 
-                    <select
-                      value={fontSize}
-                      onChange={(e) => setFontSize(e.target.value)}
-                      className="px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-transparent"
-                    >
-                      <option value="12px">12px</option>
-                      <option value="14px">14px</option>
-                      <option value="16px">16px</option>
-                      <option value="18px">18px</option>
-                    </select>
+        {/* Main Content Card */}
+        <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 overflow-hidden">
+          {/* Navigation Tabs */}
+          <div className="flex border-b border-gray-200/60 bg-white/50 backdrop-blur-sm">
+            <button
+              onClick={() => setActiveTab('editor')}
+              className={`flex items-center gap-2 px-6 py-4 font-semibold transition-all duration-300 ${activeTab === 'editor'
+                ? 'text-teal-600 border-b-2 border-teal-600 bg-gradient-to-r from-teal-50/50 to-teal-50/30'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50/50'
+                }`}
+            >
+              <FiFileText className="w-4 h-4" />
+              Template Editor
+            </button>
+            <button
+              onClick={() => setActiveTab('results')}
+              className={`flex items-center gap-2 px-6 py-4 font-semibold transition-all duration-300 ${activeTab === 'results'
+                ? 'text-teal-600 border-b-2 border-teal-600 bg-gradient-to-r from-teal-50/50 to-teal-50/30'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50/50'
+                }`}
+            >
+              <FiBarChart2 className="w-4 h-4" />
+              Analysis Results
+              {analysisResults.length > 0 && (
+                <span className="bg-teal-100 text-teal-800 text-xs px-2 py-1 rounded-full font-bold">
+                  {analysisResults.length}
+                </span>
+              )}
+            </button>
+          </div>
 
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => applyFormatting('bold')}
-                        className={`p-1 rounded transition-all duration-200 ${isBold
-                          ? 'bg-teal-600 text-white shadow'
-                          : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-                          }`}
+          {/* Content Area */}
+          <div className="p-6">
+            {activeTab === 'editor' ? (
+              <div className="space-y-6">
+                {/* Header with Actions */}
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Compose Your Email</h2>
+                    <p className="text-gray-600 text-sm">Create and optimize your email template</p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    {/* Formatting Toolbar */}
+                    <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm border border-gray-300/50 rounded-xl p-1">
+                      <select
+                        value={fontFamily}
+                        onChange={(e) => setFontFamily(e.target.value)}
+                        className="px-3 py-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-0"
                       >
-                        <FiBold className="w-3 h-3" />
+                        {fonts.map(font => (
+                          <option key={font} value={font}>{font}</option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={fontSize}
+                        onChange={(e) => setFontSize(e.target.value)}
+                        className="px-3 py-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-0 border-l border-gray-300/50"
+                      >
+                        <option value="12px">12px</option>
+                        <option value="14px">14px</option>
+                        <option value="16px">16px</option>
+                        <option value="18px">18px</option>
+                      </select>
+
+                      <div className="flex gap-1 border-l border-gray-300/50 pl-1">
+                        <button
+                          onClick={() => applyFormatting('bold')}
+                          className={`p-2 rounded-lg transition-all duration-200 ${isBold
+                            ? 'bg-teal-600 text-white shadow-md'
+                            : 'text-gray-600 hover:bg-gray-100'
+                            }`}
+                        >
+                          <FiBold className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => applyFormatting('italic')}
+                          className={`p-2 rounded-lg transition-all duration-200 ${isItalic
+                            ? 'bg-teal-600 text-white shadow-md'
+                            : 'text-gray-600 hover:bg-gray-100'
+                            }`}
+                        >
+                          <FiItalic className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => applyFormatting('underline')}
+                          className={`p-2 rounded-lg transition-all duration-200 ${isUnderline
+                            ? 'bg-teal-600 text-white shadow-md'
+                            : 'text-gray-600 hover:bg-gray-100'
+                            }`}
+                        >
+                          <FiUnderline className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleCopyToClipboard}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                      >
+                        <FiCopy className="w-4 h-4" />
+                        Copy
                       </button>
                       <button
-                        onClick={() => applyFormatting('italic')}
-                        className={`p-1 rounded transition-all duration-200 ${isItalic
-                          ? 'bg-teal-600 text-white shadow'
-                          : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-                          }`}
+                        onClick={handleAnalyze}
+                        className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 font-semibold"
                       >
-                        <FiItalic className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => applyFormatting('underline')}
-                        className={`p-1 rounded transition-all duration-200 ${isUnderline
-                          ? 'bg-blue-600 text-white shadow'
-                          : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
-                          }`}
-                      >
-                        <FiUnderline className="w-3 h-3" />
+                        <FiSend className="w-4 h-4" />
+                        Analyze Template
                       </button>
                     </div>
                   </div>
+                </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleCopyToClipboard}
-                      className="flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 transition-colors duration-200 text-sm font-medium"
-                    >
-                      <FiCopy className="w-3 h-3" />
-                      Copy
-                    </button>
-                    <button
-                      onClick={handleAnalyze}
-                      className="flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-teal-800 to-teal-500 text-white rounded shadow hover:shadow-md transform hover:-translate-y-0.5 transition-all duration-200 text-sm font-medium"
-                    >
-                      <FiSend className="w-3 h-3" />
-                      Analyze
-                    </button>
+                {/* Subject Field */}
+                <div className="bg-white/50 backdrop-blur-sm rounded-xl border border-gray-300/50 p-4">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Email Subject
+                  </label>
+                  <input
+                    type="text"
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    className="w-full px-4 py-3 bg-white/80 border border-gray-300/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 text-lg font-medium"
+                    placeholder="Enter your email subject line..."
+                  />
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-sm text-gray-500">
+                      {emailSubject.length} characters
+                    </span>
+                    {emailSubject.length > 50 && (
+                      <span className="text-amber-600 text-sm font-medium bg-amber-50 px-2 py-1 rounded-lg">
+                        Recommended: 50 characters max
+                      </span>
+                    )}
                   </div>
                 </div>
-              </div>
 
-              {/* Subject Field */}
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Subject Line
-                </label>
-                <input
-                  type="text"
-                  value={emailSubject}
-                  onChange={(e) => setEmailSubject(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent transition-all duration-200 text-sm"
-                  placeholder="Enter your email subject..."
-                />
-                <div className="flex items-center gap-1 mt-1 text-xs text-gray-600">
-                  <span>Length: {emailSubject.length} chars</span>
-                  {emailSubject.length > 50 && (
-                    <span className="text-amber-600 font-medium bg-amber-50 px-1 py-0.5 rounded">
-                      Max: 50 chars
-                    </span>
+                {/* Email Editor */}
+                <div className="bg-white/50 backdrop-blur-sm rounded-xl border border-gray-300/50 overflow-hidden">
+                  <label className="block text-sm font-semibold text-gray-700 p-4 border-b border-gray-300/50">
+                    Email Content
+                  </label>
+                  <textarea
+                    ref={textareaRef}
+                    value={emailContent}
+                    onChange={(e) => setEmailContent(e.target.value)}
+                    className="w-full h-64 px-4 py-4 bg-white/80 border-0 focus:outline-none focus:ring-0 resize-vertical text-gray-700 leading-relaxed"
+                    style={{
+                      fontFamily,
+                      fontSize,
+                      fontWeight: isBold ? 'bold' : 'normal',
+                      fontStyle: isItalic ? 'italic' : 'normal',
+                      textDecoration: isUnderline ? 'underline' : 'none'
+                    }}
+                    placeholder="Write your email content here... Use **bold**, *italic*, or _underline_ formatting."
+                  />
+                </div>
+
+                {/* Metrics Section */}
+                <div className="bg-white/50 backdrop-blur-sm rounded-xl border border-gray-300/50 overflow-hidden">
+                  <button
+                    onClick={toggleMetrics}
+                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50/50 transition-all duration-200"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-teal-600 rounded-lg flex items-center justify-center">
+                        <FiBarChart2 className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="text-left">
+                        <h3 className="font-semibold text-gray-900">Template Analytics</h3>
+                        <p className="text-sm text-gray-600">Real-time metrics and insights</p>
+                      </div>
+                    </div>
+                    {showMetrics ? <FiChevronUp className="w-5 h-5 text-gray-400" /> : <FiChevronDown className="w-5 h-5 text-gray-400" />}
+                  </button>
+
+                  {showMetrics && (
+                    <div className="p-4 border-t border-gray-300/50">
+                      {/* Score Display */}
+                      <div className="flex items-center gap-4 mb-6 p-4 bg-gradient-to-r from-teal-50 to-teal-100/30 rounded-xl border border-teal-300/30">
+                        <CircularScore score={score} color={scoreColor} />
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-900 mb-1">Email Health Score</h4>
+                          <p className={`text-sm font-medium ${score >= 80 ? 'text-teal-600' :
+                            score >= 60 ? 'text-amber-600' :
+                              'text-red-600'
+                            }`}>
+                            {score >= 80 ? 'Excellent - Ready to send' :
+                              score >= 60 ? 'Good - Minor improvements needed' :
+                                'Needs work - Review recommendations'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Metrics Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                        {[
+                          { label: 'Subject Length', value: metrics.subjectLength, warning: metrics.subjectLength > 50, icon: FiFileText },
+                          { label: 'Word Count', value: metrics.wordCount, optimal: metrics.wordCount >= 50 && metrics.wordCount <= 500, icon: FiFileText },
+                          { label: 'Sentences', value: metrics.sentenceCount, icon: FiFileText },
+                          { label: 'Paragraphs', value: metrics.paragraphCount, icon: FiFileText },
+                          { label: 'Reading Time', value: metrics.readingTime, icon: FiClock },
+                          { label: 'Links', value: metrics.linkCount, warning: metrics.linkCount > 3, icon: FiLink },
+                          { label: 'Questions', value: metrics.questionCount, icon: FiFileText },
+                          { label: 'Spam Words', value: metrics.spammyWordCount, warning: metrics.spammyWordCount > 0, icon: FiShield },
+                          { label: 'Personalization', value: metrics.personalizationCount, warning: metrics.personalizationCount > 0, icon: FiUser },
+                          { label: 'UPPERCASE', value: metrics.uppercaseCount, warning: metrics.uppercaseCount > 3, icon: FiFileText },
+                        ].map((metric, index) => {
+                          const IconComponent = metric.icon;
+                          return (
+                            <div key={index} className={`bg-white/80 backdrop-blur-sm border rounded-xl p-3 text-center transition-all duration-200 hover:shadow-md ${metric.warning ? 'border-red-300 bg-red-50/50' :
+                              metric.optimal ? 'border-teal-300 bg-teal-50/50' :
+                                'border-gray-300/50'
+                              }`}>
+                              <div className="flex items-center justify-center gap-2 mb-2">
+                                <IconComponent className={`w-4 h-4 ${metric.warning ? 'text-red-600' :
+                                  metric.optimal ? 'text-teal-600' :
+                                    'text-gray-600'
+                                  }`} />
+                                <div className="text-lg font-bold text-gray-900">{metric.value}</div>
+                              </div>
+                              <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{metric.label}</div>
+                              {metric.warning && (
+                                <div className="mt-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full font-medium">
+                                  Review
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
-
-              {/* Email Editor */}
-              <div className="mb-4 flex-1">
-                <textarea
-                  ref={textareaRef}
-                  value={emailContent}
-                  onChange={(e) => setEmailContent(e.target.value)}
-                  className="w-full h-48 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-transparent resize-vertical transition-all duration-200 text-sm"
-                  style={{
-                    fontFamily,
-                    fontSize,
-                    fontWeight: isBold ? 'bold' : 'normal',
-                    fontStyle: isItalic ? 'italic' : 'normal',
-                    textDecoration: isUnderline ? 'underline' : 'none'
-                  }}
-                  placeholder="Write your email content here..."
-                />
-              </div>
-
-              {/* Metrics Section */}
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <button
-                  onClick={toggleMetrics}
-                  className="w-full flex items-center justify-between p-2 bg-gradient-to-r from-gray-50 to-gray-100 hover:from-gray-100 hover:to-gray-200 transition-all duration-200 text-sm"
-                >
-                  <h3 className="font-semibold text-gray-900">Template Metrics</h3>
-                  {showMetrics ? <FiChevronUp className="w-4 h-4 text-gray-600" /> : <FiChevronDown className="w-4 h-4 text-gray-600" />}
-                </button>
-
-                {showMetrics && (
-                  <div className="p-3 bg-white">
-                    {/* Score Display */}
-                    <div className="flex items-center gap-3 mb-4 p-2 bg-gray-50 rounded-lg border border-gray-200">
-                      <CircularScore score={score} color={scoreColor} />
-                      <div>
-                        <h4 className="text-sm font-semibold text-gray-900">Email Health Score</h4>
-                        <p className={`text-xs font-medium ${score >= 80 ? 'text-green-600' :
-                          score >= 60 ? 'text-amber-600' :
-                            'text-red-600'
-                          }`}>
-                          {score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : 'Needs Improvement'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Metrics Grid */}
-                    <div className="grid grid-cols-3 md:grid-cols-5 gap-2">
-                      {[
-                        { label: 'Subject', value: metrics.subjectLength, warning: metrics.subjectLength > 50 },
-                        { label: 'Words', value: metrics.wordCount },
-                        { label: 'Sentences', value: metrics.sentenceCount },
-                        { label: 'Avg/Sentence', value: metrics.avgWordsPerSentence.toFixed(1) },
-                        { label: 'Read Time', value: metrics.readingTime },
-                        { label: 'Links', value: metrics.linkCount, warning: metrics.linkCount > 3 },
-                        { label: 'Questions', value: metrics.questionCount },
-                        { label: 'Spam Words', value: metrics.spammyWordCount, warning: metrics.spammyWordCount > 0 },
-                        { label: 'Personalize', value: metrics.personalizationCount, warning: metrics.personalizationCount > 0 },
-                        { label: 'UPPERCASE', value: metrics.uppercaseCount, warning: metrics.uppercaseCount > 3 },
-                      ].map((metric, index) => (
-                        <div key={index} className="bg-white border border-gray-200 rounded-lg p-2 text-center hover:shadow-sm transition-shadow duration-200">
-                          <div className="text-lg font-bold text-gray-900">{metric.value}</div>
-                          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1">{metric.label}</div>
-                          {metric.warning && (
-                            <div className="text-xs text-red-600 bg-red-50 px-1 py-0.5 rounded-full font-medium">
-                              {metric.label.includes('Spam') ? '!' :
-                                metric.label.includes('Personalize') ? '!' :
-                                  metric.label.includes('UPPERCASE') ? '!' :
-                                    metric.label.includes('Links') ? '!' : '!'}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Results Header */}
+                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                  <div>
+                    <h2 className="text-xl font-bold text-gray-900">Template Analysis Results</h2>
+                    <p className="text-gray-600 text-sm">Detailed insights and recommendations</p>
                   </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1 overflow-auto p-4">
-              {/* Results Header */}
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-900 mb-2 lg:mb-0">Analysis Results</h2>
-                <button
-                  onClick={() => setActiveTab('editor')}
-                  className="flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded border border-gray-300 hover:bg-gray-200 transition-colors duration-200 text-sm font-medium"
-                >
-                  <FiEdit2 className="w-3 h-3" />
-                  Edit Template
-                </button>
-              </div>
+                  <button
+                    onClick={() => setActiveTab('editor')}
+                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                  >
+                    <FiEdit2 className="w-4 h-4" />
+                    Edit Template
+                  </button>
+                </div>
 
-              {/* Summary Cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-                {[
-                  { severity: 'High', count: analysisResults.filter(r => r.severity === 'High').length, color: 'red' },
-                  { severity: 'Medium', count: analysisResults.filter(r => r.severity === 'Medium').length, color: 'amber' },
-                  { severity: 'Low', count: analysisResults.filter(r => r.severity === 'Low').length, color: 'green' },
-                  { severity: 'None', count: analysisResults.filter(r => r.severity === 'None').length, color: 'blue' },
-                ].map((summary, index) => (
-                  <div key={index} className={`p-3 rounded-lg border-l-3 ${summary.color === 'red' ? 'bg-red-50 border-red-500' :
-                    summary.color === 'amber' ? 'bg-amber-50 border-amber-500' :
-                      summary.color === 'green' ? 'bg-green-50 border-green-500' :
-                        'bg-blue-50 border-blue-500'
-                    }`}>
-                    <div className={`text-xl font-bold mb-1 ${summary.color === 'red' ? 'text-red-600' :
-                      summary.color === 'amber' ? 'text-amber-600' :
-                        summary.color === 'green' ? 'text-green-600' :
-                          'text-blue-600'
+                {/* Summary Cards */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { severity: 'Critical', count: analysisResults.filter(r => r.severity === 'High').length, color: 'red', description: 'Urgent fixes needed' },
+                    { severity: 'Warning', count: analysisResults.filter(r => r.severity === 'Medium').length, color: 'amber', description: 'Recommended improvements' },
+                    { severity: 'Suggestion', count: analysisResults.filter(r => r.severity === 'Low').length, color: 'teal', description: 'Optional enhancements' },
+                    { severity: 'Passed', count: analysisResults.filter(r => r.severity === 'None').length, color: 'green', description: 'All checks passed' },
+                  ].map((summary, index) => (
+                    <div key={index} className={`p-4 rounded-xl border-l-4 backdrop-blur-sm ${summary.color === 'red' ? 'bg-red-50/80 border-red-500' :
+                      summary.color === 'amber' ? 'bg-amber-50/80 border-amber-500' :
+                        summary.color === 'teal' ? 'bg-teal-50/80 border-teal-500' :
+                          'bg-green-50/80 border-green-500'
                       }`}>
-                      {summary.count}
-                    </div>
-                    <div className="text-xs text-gray-700 font-semibold">
-                      {summary.severity}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Issues List */}
-              <div className="space-y-3 mb-4">
-                {analysisResults.map((result) => (
-                  <div key={result.id} className={`p-3 rounded-lg border-l-3 ${result.severity === 'High' ? 'border-red-500 bg-red-50' :
-                    result.severity === 'Medium' ? 'border-amber-500 bg-amber-50' :
-                      result.severity === 'Low' ? 'border-green-500 bg-green-50' :
-                        'border-blue-500 bg-blue-50'
-                    }`}>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-2">
-                      <div className="flex items-center gap-2 mb-1 sm:mb-0">
-                        {result.severity === 'High' ? (
-                          <FiAlertTriangle className="w-4 h-4 text-red-600" />
-                        ) : result.severity === 'None' ? (
-                          <FiCheckCircle className="w-4 h-4 text-blue-600" />
-                        ) : (
-                          <FiAlertTriangle className="w-4 h-4 text-amber-600" />
-                        )}
-                        <span className="text-sm font-semibold text-gray-900">{result.issue}</span>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-bold uppercase ${result.severity === 'High' ? 'bg-red-100 text-red-800' :
-                        result.severity === 'Medium' ? 'bg-amber-100 text-amber-800' :
-                          result.severity === 'Low' ? 'bg-green-100 text-green-800' :
-                            'bg-blue-100 text-blue-800'
+                      <div className={`text-2xl font-bold mb-1 ${summary.color === 'red' ? 'text-red-600' :
+                        summary.color === 'amber' ? 'text-amber-600' :
+                          summary.color === 'teal' ? 'text-teal-600' :
+                            'text-green-600'
                         }`}>
-                        {result.severity}
-                      </span>
-                    </div>
-
-                    <div className="space-y-1 text-xs">
-                      <div className="flex flex-col sm:flex-row sm:items-start gap-1">
-                        <span className="font-semibold text-gray-700 min-w-12">Found:</span>
-                        <span className="bg-red-100 text-red-800 px-2 py-1 rounded font-mono">
-                          {result.found}
-                        </span>
+                        {summary.count}
                       </div>
-                      <div className="flex flex-col sm:flex-row sm:items-start gap-1">
-                        <span className="font-semibold text-gray-700 min-w-12">Fix:</span>
-                        <span className="text-gray-600">{result.suggestion}</span>
+                      <div className="text-sm font-semibold text-gray-900">
+                        {summary.severity}
+                      </div>
+                      <div className="text-xs text-gray-600 mt-1">
+                        {summary.description}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Issues List */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Detailed Analysis</h3>
+                  {analysisResults.map((result) => {
+                    const IconComponent = result.icon || FiAlertTriangle;
+                    return (
+                      <div key={result.id} className={`p-4 rounded-xl border-l-4 backdrop-blur-sm ${result.severity === 'High' ? 'border-red-500 bg-red-50/80' :
+                        result.severity === 'Medium' ? 'border-amber-500 bg-amber-50/80' :
+                          result.severity === 'Low' ? 'border-teal-500 bg-teal-50/80' :
+                            'border-green-500 bg-green-50/80'
+                        }`}>
+                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-3">
+                          <div className="flex items-start gap-3">
+                            <div className={`p-2 rounded-lg ${result.severity === 'High' ? 'bg-red-100 text-red-600' :
+                              result.severity === 'Medium' ? 'bg-amber-100 text-amber-600' :
+                                result.severity === 'Low' ? 'bg-teal-100 text-teal-600' :
+                                  'bg-green-100 text-green-600'
+                              }`}>
+                              <IconComponent className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <h4 className="font-semibold text-gray-900 mb-1">{result.issue}</h4>
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase ${result.severity === 'High' ? 'bg-red-100 text-red-800' :
+                                  result.severity === 'Medium' ? 'bg-amber-100 text-amber-800' :
+                                    result.severity === 'Low' ? 'bg-teal-100 text-teal-800' :
+                                      'bg-green-100 text-green-800'
+                                  }`}>
+                                  {result.severity}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 text-sm">
+                          <div className="flex flex-col sm:flex-row sm:items-start gap-2">
+                            <span className="font-semibold text-gray-700 min-w-20">Found:</span>
+                            <span className={`px-3 py-2 rounded-lg font-mono text-sm ${result.severity === 'High' ? 'bg-red-100 text-red-800' :
+                              result.severity === 'Medium' ? 'bg-amber-100 text-amber-800' :
+                                result.severity === 'Low' ? 'bg-teal-100 text-teal-800' :
+                                  'bg-green-100 text-green-800'
+                              }`}>
+                              {result.found}
+                            </span>
+                          </div>
+                          <div className="flex flex-col sm:flex-row sm:items-start gap-2">
+                            <span className="font-semibold text-gray-700 min-w-20">Recommendation:</span>
+                            <span className="text-gray-600 bg-white/50 px-3 py-2 rounded-lg border border-gray-300/30">
+                              {result.suggestion}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Best Practices */}
+                <div className="bg-gradient-to-r from-teal-50/50 to-teal-100/30 rounded-xl p-6 border border-teal-300/50">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                    <FiSettings className="w-5 h-5 text-teal-600" />
+                    Email Best Practices
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3 p-3 bg-white/50 rounded-lg border border-gray-300/30">
+                        <div className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-teal-600 text-xs font-bold">1</span>
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-1">Warm Up Gradually</h4>
+                          <p className="text-gray-600">Start with 5-10 emails daily, gradually increasing volume over 4-8 weeks</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 bg-white/50 rounded-lg border border-gray-300/30">
+                        <div className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-teal-600 text-xs font-bold">2</span>
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-1">Authentication Setup</h4>
+                          <p className="text-gray-600">Configure SPF, DKIM, and DMARC records for domain authentication</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3 p-3 bg-white/50 rounded-lg border border-gray-300/30">
+                        <div className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-teal-600 text-xs font-bold">3</span>
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-1">List Hygiene</h4>
+                          <p className="text-gray-600">Regularly clean your email list and remove inactive subscribers</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 p-3 bg-white/50 rounded-lg border border-gray-300/30">
+                        <div className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-teal-600 text-xs font-bold">4</span>
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-gray-900 mb-1">Engagement Focus</h4>
+                          <p className="text-gray-600">Monitor open rates and engagement metrics to maintain sender reputation</p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                ))}
+                </div>
               </div>
-
-              {/* Recommendations */}
-              <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-lg p-3 border border-gray-200">
-                <h3 className="text-sm font-bold text-gray-900 mb-2">Recommendations</h3>
-                <ul className="space-y-1 text-xs text-gray-700">
-                  <li className="flex items-start gap-2">
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1 flex-shrink-0" />
-                    <span>Warm up domain gradually over 4-8 weeks</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1 flex-shrink-0" />
-                    <span>Configure SPF, DKIM, DMARC records</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1 flex-shrink-0" />
-                    <span>Clean email list regularly</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <div className="w-1.5 h-1.5 bg-blue-500 rounded-full mt-1 flex-shrink-0" />
-                    <span>Keep subject under 50 characters</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
       {/* Notification */}
       {notification && (
-        <div className="fixed bottom-4 right-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 rounded-lg shadow-lg animate-slide-in text-sm">
-          {notification}
+        <div className="fixed bottom-6 right-6 bg-gradient-to-r from-teal-500 to-teal-600 text-white px-6 py-3 rounded-xl shadow-2xl animate-slide-in font-medium">
+          <div className="flex items-center gap-2">
+            <FiCheckCircle className="w-4 h-4" />
+            {notification}
+          </div>
         </div>
       )}
 
-      {/* Custom Animation */}
+      {/* Custom Animations */}
       <style jsx global>{`
+        @keyframes float-slow {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-20px) rotate(5deg); }
+        }
+        @keyframes float-medium {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-15px) rotate(-3deg); }
+        }
         @keyframes slide-in {
           from {
             transform: translateY(100px);
@@ -578,9 +741,9 @@ Best regards,
             opacity: 1;
           }
         }
-        .animate-slide-in {
-          animation: slide-in 0.3s ease-out;
-        }
+        .animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
+        .animate-float-medium { animation: float-medium 6s ease-in-out infinite; }
+        .animate-slide-in { animation: slide-in 0.3s ease-out; }
       `}</style>
     </div>
   );
