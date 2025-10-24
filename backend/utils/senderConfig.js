@@ -1,39 +1,63 @@
-function getSenderType(sender) {
-    console.log(`🔍 Determining sender type for ${sender.email}:`, {
-        roundRobinIndexGoogle: sender.roundRobinIndexGoogle,
-        roundRobinIndexMicrosoft: sender.roundRobinIndexMicrosoft,
-        roundRobinIndexCustom: sender.roundRobinIndexCustom,
-        provider: sender.provider,
-        smtp_host: sender.smtp_host,
-        app_password: !!sender.app_password,
-        access_token: !!sender.access_token
+function normalizeFieldNames(sender) {
+    // Create a DEEP copy of the sender object
+    const normalized = JSON.parse(JSON.stringify(sender));
+
+    console.log(`🔄 Normalizing fields for ${sender.email}`);
+
+    // Field mappings - CORRECTED: source → target
+    const fieldMappings = {
+        'appPassword': 'app_password',  // appPassword → app_password
+        'smtpPassword': 'smtp_pass',    // smtpPassword → smtp_pass  
+        'accessToken': 'access_token',   // accessToken → access_token
+        'smtpHost': 'smtp_host',        // smtpHost → smtp_host
+        'smtpPort': 'smtp_port',        // smtpPort → smtp_port
+        'imapHost': 'imap_host',        // imapHost → imap_host
+        'imapPort': 'imap_port',        // imapPort → imap_port
+        'imapPassword': 'imap_pass',    // imapPassword → imap_pass
+        'smtpUser': 'smtp_user',        // smtpUser → smtp_user
+        'imapUser': 'imap_user',        // imapUser → imap_user
+        'sender_name': 'name',          // sender_name → name
+        'user_id': 'userId'             // user_id → userId
+    };
+
+    Object.keys(fieldMappings).forEach(sourceField => {
+        const targetField = fieldMappings[sourceField];
+        // Copy from source to target if source exists and target doesn't
+        if (sender[sourceField] !== undefined && normalized[targetField] === undefined) {
+            normalized[targetField] = sender[sourceField];
+            console.log(`   🔄 Normalized: ${sourceField} → ${targetField}`);
+        }
     });
 
-    // Check for explicit provider first
+    return normalized;
+}
+
+function getSenderType(sender) {
+    // Check for pool accounts first
+    if (sender.providerType) {
+        const poolType = sender.providerType.toLowerCase();
+        return poolType; // Return 'gmail', 'microsoft', or 'custom'
+    }
+
+    // Check for explicit provider
     if (sender.provider === 'google' || sender.roundRobinIndexGoogle !== undefined) {
-        console.log(`✅ Detected as Google account (explicit): ${sender.email}`);
         return 'google';
     }
     if (sender.provider === 'microsoft' || sender.roundRobinIndexMicrosoft !== undefined) {
-        console.log(`✅ Detected as Microsoft account (explicit): ${sender.email}`);
         return 'microsoft';
     }
     if (sender.provider === 'smtp' || sender.roundRobinIndexCustom !== undefined) {
-        console.log(`✅ Detected as SMTP account (explicit): ${sender.email}`);
         return 'smtp';
     }
 
-    // Check for credentials
+    // Check for credentials (using NORMALIZED field names)
     if (sender.app_password) {
-        console.log(`✅ Detected as Google account (app_password): ${sender.email}`);
         return 'google';
     }
     if (sender.access_token) {
-        console.log(`✅ Detected as Microsoft account (access_token): ${sender.email}`);
         return 'microsoft';
     }
-    if (sender.smtp_host || sender.smtp_pass) {
-        console.log(`✅ Detected as SMTP account (smtp_host): ${sender.email}`);
+    if (sender.smtp_pass) {
         return 'smtp';
     }
 
@@ -41,19 +65,13 @@ function getSenderType(sender) {
     if (sender.email) {
         const domain = sender.email.toLowerCase();
         if (domain.endsWith('@gmail.com') || domain.endsWith('@googlemail.com')) {
-            console.log(`✅ Detected as Google account by domain: ${sender.email}`);
             return 'google';
         }
         if (domain.endsWith('@outlook.com') || domain.endsWith('@hotmail.com') || domain.endsWith('@live.com')) {
-            console.log(`✅ Detected as Microsoft account by domain: ${sender.email}`);
             return 'microsoft';
         }
-        // For custom domains, default to SMTP
-        console.log(`✅ Detected as SMTP account (custom domain): ${sender.email}`);
-        return 'smtp';
     }
 
-    console.log(`❓ Unknown account type for: ${sender.email}, defaulting to SMTP`);
     return 'smtp';
 }
 
@@ -62,117 +80,88 @@ function buildSenderConfig(sender, senderType = null) {
         throw new Error('❌ Sender object is required');
     }
 
+    // Normalize sender once
+    const normalizedSender = normalizeFieldNames(sender);
+
     if (!senderType) {
-        senderType = getSenderType(sender);
+        senderType = getSenderType(normalizedSender);
     }
 
-    console.log(`🔧 Building sender config for: ${sender.email} (type: ${senderType})`);
-    console.log(`📦 Sender data:`, {
-        email: sender.email,
-        hasAppPassword: !!sender.app_password,
-        hasAccessToken: !!sender.access_token,
-        hasSmtpPass: !!sender.smtp_pass,
-        hasSmtpHost: !!sender.smtp_host,
-        provider: sender.provider
-    });
+    console.log(`🔧 Building config for: ${normalizedSender.email} (type: ${senderType})`);
 
     const baseConfig = {
-        userId: sender.userId || sender.user_id,
-        name: sender.name || sender.sender_name || extractNameFromEmail(sender.email),
-        email: sender.email,
+        userId: normalizedSender.userId || normalizedSender.user_id,
+        name: normalizedSender.name || normalizedSender.sender_name || extractNameFromEmail(normalizedSender.email),
+        email: normalizedSender.email,
         type: senderType,
-        startEmailsPerDay: sender.startEmailsPerDay || 3,
-        increaseEmailsPerDay: sender.increaseEmailsPerDay || 3,
-        maxEmailsPerDay: sender.maxEmailsPerDay || 25,
-        replyRate: sender.replyRate || 0.25,
-        warmupDayCount: sender.warmupDayCount || 0,
-        industry: sender.industry || 'general',
-        provider: sender.provider || senderType
+        startEmailsPerDay: normalizedSender.startEmailsPerDay || 3,
+        increaseEmailsPerDay: normalizedSender.increaseEmailsPerDay || 3,
+        maxEmailsPerDay: normalizedSender.maxEmailsPerDay || 25,
+        replyRate: normalizedSender.replyRate || 0.25,
+        warmupDayCount: normalizedSender.warmupDayCount || 0,
+        industry: normalizedSender.industry || 'general',
+        provider: normalizedSender.provider || senderType
     };
 
     switch (senderType) {
         case 'google':
-            // ✅ FIX: Check for app_password in the actual sender object
-            if (!sender.app_password) {
-                console.error(`❌ Google account ${sender.email} is missing app_password. Available fields:`, Object.keys(sender));
-                throw new Error(`Google account ${sender.email} is missing app password. Please check your database.`);
+            if (!normalizedSender.app_password) {
+                throw new Error(`Google account ${normalizedSender.email} is missing app_password`);
             }
 
             return {
                 ...baseConfig,
                 smtpHost: 'smtp.gmail.com',
                 smtpPort: 587,
-                smtpUser: sender.email,
-                smtpPass: sender.app_password,
+                smtpUser: normalizedSender.email,
+                smtpPass: normalizedSender.app_password,
                 smtpEncryption: 'TLS',
                 imapHost: 'imap.gmail.com',
                 imapPort: 993,
-                imapUser: sender.email,
-                imapPass: sender.app_password,
-                imapEncryption: 'SSL',
-                app_password: sender.app_password // Include for reference
+                imapUser: normalizedSender.email,
+                imapPass: normalizedSender.app_password,
+                imapEncryption: 'SSL'
             };
 
         case 'microsoft':
-            // ✅ FIX: Check for both access_token and app_password
-            const microsoftAuth = sender.access_token || sender.app_password;
+            const microsoftAuth = normalizedSender.access_token || normalizedSender.app_password;
             if (!microsoftAuth) {
-                console.error(`❌ Microsoft account ${sender.email} is missing both access_token and app_password. Available fields:`, Object.keys(sender));
-                throw new Error(`Microsoft account ${sender.email} is missing credentials. Please check your database.`);
+                throw new Error(`Microsoft account ${normalizedSender.email} is missing credentials`);
             }
 
             return {
                 ...baseConfig,
                 smtpHost: 'smtp.office365.com',
                 smtpPort: 587,
-                smtpUser: sender.email,
+                smtpUser: normalizedSender.email,
                 smtpPass: microsoftAuth,
                 smtpEncryption: 'STARTTLS',
                 imapHost: 'outlook.office365.com',
                 imapPort: 993,
-                imapUser: sender.email,
+                imapUser: normalizedSender.email,
                 imapPass: microsoftAuth,
-                imapEncryption: 'SSL',
-                access_token: sender.access_token, // Include for reference
-                app_password: sender.app_password // Include for reference
+                imapEncryption: 'SSL'
             };
 
         case 'smtp':
-            // ✅ FIX: Use correct field names from your database model
-            console.log(`🔧 SMTP account details for ${sender.email}:`, {
-                smtp_host: sender.smtp_host,
-                smtp_port: sender.smtp_port,
-                smtp_user: sender.smtp_user,
-                smtp_pass: sender.smtp_pass ? 'SET' : 'MISSING',
-                imap_host: sender.imap_host,
-                imap_port: sender.imap_port,
-                imap_user: sender.imap_user,
-                imap_pass: sender.imap_pass
-            });
+        case 'custom':
+            const smtpHost = normalizedSender.smtp_host;
+            const smtpUser = normalizedSender.smtp_user || normalizedSender.email;
+            const smtpPass = normalizedSender.smtp_pass || normalizedSender.smtpPassword;
+            const smtpPort = normalizedSender.smtp_port || 587;
 
-            // Use the exact field names from your database model
-            const smtpHost = sender.smtp_host;
-            const smtpUser = sender.smtp_user || sender.email;
-            const smtpPass = sender.smtp_pass;
-            const smtpPort = sender.smtp_port || 587;
+            const imapHost = normalizedSender.imap_host;
+            const imapUser = normalizedSender.imap_user || normalizedSender.email;
+            const imapPass = normalizedSender.imap_pass || normalizedSender.imapPassword || smtpPass;
+            const imapPort = normalizedSender.imap_port || 993;
 
-            const imapHost = sender.imap_host || smtpHost?.replace('smtp', 'imap');
-            const imapUser = sender.imap_user || smtpUser;
-            const imapPass = sender.imap_pass || smtpPass;
-            const imapPort = sender.imap_port || 993;
-
-            // Validate required fields
             if (!smtpPass) {
-                console.error(`❌ SMTP account ${sender.email} is missing smtp_pass`);
-                throw new Error(`SMTP account ${sender.email} is missing SMTP password`);
+                throw new Error(`SMTP account ${normalizedSender.email} is missing SMTP password`);
             }
 
             if (!smtpHost) {
-                console.error(`❌ SMTP account ${sender.email} is missing smtp_host`);
-                throw new Error(`SMTP account ${sender.email} is missing SMTP host`);
+                throw new Error(`SMTP account ${normalizedSender.email} is missing SMTP host`);
             }
-
-            console.log(`✅ SMTP config built: ${smtpHost}:${smtpPort}`);
 
             return {
                 ...baseConfig,
@@ -180,20 +169,122 @@ function buildSenderConfig(sender, senderType = null) {
                 smtpPort: smtpPort,
                 smtpUser: smtpUser,
                 smtpPass: smtpPass,
-                smtpEncryption: sender.smtp_encryption || 'TLS',
+                smtpEncryption: normalizedSender.smtp_encryption || 'TLS',
                 imapHost: imapHost,
                 imapPort: imapPort,
                 imapUser: imapUser,
                 imapPass: imapPass,
-                imapEncryption: sender.imap_encryption || 'SSL'
+                imapEncryption: normalizedSender.imap_encryption || 'SSL'
             };
 
+        case 'gmail':
+            // Pool Gmail accounts
+            const gmailPassword = normalizedSender.app_password || normalizedSender.smtp_pass || normalizedSender.appPassword || normalizedSender.smtpPassword;
+            if (!gmailPassword) {
+                throw new Error(`Gmail pool account ${normalizedSender.email} is missing password`);
+            }
+
+            return {
+                ...baseConfig,
+                smtpHost: 'smtp.gmail.com',
+                smtpPort: 587,
+                smtpUser: normalizedSender.email,
+                smtpPass: gmailPassword,
+                smtpEncryption: 'TLS',
+                imapHost: 'imap.gmail.com',
+                imapPort: 993,
+                imapUser: normalizedSender.email,
+                imapPass: gmailPassword,
+                imapEncryption: 'SSL'
+            };
+
+        case 'pool':
+            // Handle pool accounts based on their actual provider type
+            const actualProviderType = normalizedSender.providerType ? normalizedSender.providerType.toLowerCase() : 'gmail';
+
+            switch (actualProviderType) {
+                case 'gmail':
+                    const poolGmailPassword = normalizedSender.app_password || normalizedSender.smtp_pass || normalizedSender.appPassword || normalizedSender.smtpPassword;
+                    if (!poolGmailPassword) {
+                        throw new Error(`Gmail pool account ${normalizedSender.email} is missing password`);
+                    }
+
+                    return {
+                        ...baseConfig,
+                        smtpHost: 'smtp.gmail.com',
+                        smtpPort: 587,
+                        smtpUser: normalizedSender.email,
+                        smtpPass: poolGmailPassword,
+                        smtpEncryption: 'TLS',
+                        imapHost: 'imap.gmail.com',
+                        imapPort: 993,
+                        imapUser: normalizedSender.email,
+                        imapPass: poolGmailPassword,
+                        imapEncryption: 'SSL'
+                    };
+
+                case 'microsoft':
+                    const poolMicrosoftAuth = normalizedSender.access_token || normalizedSender.app_password;
+                    if (!poolMicrosoftAuth) {
+                        throw new Error(`Microsoft pool account ${normalizedSender.email} is missing credentials`);
+                    }
+
+                    return {
+                        ...baseConfig,
+                        smtpHost: 'smtp.office365.com',
+                        smtpPort: 587,
+                        smtpUser: normalizedSender.email,
+                        smtpPass: poolMicrosoftAuth,
+                        smtpEncryption: 'STARTTLS',
+                        imapHost: 'outlook.office365.com',
+                        imapPort: 993,
+                        imapUser: normalizedSender.email,
+                        imapPass: poolMicrosoftAuth,
+                        imapEncryption: 'SSL'
+                    };
+
+                case 'custom':
+                    const poolSmtpHost = normalizedSender.smtp_host;
+                    const poolSmtpUser = normalizedSender.smtp_user || normalizedSender.email;
+                    const poolSmtpPass = normalizedSender.smtp_pass || normalizedSender.smtpPassword;
+                    const poolSmtpPort = normalizedSender.smtp_port || 587;
+
+                    const poolImapHost = normalizedSender.imap_host;
+                    const poolImapUser = normalizedSender.imap_user || normalizedSender.email;
+                    const poolImapPass = normalizedSender.imap_pass || normalizedSender.imapPassword || poolSmtpPass;
+                    const poolImapPort = normalizedSender.imap_port || 993;
+
+                    if (!poolSmtpPass) {
+                        throw new Error(`Custom pool account ${normalizedSender.email} is missing SMTP password`);
+                    }
+
+                    if (!poolSmtpHost) {
+                        throw new Error(`Custom pool account ${normalizedSender.email} is missing SMTP host`);
+                    }
+
+                    return {
+                        ...baseConfig,
+                        smtpHost: poolSmtpHost,
+                        smtpPort: poolSmtpPort,
+                        smtpUser: poolSmtpUser,
+                        smtpPass: poolSmtpPass,
+                        smtpEncryption: normalizedSender.smtp_encryption || 'TLS',
+                        imapHost: poolImapHost,
+                        imapPort: poolImapPort,
+                        imapUser: poolImapUser,
+                        imapPass: poolImapPass,
+                        imapEncryption: normalizedSender.imap_encryption || 'SSL'
+                    };
+
+                default:
+                    throw new Error(`Unsupported pool provider type: ${actualProviderType}`);
+            }
+
         default:
-            throw new Error(`❌ Unsupported sender type: ${senderType}`);
+            throw new Error(`Unsupported sender type: ${senderType}`);
     }
 }
 
-// ✅ ADD: Helper function to extract name from email
 function extractNameFromEmail(email) {
     if (!email) return "User";
     const localPart = email.split("@")[0];
@@ -205,5 +296,6 @@ function extractNameFromEmail(email) {
 module.exports = {
     buildSenderConfig,
     getSenderType,
-    extractNameFromEmail
+    extractNameFromEmail,
+    normalizeFieldNames
 };

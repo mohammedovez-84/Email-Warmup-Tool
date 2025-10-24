@@ -1,9 +1,10 @@
-const GoogleUser = require('../models/GoogleUser');
+const GoogleUser = require('../models/GoogleUser'); // ✅ MISSING IMPORT
 const SmtpAccount = require('../models/smtpAccounts');
 const MicrosoftUser = require('../models/MicrosoftUser');
-const { scheduleIntelligentWarmup } = require('../services/Scheduler');
+const EmailPool = require('../models/EmailPool');
 const EmailMetric = require("../models/EmailMetric")
 const { Op } = require("sequelize")
+const { triggerImmediateScheduling } = require('../services/Scheduler');
 
 exports.toggleWarmupStatus = async (req, res) => {
   try {
@@ -24,7 +25,7 @@ exports.toggleWarmupStatus = async (req, res) => {
     console.log(`Toggle request for EMAIL: ${emailAddress} with status: ${status}`);
 
     if (!['active', 'paused'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid warmup status' });
+      return res.status(400).json({ success: false, error: 'Invalid warmup status' });
     }
 
     // 🧭 Find sender account
@@ -39,7 +40,7 @@ exports.toggleWarmupStatus = async (req, res) => {
       sender = await SmtpAccount.findOne({ where: { email: emailAddress } });
       senderType = 'smtp';
     }
-    if (!sender) return res.status(404).json({ error: 'Sender account not found' });
+    if (!sender) return res.status(404).json({ success: false, error: 'Sender account not found' });
 
     // 🚫 Check if account is connected before allowing activation
     if (status === 'active' && sender.is_connected === false) {
@@ -53,35 +54,66 @@ exports.toggleWarmupStatus = async (req, res) => {
     // 🧩 Update warmup status and config
     const updateData = { warmupStatus: status };
 
+    // Only update provided fields (not all undefined values)
     if (warmupDayCount !== undefined) updateData.warmupDayCount = warmupDayCount;
     if (startEmailsPerDay !== undefined) updateData.startEmailsPerDay = startEmailsPerDay;
     if (increaseEmailsPerDay !== undefined) updateData.increaseEmailsPerDay = increaseEmailsPerDay;
     if (maxEmailsPerDay !== undefined) updateData.maxEmailsPerDay = maxEmailsPerDay;
-    if (replyRate !== undefined) updateData.replyRate = Math.min(0.25, replyRate); // cap at 25%
-    if (warmupStartTime !== undefined) updateData.warmupStartTime = warmupStartTime;
-    if (warmupEndTime !== undefined) updateData.warmupEndTime = warmupEndTime;
-    if (timezone !== undefined) updateData.timezone = timezone;
-    if (preferredSendInterval !== undefined) updateData.preferredSendInterval = preferredSendInterval;
+    if (replyRate !== undefined) updateData.replyRate = Math.min(1.0, Math.max(0, replyRate)); // Allow up to 100% for testing
+    // Remove timing fields since we're not using them anymore
+    // if (warmupStartTime !== undefined) updateData.warmupStartTime = warmupStartTime;
+    // if (warmupEndTime !== undefined) updateData.warmupEndTime = warmupEndTime;
+    // if (timezone !== undefined) updateData.timezone = timezone;
+    // if (preferredSendInterval !== undefined) updateData.preferredSendInterval = preferredSendInterval;
 
     await sender.update(updateData);
 
-    // ⚙️ Schedule or pause warmup
+    // ⚙️ POOL-BASED WARMUP LOGIC WITH IMMEDIATE SCHEDULING
     if (status === 'active') {
       try {
-        const activeAccounts = await getActiveAccountsCount();
+        const activeWarmupAccounts = await getActiveWarmupAccountsCount();
+        const activePoolAccounts = await getActivePoolAccountsCount();
 
-        if (activeAccounts >= 2) {
-          await scheduleIntelligentWarmup();
-          console.log(`✅ Intelligent warmup scheduled for ${emailAddress} (${activeAccounts} active accounts)`);
-        } else {
-          console.log(`⏸️ Warmup activated for ${emailAddress} but waiting for more active accounts (currently: ${activeAccounts})`);
+        console.log(`✅ Warmup activated for ${emailAddress}`);
+        console.log(`📊 Active warmup accounts: ${activeWarmupAccounts}`);
+        console.log(`🏊 Active pool accounts: ${activePoolAccounts}`);
+
+        if (activeWarmupAccounts >= 1 && activePoolAccounts >= 1) {
+          console.log(`🎯 ${emailAddress} will exchange emails with pool accounts`);
+          console.log(`🚀 Triggering immediate scheduling...`);
+
+          // ✅ IMMEDIATE SCHEDULING - NO WAITING!
+          await triggerImmediateScheduling();
+
+          console.log(`✅ Immediate scheduling completed for ${emailAddress}`);
+        } else if (activePoolAccounts === 0) {
+          console.log(`⚠️ No active pool accounts available for warmup`);
+          return res.json({
+            success: true,
+            message: `Warmup activated but no pool accounts available`,
+            senderType,
+            warmupStatus: status,
+            email: emailAddress,
+            warning: 'No active pool accounts found - warmup will start when pools are available',
+            updatedConfig: sender.toJSON()
+          });
         }
+
       } catch (err) {
-        console.error('❌ Error scheduling warmup:', err);
+        console.error('❌ Error activating warmup:', err);
+        return res.json({
+          success: true,
+          message: `Warmup activated but scheduling failed: ${err.message}`,
+          senderType,
+          warmupStatus: status,
+          email: emailAddress,
+          warning: 'Warmup activated but immediate scheduling failed',
+          updatedConfig: sender.toJSON()
+        });
       }
     } else {
-      console.log(`⏸️ Warmup paused for ${emailAddress} — no new jobs will be scheduled`);
-      // Optionally cancel pending jobs here
+      console.log(`⏸️ Warmup paused for ${emailAddress}`);
+      console.log(`📝 No new warmup → pool emails will be scheduled`);
     }
 
     // 🧾 Get updated sender info
@@ -94,27 +126,65 @@ exports.toggleWarmupStatus = async (req, res) => {
     })();
 
     return res.json({
-      message: `Warmup ${status} for ${senderType} account (${emailAddress})`,
+      success: true,
+      message: `Warmup ${status} for ${senderType} account`,
       senderType,
       warmupStatus: status,
-      updatedConfig: updatedSender.toJSON()
+      email: emailAddress,
+      updatedConfig: updatedSender.toJSON(),
+      note: status === 'active' ?
+        'Account scheduled immediately - emails will be sent within minutes' :
+        'No new warmup emails will be scheduled'
     });
   } catch (error) {
     console.error('Toggle warmup error:', error);
-    res.status(500).json({ error: 'Failed to update warmup status' });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update warmup status',
+      details: error.message
+    });
   }
 };
 
-async function getActiveAccountsCount() {
-  const googleCount = await GoogleUser.count({ where: { warmupStatus: 'active' } });
-  const microsoftCount = await MicrosoftUser.count({ where: { warmupStatus: 'active' } });
-  const smtpCount = await SmtpAccount.count({ where: { warmupStatus: 'active' } });
+// ✅ POOL-BASED HELPER FUNCTIONS
+async function getActiveWarmupAccountsCount() {
+  const googleCount = await GoogleUser.count({
+    where: {
+      warmupStatus: 'active',
+      is_connected: true
+    }
+  });
+  const microsoftCount = await MicrosoftUser.count({
+    where: {
+      warmupStatus: 'active',
+      is_connected: true
+    }
+  });
+  const smtpCount = await SmtpAccount.count({
+    where: {
+      warmupStatus: 'active',
+      is_connected: true
+    }
+  });
 
   const total = googleCount + microsoftCount + smtpCount;
-  console.log(`📊 Active accounts: Google:${googleCount}, Microsoft:${microsoftCount}, SMTP:${smtpCount} = Total:${total}`);
+  console.log(`🔥 Active warmup accounts: Google:${googleCount}, Microsoft:${microsoftCount}, SMTP:${smtpCount} = Total:${total}`);
 
   return total;
 }
+
+async function getActivePoolAccountsCount() {
+  const poolCount = await EmailPool.count({
+    where: {
+      isActive: true
+    }
+  });
+
+  console.log(`🏊 Active pool accounts: ${poolCount}`);
+  return poolCount;
+}
+
+
 
 exports.disconnectReconnectMail = async (req, res) => {
   const { email } = req.params;

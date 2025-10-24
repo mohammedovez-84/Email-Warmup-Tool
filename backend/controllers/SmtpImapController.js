@@ -3,6 +3,9 @@ const { ImapFlow } = require('imapflow');
 const nodemailer = require('nodemailer');
 const { runHealthCheckInternal } = require('../services/internalhealth');
 const SmtpAccount = require("../models/smtpAccounts")
+const GoogleUser = require("../models/GoogleUser")
+const MicrosoftUser = require("../models/MicrosoftUser")
+const EmailPool = require("../models/EmailPool")
 const HealthCheck = require("../models/HealthCheck")
 const UserAlert = require("../models/UserAlert")
 
@@ -21,7 +24,6 @@ function validateImap(port, encryption) {
     return (p === 993 && encryption === 'SSL') || (p === 143 && encryption === 'None');
 }
 
-// Add account + health check
 exports.addAccount = async (req, res) => {
     const {
         sender_name, email,
@@ -33,6 +35,49 @@ exports.addAccount = async (req, res) => {
     const user_id = req.user.id;
 
     try {
+        // ✅ FIRST: Check if email exists in EmailPool table
+        const existingPoolAccount = await EmailPool.findOne({
+            where: { email }
+        });
+
+        if (existingPoolAccount) {
+            return res.status(409).json({
+                success: false,
+                message: 'This email already exists as a pool account',
+                details: `Email ${email} is already registered as a pool account and cannot be added as a warmup account.`,
+                conflict_type: 'pool_account_exists'
+            });
+        }
+
+        // ✅ SECOND: Check if email exists in other warmup account tables
+        const existingGoogleAccount = await GoogleUser.findOne({ where: { email } });
+        if (existingGoogleAccount) {
+            return res.status(409).json({
+                success: false,
+                message: 'Email already exists as Google account',
+                conflict_type: 'google_account_exists'
+            });
+        }
+
+        const existingMicrosoftAccount = await MicrosoftUser.findOne({ where: { email } });
+        if (existingMicrosoftAccount) {
+            return res.status(409).json({
+                success: false,
+                message: 'Email already exists as Microsoft account',
+                conflict_type: 'microsoft_account_exists'
+            });
+        }
+
+        // ✅ THIRD: Check if email already exists in SMTP accounts (for updates)
+        const existingSmtpAccount = await SmtpAccount.findOne({ where: { email } });
+        if (existingSmtpAccount) {
+            return res.status(409).json({
+                success: false,
+                message: 'Email already exists as SMTP account',
+                conflict_type: 'smtp_account_exists'
+            });
+        }
+
         const smtpUsername = smtp_user || email;
         const imapUsername = imap_user || email;
         const imapPassword = imap_pass || smtp_pass;
@@ -40,10 +85,16 @@ exports.addAccount = async (req, res) => {
         const imapEnc = imap_encryption || 'None';
 
         if (!validateSmtp(smtp_port, smtpEnc)) {
-            return res.status(400).json({ error: `Invalid SMTP port (${smtp_port}) and encryption (${smtpEnc})` });
+            return res.status(400).json({
+                success: false,
+                error: `Invalid SMTP port (${smtp_port}) and encryption (${smtpEnc})`
+            });
         }
         if (!validateImap(imap_port, imapEnc)) {
-            return res.status(400).json({ error: `Invalid IMAP port (${imap_port}) and encryption (${imapEnc})` });
+            return res.status(400).json({
+                success: false,
+                error: `Invalid IMAP port (${imap_port}) and encryption (${imapEnc})`
+            });
         }
 
         // Test SMTP
@@ -82,7 +133,8 @@ exports.addAccount = async (req, res) => {
             imap_user: imapUsername,
             imap_pass: imapPassword,
             imap_encryption: imapEnc,
-            description
+            description,
+            warmupStatus: 'paused' // Default to paused for safety
         });
 
         // Run health check
@@ -112,10 +164,35 @@ exports.addAccount = async (req, res) => {
             createdAt: new Date()
         });
 
-        res.status(201).json({ success: true, account, health });
+        res.status(201).json({
+            success: true,
+            account,
+            health,
+            message: 'SMTP account added successfully. Warmup is paused by default - you can activate it from the dashboard.'
+        });
     } catch (err) {
         console.error('Error adding account:', err.message);
-        res.status(500).json({ error: 'Internal server error', details: err.message });
+
+        // Handle specific test failures vs general errors
+        if (err.message.includes('Invalid login') || err.message.includes('Authentication failed')) {
+            return res.status(400).json({
+                success: false,
+                error: 'SMTP/IMAP authentication failed. Please check your credentials.'
+            });
+        }
+
+        if (err.message.includes('connect ECONNREFUSED') || err.message.includes('getaddrinfo')) {
+            return res.status(400).json({
+                success: false,
+                error: 'Cannot connect to SMTP/IMAP server. Please check your host and port settings.'
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error',
+            details: err.message
+        });
     }
 };
 
