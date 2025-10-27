@@ -1,92 +1,117 @@
-const nodemailer = require('nodemailer');
+const { sendEmail } = require('./emailSender');
+const { buildSenderConfig } = require('../utils/senderConfig');
 
-async function sendEmail(senderConfig, emailData) {
+async function maybeReply(replier, emailData, replyRate = 0.25) {
     try {
-        console.log(`📧 Preparing to send email via ${senderConfig.smtpHost}:${senderConfig.smtpPort}`);
+        // **VALIDATE REPLIER OBJECT**
+        if (!replier || !replier.email) {
+            console.error('❌ Invalid replier object:', replier);
+            return { success: false, error: 'Invalid replier configuration' };
+        }
 
-        let transporterConfig = {
-            host: senderConfig.smtpHost,
-            port: senderConfig.smtpPort,
-            secure: senderConfig.smtpPort === 465 || senderConfig.smtpPort === 587,
-            auth: {
-                user: senderConfig.smtpUser,
-                pass: senderConfig.smtpPass
-            },
-            connectionTimeout: 45000,
-            greetingTimeout: 45000,
-            socketTimeout: 60000,
-            tls: {
-                rejectUnauthorized: false
+        console.log(`🔄 Attempting reply from ${replier.email}`);
+
+        // **ENHANCED OAUTH2 VALIDATION**
+        console.log(`🔍 Replier debug:`, {
+            email: replier.email,
+            providerType: replier.providerType,
+            hasSmtpConfig: !!(replier.smtpHost || replier.smtpPassword || replier.access_token),
+            hasOAuth: !!(replier.access_token || replier.accessToken),
+            hasRefreshToken: !!(replier.refresh_token || replier.refreshToken),
+            tokenExpiry: replier.token_expiry || replier.tokenExpiry,
+            hasAppPassword: !!replier.appPassword
+        });
+
+        // **CHECK OAUTH2 VALIDITY BEFORE BUILDING CONFIG**
+        if (replier.providerType === 'google' && !replier.appPassword) {
+            const hasValidOAuth = (replier.access_token || replier.accessToken) &&
+                (replier.refresh_token || replier.refreshToken);
+
+            if (!hasValidOAuth) {
+                console.error(`❌ Google OAuth2 incomplete for ${replier.email}:`, {
+                    accessToken: !!(replier.access_token || replier.accessToken),
+                    refreshToken: !!(replier.refresh_token || replier.refreshToken),
+                    tokenExpiry: replier.token_expiry || replier.tokenExpiry
+                });
+                return {
+                    success: false,
+                    error: `Google account ${replier.email} is missing OAuth2 tokens and app_password`
+                };
             }
-        };
-
-        // Special handling for Office365
-        if (senderConfig.smtpHost === 'smtp.office365.com') {
-            transporterConfig = {
-                host: 'smtp.office365.com',
-                port: 587,
-                secure: false,
-                requireTLS: true,
-                auth: {
-                    user: senderConfig.smtpUser,
-                    pass: senderConfig.smtpPass
-                },
-                connectionTimeout: 45000,
-                greetingTimeout: 45000,
-                socketTimeout: 60000
-            };
         }
 
-        // Special handling for Gmail
-        if (senderConfig.smtpHost === 'smtp.gmail.com') {
-            transporterConfig = {
-                service: 'gmail',
-                auth: {
-                    user: senderConfig.smtpUser,
-                    pass: senderConfig.smtpPass
-                },
-                connectionTimeout: 45000,
-                greetingTimeout: 45000,
-                socketTimeout: 60000
-            };
-        }
+        // Build proper sender config for replier
+        const replierConfig = buildSenderConfig(replier);
 
-        const transporter = nodemailer.createTransport(transporterConfig);
+        // **ENHANCED CONFIG DEBUG**
+        console.log(`🔧 Built replier config:`, {
+            email: replierConfig.email,
+            smtpHost: replierConfig.smtpHost,
+            smtpPort: replierConfig.smtpPort,
+            hasSmtpPass: !!replierConfig.smtpPass,
+            hasAccessToken: !!replierConfig.accessToken,
+            hasRefreshToken: !!replierConfig.refreshToken,
+            useOAuth2: replierConfig.useOAuth2,
+            useAppPassword: replierConfig.useAppPassword,
+            type: replierConfig.type
+        });
 
-        // Verify connection
-        await transporter.verify();
+        // **IMPROVED CONFIG VALIDATION**
+        const hasValidCredentials =
+            (replierConfig.smtpPass && replierConfig.smtpHost) || // App password
+            (replierConfig.accessToken && replierConfig.refreshToken) || // OAuth2
+            (replierConfig.useGraphApi); // Microsoft Graph
 
-        const mailOptions = {
-            from: `"${senderConfig.name}" <${senderConfig.email}>`,
-            to: emailData.to,
-            subject: emailData.subject,
-            html: emailData.html,
-            messageId: `<${generateMessageId()}>`,
-            headers: {
-                'X-Mailer': 'EmailWarmupService',
-                'X-Auto-Response-Suppress': 'OOF, AutoReply'
+        if (!hasValidCredentials) {
+            console.error('❌ Invalid replier configuration after build:', {
+                smtpHost: replierConfig.smtpHost,
+                hasPassword: !!replierConfig.smtpPass,
+                hasAccessToken: !!replierConfig.accessToken,
+                hasRefreshToken: !!replierConfig.refreshToken,
+                useOAuth2: replierConfig.useOAuth2,
+                useAppPassword: replierConfig.useAppPassword,
+                email: replierConfig.email
+            });
+
+            let errorMessage = `SMTP account ${replierConfig.email} is missing credentials - `;
+            if (replierConfig.useOAuth2) {
+                errorMessage += 'OAuth2 tokens missing or invalid';
+            } else {
+                errorMessage += 'SMTP password/app password required';
             }
-        };
 
-        // Add reply headers if provided
-        if (emailData.inReplyTo) {
-            mailOptions.inReplyTo = emailData.inReplyTo;
-            mailOptions.references = emailData.references || [emailData.inReplyTo];
+            return { success: false, error: errorMessage };
         }
 
-        const result = await transporter.sendMail(mailOptions);
+        // Check reply rate
+        if (Math.random() > replyRate) {
+            console.log(`⏩ Skipping reply based on rate ${replyRate}`);
+            return { success: false, error: 'Skipped by reply rate' };
+        }
 
-        console.log(`✅ Email sent successfully: ${result.messageId}`);
-        return { success: true, messageId: result.messageId };
+        // Log the method being used
+        if (replierConfig.useGraphApi) {
+            console.log(`📝 Sending reply via Microsoft Graph API`);
+        } else if (replierConfig.useOAuth2) {
+            console.log(`📝 Sending reply via OAuth2: ${replierConfig.smtpHost}:${replierConfig.smtpPort}`);
+        } else {
+            console.log(`📝 Sending reply via SMTP: ${replierConfig.smtpHost}:${replierConfig.smtpPort}`);
+        }
+
+        const replyResult = await sendEmail(replierConfig, emailData);
+
+        if (replyResult.success) {
+            console.log(`✅ Reply sent: ${replier.email} -> ${emailData.to}`);
+            return { success: true, messageId: replyResult.messageId };
+        } else {
+            console.error(`❌ Reply failed: ${replier.email} -> ${emailData.to}: ${replyResult.error}`);
+            return { success: false, error: replyResult.error };
+        }
 
     } catch (error) {
-        console.error('❌ Email sending failed:', error.message);
+        console.error(`❌ Error in maybeReply for ${replier?.email}:`, error.message);
         return { success: false, error: error.message };
     }
 }
 
-function generateMessageId() {
-    return `${Date.now()}${Math.random().toString(36).substr(2, 9)}@emailwarmup`;
-}
-
-module.exports = { sendEmail };
+module.exports = { maybeReply };
