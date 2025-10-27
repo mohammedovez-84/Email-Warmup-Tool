@@ -1,7 +1,7 @@
 import { useAuth } from '../../context/AuthContext';
 import InboxCard from '../../components/InboxCard';
 import Sidebar from '../../components/Sidebar';
-import { motion } from 'framer-motion';
+// import { motion } from 'framer-motion';
 
 export default function AdminDashboard() {
     const { user } = useAuth();
@@ -18,7 +18,7 @@ export default function AdminDashboard() {
         <div className="flex min-h-screen">
             <Sidebar />
 
-            <div className="flex-1 p-8">
+            {/* <div className="flex-1 p-8">
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -68,7 +68,7 @@ export default function AdminDashboard() {
                         ))}
                     </div>
                 </motion.div>
-            </div>
+            </div> */}
         </div>
     );
 }
