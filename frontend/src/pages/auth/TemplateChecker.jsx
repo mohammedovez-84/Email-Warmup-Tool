@@ -4,7 +4,6 @@ import {
   FiCheckCircle,
   FiCopy,
   FiEdit2,
-  FiSend,
   FiChevronDown,
   FiChevronUp,
   FiBold,
@@ -16,18 +15,28 @@ import {
   FiShield,
   FiClock,
   FiLink,
-  FiUser
+  FiUser,
+  FiMail,
+  FiTarget,
+  FiTrendingUp,
+  FiZap,
+  FiAward,
+  FiEyeOff,
+  FiUpload,
+  FiSave,
+  FiRefreshCw
 } from 'react-icons/fi';
 
 const TemplateCheckerPage = () => {
+  // State Management
   const [emailSubject, setEmailSubject] = useState('Problem with emails going to SPAM');
   const [emailContent, setEmailContent] = useState(`Hi [Recipient_Name],
 
-I ran into a problem with my email.
+I ran into a problem with my email campaigns.
 I sent emails to my clients to announce the launch of a new promotion in our company, but most of the recipients received my emails in the SPAM folder.
 
 Perhaps this is due to the fact that my domain is very young and has not participated in mailing lists before?
-Could you tell me how I can warm up my domain and mailbox?
+Could you tell me how I can warm up my domain and mailbox to improve deliverability?
 
 Best regards,
 [My_Name]`);
@@ -41,13 +50,29 @@ Best regards,
   const [isItalic, setIsItalic] = useState(false);
   const [isUnderline, setIsUnderline] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [templateHistory, setTemplateHistory] = useState([]);
+  const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
+  const [savedTemplates, setSavedTemplates] = useState([]);
+  const [templateName, setTemplateName] = useState('');
+
   const textareaRef = useRef(null);
 
-  // Calculate metrics based on email content
+  // Enhanced Metrics Calculation
   const calculateMetrics = () => {
     const words = emailContent.split(/\s+/).filter(word => word.length > 0);
     const sentences = emailContent.split(/[.!?]+/).filter(s => s.length > 0);
     const paragraphs = emailContent.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+    const lines = emailContent.split('\n').filter(line => line.trim().length > 0);
+
+    const spamWords = ['promotion', 'free', 'discount', 'offer', 'win', 'prize', 'buy now',
+      'limited time', 'act fast', 'click here', 'money back', 'guarantee',
+      'no cost', 'no obligation', 'risk-free', 'special promotion', 'urgent',
+      'cash', 'bonus', 'credit', 'deal', 'discount', 'price', 'rate', 'cheap'];
+
+    const spammyWordsFound = words.filter(word =>
+      spamWords.includes(word.toLowerCase())
+    );
 
     return {
       subjectLength: emailSubject.length,
@@ -55,134 +80,264 @@ Best regards,
       wordCount: words.length,
       sentenceCount: sentences.length,
       paragraphCount: paragraphs.length,
+      lineCount: lines.length,
       avgWordsPerSentence: words.length / Math.max(sentences.length, 1),
-      readingTime: Math.ceil(words.length / 200) + ' min',
+      readingTime: Math.max(1, Math.ceil(words.length / 200)) + ' min',
       linkCount: (emailContent.match(/https?:\/\/[^\s]+/g) || []).length,
       questionCount: (emailContent.match(/\?/g) || []).length,
-      spammyWordCount: (emailContent.match(/\b(promotion|free|discount|offer|win|prize|buy now|limited time|act fast|click here|money back|guarantee|no cost|no obligation|risk-free|special promotion)\b/gi) || []).length,
+      spammyWordCount: spammyWordsFound.length,
       personalizationCount: (emailContent.match(/\[[^\]]+\]/g) || []).length,
-      uppercaseCount: (emailContent.match(/[A-Z]{3,}/g) || []).length
+      uppercaseCount: (emailContent.match(/[A-Z]{3,}/g) || []).length,
+      sentimentScore: calculateSentiment(emailContent),
+      readabilityScore: calculateReadability(emailContent)
     };
+  };
+
+  const calculateSentiment = (text) => {
+    const positiveWords = ['great', 'excellent', 'amazing', 'wonderful', 'perfect',
+      'outstanding', 'fantastic', 'good', 'happy', 'pleased'];
+    const negativeWords = ['problem', 'issue', 'spam', 'failed', 'wrong', 'bad',
+      'terrible', 'sorry', 'unfortunately', 'difficult'];
+
+    const words = text.toLowerCase().split(/\s+/);
+    let score = 0;
+
+    words.forEach(word => {
+      if (positiveWords.includes(word)) score += 1;
+      if (negativeWords.includes(word)) score -= 1;
+    });
+
+    return Math.max(-1, Math.min(1, score / Math.max(words.length / 10, 1)));
+  };
+
+  const calculateReadability = (text) => {
+    const words = text.split(/\s+/).filter(word => word.length > 0);
+    const sentences = text.split(/[.!?]+/).filter(s => s.length > 0);
+    const avgWordsPerSentence = words.length / Math.max(sentences.length, 1);
+
+    // Simple readability score (higher is better)
+    let score = 100;
+    if (avgWordsPerSentence > 25) score -= 20;
+    if (avgWordsPerSentence > 30) score -= 20;
+    if (words.length < 50) score -= 10;
+    if (words.length > 500) score -= 10;
+
+    return Math.max(0, Math.min(100, score));
   };
 
   const [metrics, setMetrics] = useState(calculateMetrics());
 
-  // Update metrics when content changes
+  // Effects
   useEffect(() => {
     setMetrics(calculateMetrics());
   }, [emailSubject, emailContent]);
 
+  useEffect(() => {
+    const newState = { emailSubject, emailContent, timestamp: Date.now() };
+    if (templateHistory.length === 0 ||
+      JSON.stringify(templateHistory[templateHistory.length - 1]) !== JSON.stringify(newState)) {
+      setTemplateHistory(prev => [...prev.slice(0, currentHistoryIndex + 1), newState]);
+      setCurrentHistoryIndex(prev => prev + 1);
+    }
+  }, [emailSubject, emailContent]);
+
+  // Constants
   const fonts = [
     'Inter', 'Arial', 'Helvetica', 'Georgia', 'Times New Roman',
-    'Verdana', 'Tahoma', 'Segoe UI', 'Roboto', 'SF Pro Display'
+    'Verdana', 'Tahoma', 'Segoe UI', 'Roboto', 'SF Pro Display', 'Courier New'
   ];
 
-  const handleAnalyze = () => {
+  // Core Functions
+  const handleAnalyze = async () => {
+    setIsAnalyzing(true);
+
+    // Simulate analysis with more realistic timing
+    await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+
     const newResults = [];
-    const spamWords = emailContent.match(/\b(promotion|free|discount|offer|win|prize|buy now|limited time|act fast|click here|money back|guarantee|no cost|no obligation|risk-free|special promotion)\b/gi) || [];
+    const spamWords = emailContent.match(/\b(promotion|free|discount|offer|win|prize|buy now|limited time|act fast|click here|money back|guarantee|no cost|no obligation|risk-free|special promotion|urgent|cash|bonus|credit|deal|price|rate|cheap)\b/gi) || [];
     const personalizationTags = emailContent.match(/\[[^\]]+\]/g) || [];
     const uppercaseWords = emailContent.match(/[A-Z]{3,}/g) || [];
     const linkCount = metrics.linkCount;
 
-    // Spam words check
+    // Comprehensive analysis checks
     if (spamWords.length > 0) {
       newResults.push({
         id: 1,
         issue: 'Spam Trigger Words Detected',
         severity: 'High',
-        found: spamWords.join(', '),
-        suggestion: `Replace spammy words with professional alternatives. Consider: ${spamWords.map(w => `"${w}"`).join(', ')}`,
-        icon: FiShield
+        found: spamWords.slice(0, 5).join(', ') + (spamWords.length > 5 ? `... and ${spamWords.length - 5} more` : ''),
+        suggestion: `Replace ${spamWords.length} spam-triggering words with professional alternatives. Avoid excessive marketing language.`,
+        icon: FiShield,
+        category: 'Content Quality'
       });
     }
 
-    // Personalization tags check
     if (personalizationTags.length > 0) {
       newResults.push({
         id: 2,
-        issue: 'Personalization Tags Not Filled',
-        severity: 'Medium',
-        found: personalizationTags.join(', '),
-        suggestion: 'Replace all personalization tags with actual recipient data before sending',
-        icon: FiUser
+        issue: 'Unfilled Personalization Tags',
+        severity: personalizationTags.length > 3 ? 'High' : 'Medium',
+        found: `${personalizationTags.length} personalization tags found`,
+        suggestion: 'Replace all [placeholder] tags with actual recipient data before sending to improve engagement.',
+        icon: FiUser,
+        category: 'Personalization'
       });
     }
 
-    // Uppercase words check
-    if (uppercaseWords.length > 3) {
+    if (uppercaseWords.length > 2) {
       newResults.push({
         id: 3,
         issue: 'Excessive Uppercase Text',
         severity: 'Medium',
-        found: `${uppercaseWords.length} uppercase words/phrases`,
-        suggestion: 'Reduce uppercase usage. Excessive capitalization triggers spam filters',
-        icon: FiFileText
+        found: `${uppercaseWords.length} uppercase words/phrases detected`,
+        suggestion: 'Reduce uppercase usage. Excessive capitalization can trigger spam filters and appear unprofessional.',
+        icon: FiFileText,
+        category: 'Formatting'
       });
     }
 
-    // Link count check
-    if (linkCount > 3) {
+    if (linkCount > 2) {
       newResults.push({
         id: 4,
         issue: 'Too Many Links',
-        severity: 'Medium',
-        found: `${linkCount} links detected`,
-        suggestion: 'Limit to 2-3 relevant links. Multiple links can affect deliverability',
-        icon: FiLink
+        severity: linkCount > 4 ? 'High' : 'Medium',
+        found: `${linkCount} links detected (recommended: 1-2)`,
+        suggestion: 'Limit links to 1-2 most relevant URLs. Multiple links can affect deliverability and click-through rates.',
+        icon: FiLink,
+        category: 'Content Structure'
       });
     }
 
-    // Subject length check
     if (emailSubject.length > 50) {
       newResults.push({
         id: 5,
         issue: 'Subject Line Too Long',
         severity: 'Medium',
-        found: `${emailSubject.length} characters (recommended max: 50)`,
-        suggestion: 'Shorten subject line to 50 characters for better open rates',
-        icon: FiBarChart2
+        found: `${emailSubject.length} characters (optimal: 35-50 characters)`,
+        suggestion: 'Shorten subject line to improve open rates. Focus on clarity and value proposition.',
+        icon: FiTarget,
+        category: 'Subject Optimization'
       });
     }
 
-    // Signature check
-    if (!emailContent.includes('Best regards') && !emailContent.includes('Sincerely') && !emailContent.includes('Thank you')) {
+    if (emailSubject.length < 10) {
       newResults.push({
         id: 6,
-        issue: 'Professional Closing Missing',
-        severity: 'Low',
-        found: 'No professional closing detected',
-        suggestion: 'Add a professional closing like "Best regards" or "Sincerely"',
-        icon: FiFileText
+        issue: 'Subject Line Too Short',
+        severity: 'Medium',
+        found: `${emailSubject.length} characters (minimum recommended: 10 characters)`,
+        suggestion: 'Expand subject line to provide more context and improve open rates.',
+        icon: FiTarget,
+        category: 'Subject Optimization'
       });
     }
 
-    // Add a positive result if no issues found
-    if (newResults.length === 0) {
+    if (!emailContent.includes('Best regards') && !emailContent.includes('Sincerely') &&
+      !emailContent.includes('Thank you') && !emailContent.includes('Regards')) {
       newResults.push({
         id: 7,
-        issue: 'Template Quality Excellent',
+        issue: 'Professional Closing Missing',
+        severity: 'Low',
+        found: 'No professional email closing detected',
+        suggestion: 'Add a professional closing like "Best regards," "Sincerely," or "Thank you" to maintain professionalism.',
+        icon: FiFileText,
+        category: 'Email Structure'
+      });
+    }
+
+    if (metrics.wordCount < 50) {
+      newResults.push({
+        id: 8,
+        issue: 'Email Content Too Short',
+        severity: 'Medium',
+        found: `${metrics.wordCount} words (recommended minimum: 50 words)`,
+        suggestion: 'Expand your email content to provide more value and context to recipients.',
+        icon: FiFileText,
+        category: 'Content Quality'
+      });
+    }
+
+    if (metrics.wordCount > 500) {
+      newResults.push({
+        id: 9,
+        issue: 'Email Content Too Long',
+        severity: 'Low',
+        found: `${metrics.wordCount} words (recommended maximum: 500 words)`,
+        suggestion: 'Consider shortening your email for better readability and engagement.',
+        icon: FiFileText,
+        category: 'Content Quality'
+      });
+    }
+
+    if (metrics.sentimentScore < -0.1) {
+      newResults.push({
+        id: 10,
+        issue: 'Negative Tone Detected',
+        severity: 'Low',
+        found: 'Email content may sound negative or problematic',
+        suggestion: 'Rephrase to maintain a positive, solution-oriented tone while addressing issues.',
+        icon: FiFileText,
+        category: 'Tone & Voice'
+      });
+    }
+
+    if (metrics.readabilityScore < 60) {
+      newResults.push({
+        id: 11,
+        issue: 'Readability Concerns',
+        severity: 'Low',
+        found: `Readability score: ${Math.round(metrics.readabilityScore)}/100`,
+        suggestion: 'Simplify sentence structure and break up long paragraphs for better readability.',
+        icon: FiFileText,
+        category: 'Content Quality'
+      });
+    }
+
+    // Add positive reinforcement for good practices
+    const positiveAspects = [];
+    if (metrics.personalizationCount > 0) positiveAspects.push('personalization tags');
+    if (metrics.questionCount > 0) positiveAspects.push('engaging questions');
+    if (metrics.paragraphCount >= 2) positiveAspects.push('good paragraph structure');
+    if (emailSubject.length >= 10 && emailSubject.length <= 50) positiveAspects.push('optimal subject length');
+
+    if (positiveAspects.length > 0 && newResults.length === 0) {
+      newResults.push({
+        id: 12,
+        issue: 'Excellent Template Quality',
         severity: 'None',
-        found: 'All checks passed successfully',
-        suggestion: 'Your email template follows best practices for optimal deliverability',
-        icon: FiCheckCircle
+        found: `Strong aspects: ${positiveAspects.join(', ')}`,
+        suggestion: 'Your email template follows best practices. Ready for sending!',
+        icon: FiAward,
+        category: 'Overall Assessment'
+      });
+    } else if (positiveAspects.length > 0) {
+      newResults.push({
+        id: 13,
+        issue: 'Positive Aspects Found',
+        severity: 'None',
+        found: `Well done on: ${positiveAspects.join(', ')}`,
+        suggestion: 'Continue maintaining these good practices in your email templates.',
+        icon: FiCheckCircle,
+        category: 'Positive Feedback'
       });
     }
 
     setAnalysisResults(newResults);
     setActiveTab('results');
+    setIsAnalyzing(false);
   };
 
   const handleCopyToClipboard = () => {
-    if (textareaRef.current) {
-      textareaRef.current.select();
-      document.execCommand('copy');
+    const template = `Subject: ${emailSubject}\n\n${emailContent}`;
+    navigator.clipboard.writeText(template).then(() => {
       showNotification('Email template copied to clipboard!');
-    }
+    });
   };
 
-  const showNotification = (message) => {
-    setNotification(message);
-    setTimeout(() => setNotification(null), 3000);
+  const showNotification = (message, type = 'success') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 4000);
   };
 
   const toggleMetrics = () => {
@@ -198,86 +353,133 @@ Best regards,
     const selectedText = emailContent.substring(start, end);
     let newText = emailContent;
 
-    switch (type) {
-      case 'bold':
-        if (selectedText) {
-          newText = emailContent.substring(0, start) +
-            `**${selectedText}**` +
-            emailContent.substring(end);
+    if (selectedText) {
+      switch (type) {
+        case 'bold':
+          newText = emailContent.substring(0, start) + `**${selectedText}**` + emailContent.substring(end);
           setIsBold(!isBold);
-        }
-        break;
-      case 'italic':
-        if (selectedText) {
-          newText = emailContent.substring(0, start) +
-            `*${selectedText}*` +
-            emailContent.substring(end);
+          break;
+        case 'italic':
+          newText = emailContent.substring(0, start) + `*${selectedText}*` + emailContent.substring(end);
           setIsItalic(!isItalic);
-        }
-        break;
-      case 'underline':
-        if (selectedText) {
-          newText = emailContent.substring(0, start) +
-            `_${selectedText}_` +
-            emailContent.substring(end);
+          break;
+        case 'underline':
+          newText = emailContent.substring(0, start) + `_${selectedText}_` + emailContent.substring(end);
           setIsUnderline(!isUnderline);
-        }
-        break;
-      default:
-        break;
+          break;
+        default:
+          break;
+      }
+
+      setEmailContent(newText);
+
+      setTimeout(() => {
+        textarea.selectionStart = start;
+        textarea.selectionEnd = end;
+        textarea.focus();
+      }, 0);
     }
-
-    setEmailContent(newText);
-
-    // Restore cursor position
-    setTimeout(() => {
-      textarea.selectionStart = start;
-      textarea.selectionEnd = end;
-      textarea.focus();
-    }, 0);
   };
 
-  // Get score based on metrics
+  // Enhanced scoring algorithm
   const getScore = () => {
     let score = 100;
 
-    // Deduct points for issues
-    if (metrics.spammyWordCount > 0) score -= metrics.spammyWordCount * 5;
-    if (metrics.personalizationCount > 0) score -= metrics.personalizationCount * 2;
-    if (metrics.uppercaseCount > 3) score -= (metrics.uppercaseCount - 3) * 3;
-    if (metrics.linkCount > 3) score -= (metrics.linkCount - 3) * 4;
-    if (emailSubject.length > 50) score -= 5;
-    if (metrics.wordCount < 50) score -= 10; // Too short
-    if (metrics.wordCount > 500) score -= 5; // Too long
+    // Content quality deductions
+    if (metrics.spammyWordCount > 0) score -= metrics.spammyWordCount * 4;
+    if (metrics.personalizationCount > 0) score -= metrics.personalizationCount * 1;
+    if (metrics.uppercaseCount > 2) score -= (metrics.uppercaseCount - 2) * 3;
+    if (metrics.linkCount > 2) score -= (metrics.linkCount - 2) * 5;
 
-    return Math.max(0, Math.min(100, score));
+    // Structure deductions
+    if (emailSubject.length > 50) score -= 8;
+    if (emailSubject.length < 10) score -= 5;
+    if (metrics.wordCount < 50) score -= 12;
+    if (metrics.wordCount > 500) score -= 8;
+    if (metrics.sentimentScore < -0.1) score -= 6;
+    if (metrics.readabilityScore < 60) score -= 10;
+
+    // Positive adjustments
+    if (metrics.questionCount > 0) score += 5;
+    if (metrics.paragraphCount >= 2) score += 5;
+    if (metrics.personalizationCount > 0) score += 3;
+
+    return Math.max(0, Math.min(100, Math.round(score)));
   };
 
   const score = getScore();
   const scoreColor = score >= 80 ? '#0D9488' : score >= 60 ? '#D97706' : '#DC2626';
 
+  // Template Management
+  const saveTemplate = () => {
+    if (!templateName.trim()) {
+      showNotification('Please enter a template name', 'error');
+      return;
+    }
+
+    const newTemplate = {
+      id: Date.now(),
+      name: templateName,
+      subject: emailSubject,
+      content: emailContent,
+      createdAt: new Date().toISOString()
+    };
+
+    setSavedTemplates(prev => [...prev, newTemplate]);
+    setTemplateName('');
+    showNotification('Template saved successfully!');
+  };
+
+  const loadTemplate = (template) => {
+    setEmailSubject(template.subject);
+    setEmailContent(template.content);
+    showNotification(`Template "${template.name}" loaded`);
+  };
+
+  const clearTemplate = () => {
+    setEmailSubject('');
+    setEmailContent('');
+    showNotification('Template cleared!');
+  };
+
+  const loadSampleTemplate = () => {
+    setEmailSubject('Follow-up: Recent Conversation');
+    setEmailContent(`Hi [Recipient_Name],
+
+I hope this email finds you well. I wanted to follow up on our recent conversation about [Topic].
+
+I've attached the document we discussed, which includes the key points and next steps. Please let me know if you have any questions or need additional information.
+
+Looking forward to hearing your thoughts.
+
+Best regards,
+[Your_Name]`);
+    showNotification('Sample template loaded!');
+  };
+
+  // Circular Score Component
   const CircularScore = ({ score, color }) => {
-    const radius = 30;
+    const radius = 40;
     const circumference = 2 * Math.PI * radius;
     const strokeDasharray = `${(score / 100) * circumference} ${circumference}`;
 
     return (
-      <div className="relative w-16 h-16">
+      <div className="relative w-28 h-28">
         <svg className="w-full h-full transform -rotate-90">
           <circle
-            cx="32"
-            cy="32"
+            cx="56"
+            cy="56"
             r={radius}
             stroke="#E5E7EB"
-            strokeWidth="4"
+            strokeWidth="8"
             fill="none"
           />
           <circle
-            cx="32"
-            cy="32"
+            cx="56"
+            cy="56"
             r={radius}
             stroke={color}
-            strokeWidth="4"
+            strokeWidth="8"
             fill="none"
             strokeLinecap="round"
             strokeDasharray={strokeDasharray}
@@ -285,82 +487,166 @@ Best regards,
           />
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-sm font-bold text-gray-800">{score}</span>
+          <div className="text-center">
+            <span className="text-3xl font-bold text-gray-900 block">{score}</span>
+            <span className="text-xs text-gray-500 font-medium">SCORE</span>
+          </div>
         </div>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-teal-100/30 to-teal-50/30 p-6 font-sans">
-      {/* Animated Background Elements */}
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50/40 to-blue-50/30 p-4 font-sans">
+      {/* Enhanced Background Elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none -z-10">
-        <div className="absolute top-20 left-10 w-64 h-64 bg-teal-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float-slow"></div>
-        <div className="absolute top-40 right-10 w-80 h-80 bg-teal-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float-medium"></div>
-        <div className="absolute bottom-20 left-1/3 w-72 h-72 bg-teal-400 rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-float-slow"></div>
+        <div className="absolute top-10 left-5% w-80 h-80 bg-teal-200/40 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float-slow"></div>
+        <div className="absolute top-40 right-10% w-96 h-96 bg-blue-200/30 rounded-full mix-blend-multiply filter blur-3xl opacity-25 animate-float-medium"></div>
+        <div className="absolute bottom-20 left-20% w-72 h-72 bg-emerald-200/20 rounded-full mix-blend-multiply filter blur-3xl opacity-15 animate-float-slow"></div>
+        <div className="absolute top-60 left-60% w-64 h-64 bg-cyan-200/25 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-float-fast"></div>
       </div>
 
-      {/* Main Container */}
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2 bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent">
+      {/* Main Container - Responsive */}
+      <div className="max-w-9xl mx-auto">
+
+        {/* Enhanced Header - Responsive */}
+        <div className="text-center mb-8 px-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 md:w-24 md:h-24 bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl md:rounded-3xl shadow-2xl mb-4 md:mb-6">
+            <FiMail className="w-8 h-8 md:w-12 md:h-12 text-white" />
+          </div>
+          <h1 className="text-3xl md:text-5xl font-bold text-gray-900 mb-3 md:mb-4 bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent">
             Email Template Analyzer
           </h1>
-          <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-            Optimize your email templates for better deliverability and engagement
+          <p className="text-lg md:text-xl text-gray-600 max-w-4xl mx-auto leading-relaxed mb-4 md:mb-6">
+            Optimize your email templates for maximum deliverability, engagement, and professional impact
           </p>
+          <div className="flex justify-center items-center gap-3 md:gap-6 text-xs md:text-sm text-gray-500 flex-wrap">
+            <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
+              <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
+              <span className="font-medium">Real-time Analysis</span>
+            </div>
+            <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
+              <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
+              <span className="font-medium">Professional Templates</span>
+            </div>
+            <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
+              <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
+              <span className="font-medium">Best Practices</span>
+            </div>
+            <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
+              <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
+              <span className="font-medium">Spam Detection</span>
+            </div>
+          </div>
         </div>
 
-        {/* Main Content Card */}
-        <div className="bg-white/80 backdrop-blur-xl rounded-2xl shadow-xl border border-white/20 overflow-hidden">
-          {/* Navigation Tabs */}
-          <div className="flex border-b border-gray-200/60 bg-white/50 backdrop-blur-sm">
+        {/* Premium Main Card - Enhanced & Responsive */}
+        <div className="bg-white/90 backdrop-blur-2xl rounded-2xl md:rounded-3xl shadow-2xl border border-white/40 overflow-hidden mx-auto">
+
+          {/* Enhanced Navigation Tabs - Responsive */}
+          <div className="flex flex-col sm:flex-row border-b border-gray-200/60 bg-gradient-to-r from-white/80 to-white/60 backdrop-blur-sm">
             <button
               onClick={() => setActiveTab('editor')}
-              className={`flex items-center gap-2 px-6 py-4 font-semibold transition-all duration-300 ${activeTab === 'editor'
-                ? 'text-teal-600 border-b-2 border-teal-600 bg-gradient-to-r from-teal-50/50 to-teal-50/30'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50/50'
+              className={`flex items-center gap-2 md:gap-3 px-4 md:px-8 py-4 md:py-6 font-semibold transition-all duration-300 relative group flex-1 justify-center ${activeTab === 'editor'
+                ? 'text-teal-600'
+                : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
-              <FiFileText className="w-4 h-4" />
-              Template Editor
+              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${activeTab === 'editor'
+                ? 'bg-teal-500 text-white shadow-lg'
+                : 'bg-gray-100 text-gray-600 group-hover:bg-teal-50 group-hover:text-teal-600'
+                }`}>
+                <FiFileText className="w-5 h-5 md:w-6 md:h-6" />
+              </div>
+              <span className="text-base md:text-lg">Template Editor</span>
+              {activeTab === 'editor' && (
+                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-teal-500 to-teal-600"></div>
+              )}
             </button>
             <button
               onClick={() => setActiveTab('results')}
-              className={`flex items-center gap-2 px-6 py-4 font-semibold transition-all duration-300 ${activeTab === 'results'
-                ? 'text-teal-600 border-b-2 border-teal-600 bg-gradient-to-r from-teal-50/50 to-teal-50/30'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50/50'
+              className={`flex items-center gap-2 md:gap-3 px-4 md:px-8 py-4 md:py-6 font-semibold transition-all duration-300 relative group flex-1 justify-center ${activeTab === 'results'
+                ? 'text-teal-600'
+                : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
-              <FiBarChart2 className="w-4 h-4" />
-              Analysis Results
+              <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${activeTab === 'results'
+                ? 'bg-teal-500 text-white shadow-lg'
+                : 'bg-gray-100 text-gray-600 group-hover:bg-teal-50 group-hover:text-teal-600'
+                }`}>
+                <FiBarChart2 className="w-5 h-5 md:w-6 md:h-6" />
+              </div>
+              <span className="text-base md:text-lg">Analysis Results</span>
               {analysisResults.length > 0 && (
-                <span className="bg-teal-100 text-teal-800 text-xs px-2 py-1 rounded-full font-bold">
+                <span className="bg-teal-500 text-white text-xs px-2 py-1 rounded-full font-bold min-w-6">
                   {analysisResults.length}
                 </span>
+              )}
+              {activeTab === 'results' && (
+                <div className="absolute bottom-0 left-0 w-full h-1 bg-gradient-to-r from-teal-500 to-teal-600"></div>
               )}
             </button>
           </div>
 
-          {/* Content Area */}
-          <div className="p-6">
+          {/* Enhanced Content Area - Responsive */}
+          <div className="p-4 md:p-6 lg:p-8">
             {activeTab === 'editor' ? (
-              <div className="space-y-6">
-                {/* Header with Actions */}
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">Compose Your Email</h2>
-                    <p className="text-gray-600 text-sm">Create and optimize your email template</p>
+              <div className="space-y-6 md:space-y-8">
+                {/* Premium Header with Actions - Improved & Responsive */}
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 md:gap-6">
+                  <div className="flex items-start gap-3 md:gap-4 flex-shrink-0">
+                    <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl md:rounded-2xl flex items-center justify-center shadow-xl">
+                      <FiEdit2 className="w-6 h-6 md:w-8 md:h-8 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-2xl md:text-3xl font-bold text-gray-900">Compose Your Email</h2>
+                      <p className="text-gray-600 text-base md:text-lg mt-1 md:mt-2">Create professional email templates with real-time optimization</p>
+                    </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    {/* Formatting Toolbar */}
-                    <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm border border-gray-300/50 rounded-xl p-1">
+                  <div className="flex flex-col sm:flex-row gap-3 md:gap-4 flex-wrap">
+                    {/* Template Actions */}
+                    <div className="flex gap-2 order-1">
+                      <button
+                        onClick={loadSampleTemplate}
+                        className="flex items-center gap-2 px-3 md:px-4 py-2.5 md:py-3 bg-white border border-gray-300 text-gray-700 rounded-lg md:rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium shadow-sm hover:shadow-md flex-shrink-0 text-sm md:text-base"
+                      >
+                        <FiFileText className="w-4 h-4" />
+                        Sample
+                      </button>
+                      <button
+                        onClick={clearTemplate}
+                        className="flex items-center gap-2 px-3 md:px-4 py-2.5 md:py-3 bg-white border border-gray-300 text-gray-700 rounded-lg md:rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium shadow-sm hover:shadow-md flex-shrink-0 text-sm md:text-base"
+                      >
+                        <FiEyeOff className="w-4 h-4" />
+                        Clear
+                      </button>
+                    </div>
+
+                    {/* Save Template */}
+                    <div className="flex gap-2 order-3 lg:order-2 flex-1 min-w-0">
+                      <input
+                        type="text"
+                        value={templateName}
+                        onChange={(e) => setTemplateName(e.target.value)}
+                        placeholder="Template name"
+                        className="px-3 md:px-4 py-2.5 md:py-3 bg-white border border-gray-300 rounded-lg md:rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent flex-1 min-w-0 text-sm md:text-base"
+                      />
+                      <button
+                        onClick={saveTemplate}
+                        className="flex items-center gap-2 px-3 md:px-4 py-2.5 md:py-3 bg-white border border-gray-300 text-gray-700 rounded-lg md:rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium shadow-sm hover:shadow-md flex-shrink-0 text-sm md:text-base"
+                      >
+                        <FiSave className="w-4 h-4" />
+                        Save
+                      </button>
+                    </div>
+
+                    {/* Enhanced Formatting Toolbar - Responsive */}
+                    <div className="flex items-center gap-1 bg-white/80 backdrop-blur-sm border border-gray-300/50 rounded-lg md:rounded-xl p-2 shadow-sm order-4 lg:order-3 flex-shrink-0 overflow-x-auto">
                       <select
                         value={fontFamily}
                         onChange={(e) => setFontFamily(e.target.value)}
-                        className="px-3 py-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-0"
+                        className="px-2 md:px-3 py-1.5 md:py-2 border-0 bg-transparent text-xs md:text-sm focus:outline-none focus:ring-0 font-medium min-w-20"
                       >
                         {fonts.map(font => (
                           <option key={font} value={font}>{font}</option>
@@ -370,99 +656,123 @@ Best regards,
                       <select
                         value={fontSize}
                         onChange={(e) => setFontSize(e.target.value)}
-                        className="px-3 py-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-0 border-l border-gray-300/50"
+                        className="px-2 md:px-3 py-1.5 md:py-2 border-0 bg-transparent text-xs md:text-sm focus:outline-none focus:ring-0 border-l border-gray-300/50 font-medium min-w-16"
                       >
                         <option value="12px">12px</option>
                         <option value="14px">14px</option>
                         <option value="16px">16px</option>
                         <option value="18px">18px</option>
+                        <option value="20px">20px</option>
                       </select>
 
-                      <div className="flex gap-1 border-l border-gray-300/50 pl-1">
+                      <div className="flex gap-1 border-l border-gray-300/50 pl-2">
                         <button
                           onClick={() => applyFormatting('bold')}
-                          className={`p-2 rounded-lg transition-all duration-200 ${isBold
-                            ? 'bg-teal-600 text-white shadow-md'
-                            : 'text-gray-600 hover:bg-gray-100'
+                          className={`p-1.5 md:p-2 rounded-lg transition-all duration-200 ${isBold
+                            ? 'bg-teal-500 text-white shadow-md transform scale-105'
+                            : 'text-gray-600 hover:bg-gray-100 hover:text-teal-600'
                             }`}
                         >
-                          <FiBold className="w-4 h-4" />
+                          <FiBold className="w-3 h-3 md:w-4 md:h-4" />
                         </button>
                         <button
                           onClick={() => applyFormatting('italic')}
-                          className={`p-2 rounded-lg transition-all duration-200 ${isItalic
-                            ? 'bg-teal-600 text-white shadow-md'
-                            : 'text-gray-600 hover:bg-gray-100'
+                          className={`p-1.5 md:p-2 rounded-lg transition-all duration-200 ${isItalic
+                            ? 'bg-teal-500 text-white shadow-md transform scale-105'
+                            : 'text-gray-600 hover:bg-gray-100 hover:text-teal-600'
                             }`}
                         >
-                          <FiItalic className="w-4 h-4" />
+                          <FiItalic className="w-3 h-3 md:w-4 md:h-4" />
                         </button>
                         <button
                           onClick={() => applyFormatting('underline')}
-                          className={`p-2 rounded-lg transition-all duration-200 ${isUnderline
-                            ? 'bg-teal-600 text-white shadow-md'
-                            : 'text-gray-600 hover:bg-gray-100'
+                          className={`p-1.5 md:p-2 rounded-lg transition-all duration-200 ${isUnderline
+                            ? 'bg-teal-500 text-white shadow-md transform scale-105'
+                            : 'text-gray-600 hover:bg-gray-100 hover:text-teal-600'
                             }`}
                         >
-                          <FiUnderline className="w-4 h-4" />
+                          <FiUnderline className="w-3 h-3 md:w-4 md:h-4" />
                         </button>
                       </div>
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex gap-2">
+                    {/* Enhanced Action Buttons - Responsive */}
+                    <div className="flex gap-2 md:gap-3 order-2 lg:order-4">
                       <button
                         onClick={handleCopyToClipboard}
-                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
+                        className="flex items-center gap-2 px-3 md:px-5 py-2.5 md:py-3 bg-white border border-gray-300 text-gray-700 rounded-lg md:rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium shadow-sm hover:shadow-md hover:border-teal-200 flex-shrink-0 text-sm md:text-base"
                       >
                         <FiCopy className="w-4 h-4" />
                         Copy
                       </button>
                       <button
                         onClick={handleAnalyze}
-                        className="flex items-center gap-2 px-6 py-2 bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 font-semibold"
+                        disabled={isAnalyzing}
+                        className="flex items-center gap-2 md:gap-3 px-4 md:px-6 py-2.5 md:py-3 bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-lg md:rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 font-semibold disabled:opacity-50 disabled:transform-none disabled:hover:shadow-lg flex-shrink-0 text-sm md:text-base"
                       >
-                        <FiSend className="w-4 h-4" />
-                        Analyze Template
+                        {isAnalyzing ? (
+                          <>
+                            <div className="w-4 h-4 md:w-5 md:h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            <span className="text-sm md:text-lg">Analyzing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <FiZap className="w-4 h-4 md:w-5 md:h-5" />
+                            <span className="text-sm md:text-lg">Analyze</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
                 </div>
 
-                {/* Subject Field */}
-                <div className="bg-white/50 backdrop-blur-sm rounded-xl border border-gray-300/50 p-4">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Email Subject
+                {/* Enhanced Subject Field - Responsive */}
+                <div className="bg-white/60 backdrop-blur-sm rounded-xl md:rounded-2xl border border-gray-300/50 p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow duration-300">
+                  <label className="block text-sm font-semibold text-gray-700 mb-2 md:mb-3 flex items-center gap-2">
+                    <FiTarget className="w-4 h-4 md:w-5 md:h-5 text-teal-500" />
+                    <span className="text-base md:text-lg">Email Subject Line</span>
                   </label>
                   <input
                     type="text"
                     value={emailSubject}
                     onChange={(e) => setEmailSubject(e.target.value)}
-                    className="w-full px-4 py-3 bg-white/80 border border-gray-300/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 text-lg font-medium"
-                    placeholder="Enter your email subject line..."
+                    className="w-full px-4 md:px-5 py-3 md:py-4 bg-white/80 border border-gray-300/50 rounded-lg md:rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all duration-200 text-lg md:text-xl font-medium placeholder-gray-400"
+                    placeholder="Craft an engaging subject line that drives opens..."
                   />
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-sm text-gray-500">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between mt-2 md:mt-3 gap-2">
+                    <span className="text-xs md:text-sm text-gray-500 font-medium">
                       {emailSubject.length} characters
                     </span>
-                    {emailSubject.length > 50 && (
-                      <span className="text-amber-600 text-sm font-medium bg-amber-50 px-2 py-1 rounded-lg">
+                    {emailSubject.length > 50 ? (
+                      <span className="text-amber-600 text-xs md:text-sm font-medium bg-amber-50 px-2 md:px-3 py-1 md:py-1.5 rounded-lg border border-amber-200 flex items-center gap-1 md:gap-2">
+                        <FiAlertTriangle className="w-3 h-3 md:w-4 md:h-4" />
                         Recommended: 50 characters max
+                      </span>
+                    ) : emailSubject.length < 10 ? (
+                      <span className="text-amber-600 text-xs md:text-sm font-medium bg-amber-50 px-2 md:px-3 py-1 md:py-1.5 rounded-lg border border-amber-200 flex items-center gap-1 md:gap-2">
+                        <FiAlertTriangle className="w-3 h-3 md:w-4 md:h-4" />
+                        Recommended: at least 10 characters
+                      </span>
+                    ) : (
+                      <span className="text-teal-600 text-xs md:text-sm font-medium bg-teal-50 px-2 md:px-3 py-1 md:py-1.5 rounded-lg border border-teal-200 flex items-center gap-1 md:gap-2">
+                        <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4" />
+                        Optimal length
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* Email Editor */}
-                <div className="bg-white/50 backdrop-blur-sm rounded-xl border border-gray-300/50 overflow-hidden">
-                  <label className="block text-sm font-semibold text-gray-700 p-4 border-b border-gray-300/50">
-                    Email Content
+                {/* Enhanced Email Editor - Increased Height & Responsive */}
+                <div className="bg-white/60 backdrop-blur-sm rounded-xl md:rounded-2xl border border-gray-300/50 overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300">
+                  <label className="block text-sm font-semibold text-gray-700 p-4 md:p-5 border-b border-gray-300/50 flex items-center gap-2">
+                    <FiFileText className="w-4 h-4 md:w-5 md:h-5 text-teal-500" />
+                    <span className="text-base md:text-lg">Email Content</span>
                   </label>
                   <textarea
                     ref={textareaRef}
                     value={emailContent}
                     onChange={(e) => setEmailContent(e.target.value)}
-                    className="w-full h-64 px-4 py-4 bg-white/80 border-0 focus:outline-none focus:ring-0 resize-vertical text-gray-700 leading-relaxed"
+                    className="w-full h-64 md:h-80 lg:h-96 px-4 md:px-6 py-4 md:py-6 bg-white/80 border-0 focus:outline-none focus:ring-0 resize-vertical text-gray-700 leading-relaxed placeholder-gray-400 text-sm md:text-base"
                     style={{
                       fontFamily,
                       fontSize,
@@ -470,77 +780,120 @@ Best regards,
                       fontStyle: isItalic ? 'italic' : 'normal',
                       textDecoration: isUnderline ? 'underline' : 'none'
                     }}
-                    placeholder="Write your email content here... Use **bold**, *italic*, or _underline_ formatting."
+                    placeholder="Write your compelling email content here... Use **bold**, *italic*, or _underline_ formatting for emphasis."
                   />
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 md:px-6 py-3 md:py-4 bg-gray-50/50 border-t border-gray-300/50 gap-2">
+                    <span className="text-xs md:text-sm text-gray-500">
+                      {metrics.wordCount} words • {metrics.lineCount} lines • {metrics.paragraphCount} paragraphs
+                    </span>
+                    <span className="text-xs md:text-sm text-gray-500">
+                      Reading time: {metrics.readingTime} • {metrics.sentenceCount} sentences
+                    </span>
+                  </div>
                 </div>
 
-                {/* Metrics Section */}
-                <div className="bg-white/50 backdrop-blur-sm rounded-xl border border-gray-300/50 overflow-hidden">
+                {/* Enhanced Metrics Section - Responsive */}
+                <div className="bg-white/60 backdrop-blur-sm rounded-xl md:rounded-2xl border border-gray-300/50 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300">
                   <button
                     onClick={toggleMetrics}
-                    className="w-full flex items-center justify-between p-4 hover:bg-gray-50/50 transition-all duration-200"
+                    className="w-full flex items-center justify-between p-4 md:p-6 hover:bg-gray-50/50 transition-all duration-200 group"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-gradient-to-br from-teal-500 to-teal-600 rounded-lg flex items-center justify-center">
-                        <FiBarChart2 className="w-4 h-4 text-white" />
+                    <div className="flex items-center gap-3 md:gap-4">
+                      <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl md:rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform duration-200">
+                        <FiTrendingUp className="w-5 h-5 md:w-6 md:h-6 text-white" />
                       </div>
                       <div className="text-left">
-                        <h3 className="font-semibold text-gray-900">Template Analytics</h3>
-                        <p className="text-sm text-gray-600">Real-time metrics and insights</p>
+                        <h3 className="font-semibold text-gray-900 text-lg md:text-xl">Template Analytics</h3>
+                        <p className="text-gray-600 text-sm md:text-base">Real-time metrics and performance insights</p>
                       </div>
                     </div>
-                    {showMetrics ? <FiChevronUp className="w-5 h-5 text-gray-400" /> : <FiChevronDown className="w-5 h-5 text-gray-400" />}
+                    <div className="flex items-center gap-2 md:gap-3">
+                      <span className={`text-xs md:text-sm font-medium px-2 md:px-3 py-1 md:py-1.5 rounded-full ${score >= 80 ? 'bg-teal-100 text-teal-800 border border-teal-200' :
+                        score >= 60 ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                          'bg-red-100 text-red-800 border border-red-200'
+                        }`}>
+                        {score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : 'Needs Work'}
+                      </span>
+                      {showMetrics ?
+                        <FiChevronUp className="w-5 h-5 md:w-6 md:h-6 text-gray-400 transition-transform duration-200" /> :
+                        <FiChevronDown className="w-5 h-5 md:w-6 md:h-6 text-gray-400 transition-transform duration-200" />
+                      }
+                    </div>
                   </button>
 
                   {showMetrics && (
-                    <div className="p-4 border-t border-gray-300/50">
-                      {/* Score Display */}
-                      <div className="flex items-center gap-4 mb-6 p-4 bg-gradient-to-r from-teal-50 to-teal-100/30 rounded-xl border border-teal-300/30">
+                    <div className="p-4 md:p-6 border-t border-gray-300/50 bg-gradient-to-br from-gray-50/50 to-white/30">
+                      {/* Enhanced Score Display - Responsive */}
+                      <div className="flex flex-col lg:flex-row items-center gap-6 md:gap-8 mb-6 md:mb-8 p-6 md:p-8 bg-white rounded-xl md:rounded-2xl border border-gray-300/50 shadow-sm">
                         <CircularScore score={score} color={scoreColor} />
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-gray-900 mb-1">Email Health Score</h4>
-                          <p className={`text-sm font-medium ${score >= 80 ? 'text-teal-600' :
+                        <div className="flex-1 text-center lg:text-left mt-4 lg:mt-0">
+                          <h4 className="font-bold text-gray-900 text-xl md:text-2xl mb-2 md:mb-3">Email Health Score</h4>
+                          <p className={`text-base md:text-lg font-medium mb-3 md:mb-4 ${score >= 80 ? 'text-teal-600' :
                             score >= 60 ? 'text-amber-600' :
                               'text-red-600'
                             }`}>
-                            {score >= 80 ? 'Excellent - Ready to send' :
-                              score >= 60 ? 'Good - Minor improvements needed' :
-                                'Needs work - Review recommendations'}
+                            {score >= 80 ? '🎉 Excellent - Your template is ready for sending!' :
+                              score >= 60 ? '📝 Good - Minor improvements can boost performance' :
+                                '⚠️ Needs Work - Review recommendations below'}
                           </p>
+                          <div className="flex flex-wrap justify-center lg:justify-start items-center gap-4 md:gap-6 text-xs md:text-sm text-gray-600">
+                            <div className="flex items-center gap-1 md:gap-2">
+                              <div className="w-2 h-2 md:w-3 md:h-3 bg-teal-500 rounded-full"></div>
+                              <span className="font-medium">80-100: Excellent</span>
+                            </div>
+                            <div className="flex items-center gap-1 md:gap-2">
+                              <div className="w-2 h-2 md:w-3 md:h-3 bg-amber-500 rounded-full"></div>
+                              <span className="font-medium">60-79: Good</span>
+                            </div>
+                            <div className="flex items-center gap-1 md:gap-2">
+                              <div className="w-2 h-2 md:w-3 md:h-3 bg-red-500 rounded-full"></div>
+                              <span className="font-medium">0-59: Needs Work</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Metrics Grid */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                      {/* Enhanced Metrics Grid - Improved Responsive Grid */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
                         {[
-                          { label: 'Subject Length', value: metrics.subjectLength, warning: metrics.subjectLength > 50, icon: FiFileText },
-                          { label: 'Word Count', value: metrics.wordCount, optimal: metrics.wordCount >= 50 && metrics.wordCount <= 500, icon: FiFileText },
-                          { label: 'Sentences', value: metrics.sentenceCount, icon: FiFileText },
-                          { label: 'Paragraphs', value: metrics.paragraphCount, icon: FiFileText },
-                          { label: 'Reading Time', value: metrics.readingTime, icon: FiClock },
-                          { label: 'Links', value: metrics.linkCount, warning: metrics.linkCount > 3, icon: FiLink },
-                          { label: 'Questions', value: metrics.questionCount, icon: FiFileText },
-                          { label: 'Spam Words', value: metrics.spammyWordCount, warning: metrics.spammyWordCount > 0, icon: FiShield },
-                          { label: 'Personalization', value: metrics.personalizationCount, warning: metrics.personalizationCount > 0, icon: FiUser },
-                          { label: 'UPPERCASE', value: metrics.uppercaseCount, warning: metrics.uppercaseCount > 3, icon: FiFileText },
+                          { label: 'Subject', value: metrics.subjectLength, warning: metrics.subjectLength > 50 || metrics.subjectLength < 10, optimal: metrics.subjectLength >= 10 && metrics.subjectLength <= 50, icon: FiTarget, description: 'chars' },
+                          { label: 'Words', value: metrics.wordCount, warning: metrics.wordCount < 50 || metrics.wordCount > 500, optimal: metrics.wordCount >= 50 && metrics.wordCount <= 500, icon: FiFileText, description: 'words' },
+                          { label: 'Sentences', value: metrics.sentenceCount, optimal: metrics.sentenceCount >= 3, icon: FiFileText, description: 'sentences' },
+                          { label: 'Paragraphs', value: metrics.paragraphCount, optimal: metrics.paragraphCount >= 2, icon: FiFileText, description: 'paragraphs' },
+                          { label: 'Lines', value: metrics.lineCount, icon: FiFileText, description: 'lines' },
+                          { label: 'Read Time', value: metrics.readingTime, icon: FiClock, description: 'minutes' },
+                          { label: 'Links', value: metrics.linkCount, warning: metrics.linkCount > 2, optimal: metrics.linkCount <= 2, icon: FiLink, description: 'links' },
+                          { label: 'Questions', value: metrics.questionCount, optimal: metrics.questionCount >= 1, icon: FiFileText, description: 'questions' },
+                          { label: 'Spam Words', value: metrics.spammyWordCount, warning: metrics.spammyWordCount > 0, optimal: metrics.spammyWordCount === 0, icon: FiShield, description: 'words' },
+                          { label: 'Personal Tags', value: metrics.personalizationCount, optimal: metrics.personalizationCount > 0, icon: FiUser, description: 'tags' },
+                          { label: 'UPPERCASE', value: metrics.uppercaseCount, warning: metrics.uppercaseCount > 2, optimal: metrics.uppercaseCount <= 2, icon: FiFileText, description: 'instances' },
+                          { label: 'Readability', value: Math.round(metrics.readabilityScore), warning: metrics.readabilityScore < 60, optimal: metrics.readabilityScore >= 60, icon: FiFileText, description: 'score' },
                         ].map((metric, index) => {
                           const IconComponent = metric.icon;
                           return (
-                            <div key={index} className={`bg-white/80 backdrop-blur-sm border rounded-xl p-3 text-center transition-all duration-200 hover:shadow-md ${metric.warning ? 'border-red-300 bg-red-50/50' :
+                            <div key={index} className={`bg-white/80 backdrop-blur-sm border rounded-lg md:rounded-xl p-3 md:p-4 text-center transition-all duration-200 hover:shadow-md group ${metric.warning ? 'border-red-300 bg-red-50/50' :
                               metric.optimal ? 'border-teal-300 bg-teal-50/50' :
                                 'border-gray-300/50'
                               }`}>
-                              <div className="flex items-center justify-center gap-2 mb-2">
-                                <IconComponent className={`w-4 h-4 ${metric.warning ? 'text-red-600' :
+                              <div className="flex items-center justify-center gap-1 md:gap-2 mb-2 md:mb-3">
+                                <IconComponent className={`w-4 h-4 md:w-5 md:h-5 ${metric.warning ? 'text-red-600' :
                                   metric.optimal ? 'text-teal-600' :
                                     'text-gray-600'
                                   }`} />
-                                <div className="text-lg font-bold text-gray-900">{metric.value}</div>
+                                <div className="text-xl md:text-2xl font-bold text-gray-900">{metric.value}</div>
                               </div>
-                              <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide">{metric.label}</div>
+                              <div className="space-y-1">
+                                <div className="text-xs md:text-sm font-semibold text-gray-700 uppercase tracking-wide">{metric.label}</div>
+                                <div className="text-xs text-gray-500">{metric.description}</div>
+                              </div>
                               {metric.warning && (
-                                <div className="mt-1 text-xs text-red-600 bg-red-100 px-2 py-1 rounded-full font-medium">
+                                <div className="mt-1 md:mt-2 text-xs text-red-600 bg-red-100 px-1.5 md:px-2 py-0.5 md:py-1 rounded-full font-medium animate-pulse">
                                   Review
+                                </div>
+                              )}
+                              {metric.optimal && !metric.warning && (
+                                <div className="mt-1 md:mt-2 text-xs text-teal-600 bg-teal-100 px-1.5 md:px-2 py-0.5 md:py-1 rounded-full font-medium">
+                                  Optimal
                                 </div>
                               )}
                             </div>
@@ -550,156 +903,229 @@ Best regards,
                     </div>
                   )}
                 </div>
+
+                {/* Saved Templates - Responsive */}
+                {savedTemplates.length > 0 && (
+                  <div className="bg-white/60 backdrop-blur-sm rounded-xl md:rounded-2xl border border-gray-300/50 p-4 md:p-6 shadow-sm">
+                    <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-3 md:mb-4 flex items-center gap-2">
+                      <FiSave className="w-4 h-4 md:w-5 md:h-5 text-teal-500" />
+                      Saved Templates
+                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+                      {savedTemplates.map(template => (
+                        <div key={template.id} className="bg-white/80 border border-gray-300/50 rounded-lg md:rounded-xl p-3 md:p-4 hover:shadow-md transition-shadow duration-200">
+                          <div className="flex items-center justify-between mb-1 md:mb-2">
+                            <h4 className="font-semibold text-gray-900 truncate text-sm md:text-base">{template.name}</h4>
+                            <button
+                              onClick={() => loadTemplate(template)}
+                              className="text-teal-600 hover:text-teal-700 transition-colors duration-200"
+                            >
+                              <FiUpload className="w-3 h-3 md:w-4 md:h-4" />
+                            </button>
+                          </div>
+                          <p className="text-xs md:text-sm text-gray-600 truncate">{template.subject}</p>
+                          <p className="text-xs text-gray-500 mt-1 md:mt-2">
+                            {new Date(template.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="space-y-6">
-                {/* Results Header */}
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-bold text-gray-900">Template Analysis Results</h2>
-                    <p className="text-gray-600 text-sm">Detailed insights and recommendations</p>
+              <div className="space-y-6 md:space-y-8">
+                {/* Results Header - Improved Layout & Responsive */}
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 md:gap-6">
+                  <div className="flex items-start gap-3 md:gap-4 flex-shrink-0">
+                    <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl md:rounded-2xl flex items-center justify-center shadow-xl">
+                      <FiBarChart2 className="w-6 h-6 md:w-8 md:h-8 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-2xl md:text-3xl font-bold text-gray-900">Template Analysis Results</h2>
+                      <p className="text-gray-600 text-base md:text-lg mt-1 md:mt-2">Comprehensive insights and actionable recommendations</p>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => setActiveTab('editor')}
-                    className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium shadow-sm hover:shadow-md"
-                  >
-                    <FiEdit2 className="w-4 h-4" />
-                    Edit Template
-                  </button>
+                  <div className="flex gap-2 md:gap-3 flex-shrink-0">
+                    <button
+                      onClick={() => setActiveTab('editor')}
+                      className="flex items-center gap-2 px-3 md:px-5 py-2.5 md:py-3 bg-white border border-gray-300 text-gray-700 rounded-lg md:rounded-xl hover:bg-gray-50 transition-all duration-200 font-medium shadow-sm hover:shadow-md hover:border-teal-200 text-sm md:text-base"
+                    >
+                      <FiEdit2 className="w-4 h-4 md:w-5 md:h-5" />
+                      Edit Template
+                    </button>
+                    <button
+                      onClick={handleAnalyze}
+                      className="flex items-center gap-2 px-3 md:px-5 py-2.5 md:py-3 bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-lg md:rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 transition-all duration-200 font-semibold text-sm md:text-base"
+                    >
+                      <FiRefreshCw className="w-4 h-4 md:w-5 md:h-5" />
+                      Re-analyze
+                    </button>
+                  </div>
                 </div>
 
-                {/* Summary Cards */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Summary Cards - Improved Grid & Responsive */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
                   {[
-                    { severity: 'Critical', count: analysisResults.filter(r => r.severity === 'High').length, color: 'red', description: 'Urgent fixes needed' },
-                    { severity: 'Warning', count: analysisResults.filter(r => r.severity === 'Medium').length, color: 'amber', description: 'Recommended improvements' },
-                    { severity: 'Suggestion', count: analysisResults.filter(r => r.severity === 'Low').length, color: 'teal', description: 'Optional enhancements' },
-                    { severity: 'Passed', count: analysisResults.filter(r => r.severity === 'None').length, color: 'green', description: 'All checks passed' },
+                    { severity: 'Critical', count: analysisResults.filter(r => r.severity === 'High').length, color: 'red', description: 'Urgent fixes needed', icon: FiAlertTriangle },
+                    { severity: 'Warning', count: analysisResults.filter(r => r.severity === 'Medium').length, color: 'amber', description: 'Recommended improvements', icon: FiAlertTriangle },
+                    { severity: 'Suggestion', count: analysisResults.filter(r => r.severity === 'Low').length, color: 'teal', description: 'Optional enhancements', icon: FiFileText },
+                    { severity: 'Passed', count: analysisResults.filter(r => r.severity === 'None').length, color: 'green', description: 'All checks passed', icon: FiAward },
                   ].map((summary, index) => (
-                    <div key={index} className={`p-4 rounded-xl border-l-4 backdrop-blur-sm ${summary.color === 'red' ? 'bg-red-50/80 border-red-500' :
+                    <div key={index} className={`p-4 md:p-6 rounded-xl md:rounded-2xl border-l-4 backdrop-blur-sm shadow-sm hover:shadow-md transition-shadow duration-300 ${summary.color === 'red' ? 'bg-red-50/80 border-red-500' :
                       summary.color === 'amber' ? 'bg-amber-50/80 border-amber-500' :
                         summary.color === 'teal' ? 'bg-teal-50/80 border-teal-500' :
                           'bg-green-50/80 border-green-500'
                       }`}>
-                      <div className={`text-2xl font-bold mb-1 ${summary.color === 'red' ? 'text-red-600' :
-                        summary.color === 'amber' ? 'text-amber-600' :
-                          summary.color === 'teal' ? 'text-teal-600' :
-                            'text-green-600'
-                        }`}>
-                        {summary.count}
+                      <div className="flex items-center justify-between mb-3 md:mb-4">
+                        <div className={`p-2 md:p-3 rounded-lg md:rounded-xl ${summary.color === 'red' ? 'bg-red-100 text-red-600' :
+                          summary.color === 'amber' ? 'bg-amber-100 text-amber-600' :
+                            summary.color === 'teal' ? 'bg-teal-100 text-teal-600' :
+                              'bg-green-100 text-green-600'
+                          }`}>
+                          <summary.icon className="w-4 h-4 md:w-6 md:h-6" />
+                        </div>
+                        <div className={`text-3xl md:text-4xl font-bold ${summary.color === 'red' ? 'text-red-600' :
+                          summary.color === 'amber' ? 'text-amber-600' :
+                            summary.color === 'teal' ? 'text-teal-600' :
+                              'text-green-600'
+                          }`}>
+                          {summary.count}
+                        </div>
                       </div>
-                      <div className="text-sm font-semibold text-gray-900">
-                        {summary.severity}
-                      </div>
-                      <div className="text-xs text-gray-600 mt-1">
-                        {summary.description}
+                      <div className="space-y-1 md:space-y-2">
+                        <div className="text-lg md:text-xl font-semibold text-gray-900">
+                          {summary.severity}
+                        </div>
+                        <div className="text-xs md:text-sm text-gray-600">
+                          {summary.description}
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Issues List */}
-                <div className="space-y-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Detailed Analysis</h3>
-                  {analysisResults.map((result) => {
-                    const IconComponent = result.icon || FiAlertTriangle;
-                    return (
-                      <div key={result.id} className={`p-4 rounded-xl border-l-4 backdrop-blur-sm ${result.severity === 'High' ? 'border-red-500 bg-red-50/80' :
-                        result.severity === 'Medium' ? 'border-amber-500 bg-amber-50/80' :
-                          result.severity === 'Low' ? 'border-teal-500 bg-teal-50/80' :
-                            'border-green-500 bg-green-50/80'
-                        }`}>
-                        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-3">
-                          <div className="flex items-start gap-3">
-                            <div className={`p-2 rounded-lg ${result.severity === 'High' ? 'bg-red-100 text-red-600' :
-                              result.severity === 'Medium' ? 'bg-amber-100 text-amber-600' :
-                                result.severity === 'Low' ? 'bg-teal-100 text-teal-600' :
-                                  'bg-green-100 text-green-600'
-                              }`}>
-                              <IconComponent className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <h4 className="font-semibold text-gray-900 mb-1">{result.issue}</h4>
-                              <div className="flex items-center gap-2">
-                                <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase ${result.severity === 'High' ? 'bg-red-100 text-red-800' :
-                                  result.severity === 'Medium' ? 'bg-amber-100 text-amber-800' :
-                                    result.severity === 'Low' ? 'bg-teal-100 text-teal-800' :
-                                      'bg-green-100 text-green-800'
-                                  }`}>
-                                  {result.severity}
+                {/* Enhanced Issues List - Responsive */}
+                <div className="space-y-4 md:space-y-6">
+                  <h3 className="text-xl md:text-2xl font-bold text-gray-900 flex items-center gap-2 md:gap-3">
+                    <FiFileText className="w-5 h-5 md:w-6 md:h-6 text-teal-500" />
+                    Detailed Analysis
+                  </h3>
+                  {analysisResults.length === 0 ? (
+                    <div className="text-center py-8 md:py-12 bg-white/60 rounded-xl md:rounded-2xl border border-gray-300/50">
+                      <FiBarChart2 className="w-12 h-12 md:w-16 md:h-16 text-gray-400 mx-auto mb-3 md:mb-4" />
+                      <p className="text-gray-600 text-base md:text-lg">No analysis results yet. Click "Analyze Template" to get started.</p>
+                    </div>
+                  ) : (
+                    analysisResults.map((result) => {
+                      const IconComponent = result.icon || FiAlertTriangle;
+                      return (
+                        <div key={result.id} className={`p-4 md:p-6 rounded-xl md:rounded-2xl border-l-4 backdrop-blur-sm shadow-sm hover:shadow-md transition-all duration-300 ${result.severity === 'High' ? 'border-red-500 bg-red-50/80' :
+                          result.severity === 'Medium' ? 'border-amber-500 bg-amber-50/80' :
+                            result.severity === 'Low' ? 'border-teal-500 bg-teal-50/80' :
+                              'border-green-500 bg-green-50/80'
+                          }`}>
+                          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 md:gap-4 mb-3 md:mb-4">
+                            <div className="flex items-start gap-3 md:gap-4">
+                              <div className={`p-2 md:p-3 rounded-lg md:rounded-xl ${result.severity === 'High' ? 'bg-red-100 text-red-600' :
+                                result.severity === 'Medium' ? 'bg-amber-100 text-amber-600' :
+                                  result.severity === 'Low' ? 'bg-teal-100 text-teal-600' :
+                                    'bg-green-100 text-green-600'
+                                }`}>
+                                <IconComponent className="w-4 h-4 md:w-6 md:h-6" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-2 md:gap-3 mb-1 md:mb-2">
+                                  <h4 className="font-bold text-gray-900 text-lg md:text-xl break-words">{result.issue}</h4>
+                                  <span className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-xs md:text-sm font-bold uppercase flex-shrink-0 ${result.severity === 'High' ? 'bg-red-100 text-red-800' :
+                                    result.severity === 'Medium' ? 'bg-amber-100 text-amber-800' :
+                                      result.severity === 'Low' ? 'bg-teal-100 text-teal-800' :
+                                        'bg-green-100 text-green-800'
+                                    }`}>
+                                    {result.severity} Priority
+                                  </span>
+                                </div>
+                                <span className="inline-block px-2 md:px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-xs md:text-sm font-medium">
+                                  {result.category}
                                 </span>
                               </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="space-y-2 text-sm">
-                          <div className="flex flex-col sm:flex-row sm:items-start gap-2">
-                            <span className="font-semibold text-gray-700 min-w-20">Found:</span>
-                            <span className={`px-3 py-2 rounded-lg font-mono text-sm ${result.severity === 'High' ? 'bg-red-100 text-red-800' :
-                              result.severity === 'Medium' ? 'bg-amber-100 text-amber-800' :
-                                result.severity === 'Low' ? 'bg-teal-100 text-teal-800' :
-                                  'bg-green-100 text-green-800'
-                              }`}>
-                              {result.found}
-                            </span>
-                          </div>
-                          <div className="flex flex-col sm:flex-row sm:items-start gap-2">
-                            <span className="font-semibold text-gray-700 min-w-20">Recommendation:</span>
-                            <span className="text-gray-600 bg-white/50 px-3 py-2 rounded-lg border border-gray-300/30">
-                              {result.suggestion}
-                            </span>
+                          <div className="space-y-3 md:space-y-4 text-sm md:text-base">
+                            <div className="flex flex-col sm:flex-row sm:items-start gap-2 md:gap-3">
+                              <span className="font-semibold text-gray-700 min-w-20 md:min-w-24 flex items-center gap-1 md:gap-2 flex-shrink-0 text-sm md:text-base">
+                                <FiAlertTriangle className="w-4 h-4 md:w-5 md:h-5" />
+                                Found:
+                              </span>
+                              <span className={`px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl font-mono text-xs md:text-sm flex-1 break-words ${result.severity === 'High' ? 'bg-red-100 text-red-800 border border-red-200' :
+                                result.severity === 'Medium' ? 'bg-amber-100 text-amber-800 border border-amber-200' :
+                                  result.severity === 'Low' ? 'bg-teal-100 text-teal-800 border border-teal-200' :
+                                    'bg-green-100 text-green-800 border border-green-200'
+                                }`}>
+                                {result.found}
+                              </span>
+                            </div>
+                            <div className="flex flex-col sm:flex-row sm:items-start gap-2 md:gap-3">
+                              <span className="font-semibold text-gray-700 min-w-20 md:min-w-24 flex items-center gap-1 md:gap-2 flex-shrink-0 text-sm md:text-base">
+                                <FiCheckCircle className="w-4 h-4 md:w-5 md:h-5" />
+                                Recommendation:
+                              </span>
+                              <span className="text-gray-600 bg-white/60 px-3 md:px-4 py-2 md:py-3 rounded-lg md:rounded-xl border border-gray-300/50 flex-1 leading-relaxed text-sm md:text-base">
+                                {result.suggestion}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })
+                  )}
                 </div>
 
-                {/* Best Practices */}
-                <div className="bg-gradient-to-r from-teal-50/50 to-teal-100/30 rounded-xl p-6 border border-teal-300/50">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <FiSettings className="w-5 h-5 text-teal-600" />
-                    Email Best Practices
+                {/* Enhanced Best Practices - Responsive */}
+                <div className="bg-gradient-to-r from-teal-50/60 to-teal-100/30 rounded-xl md:rounded-2xl p-6 md:p-8 border border-teal-300/50 shadow-sm">
+                  <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 md:mb-6 flex items-center gap-2 md:gap-3">
+                    <FiSettings className="w-5 h-5 md:w-7 md:h-7 text-teal-500" />
+                    Email Best Practices & Warmup Strategies
                   </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div className="space-y-3">
-                      <div className="flex items-start gap-3 p-3 bg-white/50 rounded-lg border border-gray-300/30">
-                        <div className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-teal-600 text-xs font-bold">1</span>
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6 text-sm md:text-base">
+                    <div className="space-y-3 md:space-y-4">
+                      <div className="flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white/60 rounded-lg md:rounded-xl border border-gray-300/30 shadow-sm hover:shadow-md transition-shadow duration-300">
+                        <div className="w-8 h-8 md:w-10 md:h-10 bg-teal-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-teal-600 text-xs md:text-sm font-bold">1</span>
                         </div>
                         <div>
-                          <h4 className="font-semibold text-gray-900 mb-1">Warm Up Gradually</h4>
-                          <p className="text-gray-600">Start with 5-10 emails daily, gradually increasing volume over 4-8 weeks</p>
+                          <h4 className="font-semibold text-gray-900 text-base md:text-lg mb-1 md:mb-2">Gradual Warmup Process</h4>
+                          <p className="text-gray-600 leading-relaxed text-sm md:text-base">Start with 5-10 emails daily, gradually increasing volume over 4-8 weeks. Monitor engagement metrics closely and adjust based on performance.</p>
                         </div>
                       </div>
-                      <div className="flex items-start gap-3 p-3 bg-white/50 rounded-lg border border-gray-300/30">
-                        <div className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-teal-600 text-xs font-bold">2</span>
+                      <div className="flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white/60 rounded-lg md:rounded-xl border border-gray-300/30 shadow-sm hover:shadow-md transition-shadow duration-300">
+                        <div className="w-8 h-8 md:w-10 md:h-10 bg-teal-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-teal-600 text-xs md:text-sm font-bold">2</span>
                         </div>
                         <div>
-                          <h4 className="font-semibold text-gray-900 mb-1">Authentication Setup</h4>
-                          <p className="text-gray-600">Configure SPF, DKIM, and DMARC records for domain authentication</p>
+                          <h4 className="font-semibold text-gray-900 text-base md:text-lg mb-1 md:mb-2">Authentication Setup</h4>
+                          <p className="text-gray-600 leading-relaxed text-sm md:text-base">Configure SPF, DKIM, and DMARC records properly. This builds trust with email providers and improves deliverability rates significantly.</p>
                         </div>
                       </div>
                     </div>
-                    <div className="space-y-3">
-                      <div className="flex items-start gap-3 p-3 bg-white/50 rounded-lg border border-gray-300/30">
-                        <div className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-teal-600 text-xs font-bold">3</span>
+                    <div className="space-y-3 md:space-y-4">
+                      <div className="flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white/60 rounded-lg md:rounded-xl border border-gray-300/30 shadow-sm hover:shadow-md transition-shadow duration-300">
+                        <div className="w-8 h-8 md:w-10 md:h-10 bg-teal-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-teal-600 text-xs md:text-sm font-bold">3</span>
                         </div>
                         <div>
-                          <h4 className="font-semibold text-gray-900 mb-1">List Hygiene</h4>
-                          <p className="text-gray-600">Regularly clean your email list and remove inactive subscribers</p>
+                          <h4 className="font-semibold text-gray-900 text-base md:text-lg mb-1 md:mb-2">List Hygiene & Engagement</h4>
+                          <p className="text-gray-600 leading-relaxed text-sm md:text-base">Regularly clean your email list. Remove inactive subscribers, validate email addresses, and monitor open/click rates to maintain list quality.</p>
                         </div>
                       </div>
-                      <div className="flex items-start gap-3 p-3 bg-white/50 rounded-lg border border-gray-300/30">
-                        <div className="w-6 h-6 bg-teal-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-teal-600 text-xs font-bold">4</span>
+                      <div className="flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white/60 rounded-lg md:rounded-xl border border-gray-300/30 shadow-sm hover:shadow-md transition-shadow duration-300">
+                        <div className="w-8 h-8 md:w-10 md:h-10 bg-teal-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
+                          <span className="text-teal-600 text-xs md:text-sm font-bold">4</span>
                         </div>
                         <div>
-                          <h4 className="font-semibold text-gray-900 mb-1">Engagement Focus</h4>
-                          <p className="text-gray-600">Monitor open rates and engagement metrics to maintain sender reputation</p>
+                          <h4 className="font-semibold text-gray-900 text-base md:text-lg mb-1 md:mb-2">Content Optimization</h4>
+                          <p className="text-gray-600 leading-relaxed text-sm md:text-base">Personalize content, avoid spam triggers, maintain a clean professional tone, and ensure mobile responsiveness for better engagement.</p>
                         </div>
                       </div>
                     </div>
@@ -711,17 +1137,17 @@ Best regards,
         </div>
       </div>
 
-      {/* Notification */}
+      {/* Enhanced Notification - Responsive */}
       {notification && (
-        <div className="fixed bottom-6 right-6 bg-gradient-to-r from-teal-500 to-teal-600 text-white px-6 py-3 rounded-xl shadow-2xl animate-slide-in font-medium">
-          <div className="flex items-center gap-2">
-            <FiCheckCircle className="w-4 h-4" />
-            {notification}
+        <div className={`fixed bottom-4 md:bottom-8 right-4 md:right-8 left-4 md:left-auto text-white px-4 md:px-8 py-3 md:py-4 rounded-xl md:rounded-2xl shadow-2xl animate-slide-in font-medium ${notification.type === 'error' ? 'bg-gradient-to-r from-red-500 to-red-600' : 'bg-gradient-to-r from-teal-500 to-teal-600'}`}>
+          <div className="flex items-center gap-2 md:gap-3">
+            {notification.type === 'error' ? <FiAlertTriangle className="w-5 h-5 md:w-6 md:h-6" /> : <FiCheckCircle className="w-5 h-5 md:w-6 md:h-6" />}
+            <span className="font-semibold text-sm md:text-lg">{notification.message}</span>
           </div>
         </div>
       )}
 
-      {/* Custom Animations */}
+      {/* Enhanced Custom Animations */}
       <style jsx global>{`
         @keyframes float-slow {
           0%, 100% { transform: translateY(0px) rotate(0deg); }
@@ -730,6 +1156,10 @@ Best regards,
         @keyframes float-medium {
           0%, 100% { transform: translateY(0px) rotate(0deg); }
           50% { transform: translateY(-15px) rotate(-3deg); }
+        }
+        @keyframes float-fast {
+          0%, 100% { transform: translateY(0px) rotate(0deg); }
+          50% { transform: translateY(-10px) rotate(2deg); }
         }
         @keyframes slide-in {
           from {
@@ -743,6 +1173,7 @@ Best regards,
         }
         .animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
         .animate-float-medium { animation: float-medium 6s ease-in-out infinite; }
+        .animate-float-fast { animation: float-fast 4s ease-in-out infinite; }
         .animate-slide-in { animation: slide-in 0.3s ease-out; }
       `}</style>
     </div>
