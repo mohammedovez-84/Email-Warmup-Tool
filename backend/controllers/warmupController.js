@@ -1,9 +1,9 @@
-const GoogleUser = require('../models/GoogleUser'); // ✅ MISSING IMPORT
+const GoogleUser = require('../models/GoogleUser');
 const SmtpAccount = require('../models/smtpAccounts');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const EmailPool = require('../models/EmailPool');
-const EmailMetric = require("../models/EmailMetric")
-const { Op } = require("sequelize")
+const EmailMetric = require("../models/EmailMetric");
+const { Op } = require("sequelize");
 const { triggerImmediateScheduling } = require('../services/Scheduler');
 
 exports.toggleWarmupStatus = async (req, res) => {
@@ -16,10 +16,7 @@ exports.toggleWarmupStatus = async (req, res) => {
       increaseEmailsPerDay,
       maxEmailsPerDay,
       replyRate,
-      warmupStartTime,
-      warmupEndTime,
-      timezone,
-      preferredSendInterval
+
     } = req.body;
 
     console.log(`Toggle request for EMAIL: ${emailAddress} with status: ${status}`);
@@ -59,12 +56,7 @@ exports.toggleWarmupStatus = async (req, res) => {
     if (startEmailsPerDay !== undefined) updateData.startEmailsPerDay = startEmailsPerDay;
     if (increaseEmailsPerDay !== undefined) updateData.increaseEmailsPerDay = increaseEmailsPerDay;
     if (maxEmailsPerDay !== undefined) updateData.maxEmailsPerDay = maxEmailsPerDay;
-    if (replyRate !== undefined) updateData.replyRate = Math.min(1.0, Math.max(0, replyRate)); // Allow up to 100% for testing
-    // Remove timing fields since we're not using them anymore
-    // if (warmupStartTime !== undefined) updateData.warmupStartTime = warmupStartTime;
-    // if (warmupEndTime !== undefined) updateData.warmupEndTime = warmupEndTime;
-    // if (timezone !== undefined) updateData.timezone = timezone;
-    // if (preferredSendInterval !== undefined) updateData.preferredSendInterval = preferredSendInterval;
+    if (replyRate !== undefined) updateData.replyRate = Math.min(1.0, Math.max(0, replyRate));
 
     await sender.update(updateData);
 
@@ -125,6 +117,16 @@ exports.toggleWarmupStatus = async (req, res) => {
       }
     })();
 
+    // 📊 Get metric summary
+    const metrics = await EmailMetric.findAll({
+      where: { senderEmail: emailAddress }
+    });
+
+    const totalSent = metrics.length;
+    const delivered = metrics.filter(m => m.deliveredInbox).length;
+    const replied = metrics.filter(m => m.replied).length;
+    const deliveryRate = totalSent > 0 ? (delivered / totalSent * 100).toFixed(1) : 0;
+
     return res.json({
       success: true,
       message: `Warmup ${status} for ${senderType} account`,
@@ -132,6 +134,12 @@ exports.toggleWarmupStatus = async (req, res) => {
       warmupStatus: status,
       email: emailAddress,
       updatedConfig: updatedSender.toJSON(),
+      metricSummary: {
+        totalSent,
+        delivered,
+        replied,
+        deliveryRate: `${deliveryRate}%`
+      },
       note: status === 'active' ?
         'Account scheduled immediately - emails will be sent within minutes' :
         'No new warmup emails will be scheduled'
@@ -184,8 +192,6 @@ async function getActivePoolAccountsCount() {
   return poolCount;
 }
 
-
-
 exports.disconnectReconnectMail = async (req, res) => {
   const { email } = req.params;
 
@@ -216,6 +222,15 @@ exports.disconnectReconnectMail = async (req, res) => {
       `${newStatus ? '🔌 Reconnected' : '⛔ Disconnected'} ${accountType} account: ${email}`
     );
 
+    // Get metric summary
+    const metrics = await EmailMetric.findAll({
+      where: { senderEmail: email }
+    });
+
+    const totalSent = metrics.length;
+    const delivered = metrics.filter(m => m.deliveredInbox).length;
+    const deliveryRate = totalSent > 0 ? (delivered / totalSent * 100).toFixed(1) : 0;
+
     return res.json({
       success: true,
       message: `Email account (${accountType}) ${newStatus ? 'reconnected' : 'disconnected'} successfully`,
@@ -224,6 +239,11 @@ exports.disconnectReconnectMail = async (req, res) => {
         accountType,
         name: targetAccount.name || targetAccount.sender_name,
         is_connected: newStatus,
+        metricSummary: {
+          totalSent,
+          delivered,
+          deliveryRate: `${deliveryRate}%`
+        },
         updatedAt: new Date().toISOString(),
       },
     });
@@ -273,6 +293,15 @@ exports.deleteMail = async (req, res) => {
       });
     }
 
+    // Get metrics before deletion for reporting
+    const metrics = await EmailMetric.findAll({
+      where: { senderEmail: email }
+    });
+
+    const totalSent = metrics.length;
+    const delivered = metrics.filter(m => m.deliveredInbox).length;
+    const deliveryRate = totalSent > 0 ? (delivered / totalSent * 100).toFixed(1) : 0;
+
     // Delete metrics
     try {
       const deletedMetricsCount = await EmailMetric.destroy({
@@ -295,6 +324,12 @@ exports.deleteMail = async (req, res) => {
         email: deletedAccount.email,
         accountType,
         name: deletedAccount.name || deletedAccount.sender_name,
+        deletedMetrics: totalSent,
+        performanceSummary: {
+          totalSent,
+          delivered,
+          deliveryRate: `${deliveryRate}%`
+        },
         deletedAt: new Date().toISOString()
       }
     });
@@ -354,6 +389,17 @@ exports.updateMailSettings = async (req, res) => {
     // Update the account
     await account.update(updateData);
 
+    // Get metric summary
+    const metrics = await EmailMetric.findAll({
+      where: { senderEmail: email }
+    });
+
+    const totalSent = metrics.length;
+    const delivered = metrics.filter(m => m.deliveredInbox).length;
+    const replied = metrics.filter(m => m.replied).length;
+    const deliveryRate = totalSent > 0 ? (delivered / totalSent * 100).toFixed(1) : 0;
+    const actualReplyRate = totalSent > 0 ? (replied / totalSent * 100).toFixed(1) : 0;
+
     console.log(`✅ Settings updated for ${email} (${accountType})`);
 
     return res.json({
@@ -362,7 +408,14 @@ exports.updateMailSettings = async (req, res) => {
       data: {
         email: account.email,
         accountType: accountType,
-        updatedSettings: updateData
+        updatedSettings: updateData,
+        performanceMetrics: {
+          totalSent,
+          delivered,
+          replied,
+          deliveryRate: `${deliveryRate}%`,
+          actualReplyRate: `${actualReplyRate}%`
+        }
       }
     });
 
@@ -399,7 +452,32 @@ exports.fetchSingleMailData = async (req, res) => {
     else if (account instanceof MicrosoftUser) accountType = "microsoft";
     else if (account instanceof SmtpAccount) accountType = "smtp";
 
-    // 🧠 Prepare response data
+    // 📊 Get metric statistics for this email
+    const metrics = await EmailMetric.findAll({
+      where: { senderEmail: email }
+    });
+
+    // Calculate basic metrics
+    const totalSent = metrics.length;
+    const delivered = metrics.filter(m => m.deliveredInbox).length;
+    const replied = metrics.filter(m => m.replied).length;
+    const opened = metrics.filter(m => m.opened).length;
+    const clicked = metrics.filter(m => m.clicked).length;
+    const bounced = metrics.filter(m => m.bounced).length;
+
+    const deliveryRate = totalSent > 0 ? (delivered / totalSent * 100).toFixed(1) : 0;
+    const replyRate = totalSent > 0 ? (replied / totalSent * 100).toFixed(1) : 0;
+    const openRate = totalSent > 0 ? (opened / totalSent * 100).toFixed(1) : 0;
+    const clickRate = totalSent > 0 ? (clicked / totalSent * 100).toFixed(1) : 0;
+    const bounceRate = totalSent > 0 ? (bounced / totalSent * 100).toFixed(1) : 0;
+
+    // Recent activity (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recentSent = metrics.filter(m => new Date(m.sentAt) > sevenDaysAgo).length;
+    const recentReplied = metrics.filter(m => m.replied && new Date(m.sentAt) > sevenDaysAgo).length;
+
+    // 🧠 Prepare response data with metrics
     const accountData = {
       email: account.email,
       name: account.name || account.sender_name || null,
@@ -415,9 +493,37 @@ exports.fetchSingleMailData = async (req, res) => {
       warmupEndTime: account.warmupEndTime,
       timezone: account.timezone,
       preferredSendInterval: account.preferredSendInterval,
+      // 📈 Metric Information
+      metrics: {
+        summary: {
+          totalSent,
+          delivered,
+          replied,
+          opened,
+          clicked,
+          bounced
+        },
+        rates: {
+          deliveryRate: `${deliveryRate}%`,
+          replyRate: `${replyRate}%`,
+          openRate: `${openRate}%`,
+          clickRate: `${clickRate}%`,
+          bounceRate: `${bounceRate}%`
+        },
+        recentActivity: {
+          last7Days: {
+            sent: recentSent,
+            replied: recentReplied
+          }
+        },
+        lastSent: metrics.length > 0 ?
+          new Date(Math.max(...metrics.filter(m => m.sentAt).map(m => new Date(m.sentAt)))) :
+          null,
+        performanceScore: this.calculatePerformanceScore(deliveryRate, replyRate, openRate, clickRate)
+      }
     };
 
-    console.log(`📧 Fetched data for ${accountType} account: ${email}`);
+    console.log(`📧 Fetched data with metrics for ${accountType} account: ${email}`);
 
     return res.json({
       success: true,
@@ -457,10 +563,41 @@ exports.fetchSingleMailReport = async (req, res) => {
     else if (account instanceof MicrosoftUser) accountType = "microsoft";
     else if (account instanceof SmtpAccount) accountType = "smtp";
 
-    // 📊 Get simplified report for frontend
-    const report = await this.calculateSimplifiedEmailReport(email);
+    // 📊 Get detailed metrics for comprehensive report
+    const sentMetrics = await EmailMetric.findAll({
+      where: { senderEmail: email },
+      order: [['sentAt', 'DESC']]
+    });
 
-    // 🧠 Prepare response data
+    const receivedMetrics = await EmailMetric.findAll({
+      where: { receiverEmail: email },
+      order: [['sentAt', 'DESC']]
+    });
+
+    // Calculate detailed metrics
+    const totalSent = sentMetrics.length;
+    const totalReceived = receivedMetrics.length;
+    const deliveredEmails = sentMetrics.filter(metric => metric.deliveredInbox).length;
+    const repliedEmails = sentMetrics.filter(metric => metric.replied).length;
+    const openedEmails = sentMetrics.filter(metric => metric.opened).length;
+    const clickedEmails = sentMetrics.filter(metric => metric.clicked).length;
+    const bouncedEmails = sentMetrics.filter(metric => metric.bounced).length;
+
+    // Calculate rates
+    const deliveryRate = totalSent > 0 ? (deliveredEmails / totalSent * 100).toFixed(1) : 0;
+    const replyRate = totalSent > 0 ? (repliedEmails / totalSent * 100).toFixed(1) : 0;
+    const openRate = totalSent > 0 ? (openedEmails / totalSent * 100).toFixed(1) : 0;
+    const clickRate = totalSent > 0 ? (clickedEmails / totalSent * 100).toFixed(1) : 0;
+    const bounceRate = totalSent > 0 ? (bouncedEmails / totalSent * 100).toFixed(1) : 0;
+
+    // Recent activity (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const recentSent = sentMetrics.filter(m => new Date(m.sentAt) > sevenDaysAgo).length;
+    const recentReplies = sentMetrics.filter(m => m.replied && new Date(m.sentAt) > sevenDaysAgo).length;
+
+    // 🧠 Prepare account data
     const accountData = {
       email: account.email,
       name: account.name || account.sender_name || null,
@@ -469,14 +606,60 @@ exports.fetchSingleMailReport = async (req, res) => {
       is_connected: account.is_connected ?? true,
     };
 
-    console.log(`📊 Generated simplified report for ${accountType} account: ${email}`);
+    // 📈 Comprehensive metric report
+    const metricReport = {
+      summary: {
+        totalSent,
+        totalReceived,
+        delivered: deliveredEmails,
+        replied: repliedEmails,
+        opened: openedEmails,
+        clicked: clickedEmails,
+        bounced: bouncedEmails
+      },
+      rates: {
+        deliveryRate: `${deliveryRate}%`,
+        replyRate: `${replyRate}%`,
+        openRate: `${openRate}%`,
+        clickRate: `${clickRate}%`,
+        bounceRate: `${bounceRate}%`,
+        engagementRate: `${clickRate}%`
+      },
+      performance: {
+        recentActivity: {
+          last7Days: {
+            sent: recentSent,
+            replies: recentReplies
+          }
+        },
+        bestPerforming: {
+          day: this.calculateBestDay(sentMetrics),
+          time: this.calculateBestTime(sentMetrics)
+        }
+      },
+      timeline: this.calculateSimplifiedDailyPerformance(sentMetrics),
+      recentEmails: sentMetrics.slice(0, 10).map(metric => ({
+        id: metric.id,
+        subject: metric.subject,
+        receiver: metric.receiverEmail,
+        sentAt: metric.sentAt,
+        status: metric.status,
+        delivered: metric.deliveredInbox,
+        replied: metric.replied,
+        opened: metric.opened,
+        clicked: metric.clicked
+      }))
+    };
+
+    console.log(`📊 Generated comprehensive metric report for ${accountType} account: ${email}`);
 
     return res.json({
       success: true,
       message: `Fetched comprehensive report for ${accountType} account (${email})`,
       data: {
         account: accountData,
-        report: report
+        metrics: metricReport,
+        report: await this.calculateSimplifiedEmailReport(email)
       },
     });
   } catch (error) {
@@ -548,7 +731,7 @@ exports.calculateSimplifiedEmailReport = async (email) => {
       insights: {
         bestDay,
         peakTime: bestTime,
-        reputation: engagementScore // Using engagement score as reputation
+        reputation: engagementScore
       },
 
       // Key Metrics Data
@@ -556,26 +739,26 @@ exports.calculateSimplifiedEmailReport = async (email) => {
         replyRate: `${replyRate}%`,
         openRate: `${openRate}%`,
         clickRate: `${clickRate}%`,
-        engagementRate: `${clickRate}%` // Using click rate as engagement rate
+        engagementRate: `${clickRate}%`
       },
 
       // Performance Benchmarking Data
       benchmarking: {
         deliverability: {
           current: `${deliveryRate}%`,
-          industry: "85%" // Static for now
+          industry: "85%"
         },
         replyRate: {
           current: `${replyRate}%`,
-          industry: "Previous" // Static for now
+          industry: "Previous"
         },
         openRate: {
           current: `${openRate}%`,
-          industry: "Previous" // Static for now
+          industry: "Previous"
         },
         clickRate: {
           current: `${clickRate}%`,
-          industry: "Previous" // Static for now
+          industry: "Previous"
         }
       },
 
@@ -701,6 +884,16 @@ exports.calculateBestDay = (sentMetrics) => {
   return Object.keys(dayCount).reduce((a, b) =>
     dayCount[a] > dayCount[b] ? a : b
   );
+};
+
+exports.calculatePerformanceScore = (deliveryRate, replyRate, openRate, clickRate) => {
+  const score = (
+    (parseFloat(deliveryRate) * 0.4) +
+    (parseFloat(replyRate) * 0.3) +
+    (parseFloat(openRate) * 0.2) +
+    (parseFloat(clickRate) * 0.1)
+  );
+  return Math.min(100, Math.round(score));
 };
 
 exports.getSimplifiedFallbackReport = () => {
