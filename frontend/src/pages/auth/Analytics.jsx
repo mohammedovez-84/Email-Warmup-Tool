@@ -5,76 +5,49 @@ import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import { motion, AnimatePresence } from 'framer-motion';
 import 'react-circular-progressbar/dist/styles.css';
 
-// Toast Notification Component
-const Toast = ({ message, type = 'success', onClose }) => {
-  return (
-    <motion.div
-      className={`fixed top-4 right-4 z-[100] flex items-center p-4 rounded-xl shadow-lg border ${type === 'success'
-        ? 'bg-green-50 text-green-800 border-green-200'
-        : type === 'error'
-          ? 'bg-red-50 text-red-800 border-red-200'
-          : type === 'warning'
-            ? 'bg-amber-50 text-amber-800 border-amber-200'
-            : 'bg-blue-50 text-blue-800 border-blue-200'
-        } min-w-[300px] max-w-md`}
-      initial={{ opacity: 0, x: 300, scale: 0.8 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 300, scale: 0.8 }}
-      transition={{ type: "spring", damping: 25, stiffness: 300 }}
-    >
-      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${type === 'success' ? 'bg-green-100' :
-          type === 'error' ? 'bg-red-100' :
-            type === 'warning' ? 'bg-amber-100' : 'bg-blue-100'
-        }`}>
-        {type === 'success' ? (
-          <FiCheck className="text-green-600 text-sm" />
-        ) : type === 'error' ? (
-          <FiAlertTriangle className="text-red-600 text-sm" />
-        ) : type === 'warning' ? (
-          <FiAlertTriangle className="text-amber-600 text-sm" />
-        ) : (
-          <FiInfo className="text-blue-600 text-sm" />
-        )}
-      </div>
-      <div className="ml-3 flex-1">
-        <p className="text-sm font-medium font-['Poppins']">{message}</p>
-      </div>
-      <button
-        onClick={onClose}
-        className={`ml-4 flex-shrink-0 p-1 rounded-full hover:bg-opacity-20 transition-colors ${type === 'success' ? 'hover:bg-green-600' :
-            type === 'error' ? 'hover:bg-red-600' :
-              type === 'warning' ? 'hover:bg-amber-600' : 'hover:bg-blue-600'
-          }`}
-      >
-        <FiX className={`text-sm ${type === 'success' ? 'text-green-600' :
-            type === 'error' ? 'text-red-600' :
-              type === 'warning' ? 'text-amber-600' : 'text-blue-600'
-          }`} />
-      </button>
-    </motion.div>
-  );
-};
-
-// Toast Manager Hook
-const useToast = () => {
-  const [toasts, setToasts] = useState([]);
-
-  const showToast = (message, type = 'success', duration = 4000) => {
-    const id = Date.now().toString();
-    const toast = { id, message, type };
-
-    setToasts(prev => [...prev, toast]);
-
-    setTimeout(() => {
-      removeToast(id);
-    }, duration);
-  };
-
-  const removeToast = (id) => {
-    setToasts(prev => prev.filter(toast => toast.id !== id));
-  };
-
-  return { toasts, showToast, removeToast };
+// API PLACEHOLDER - Add your API calls here later
+const API = {
+  // TODO: Replace with actual API calls
+  fetchEmailStats: async () => {
+    // return await fetch('/api/email-stats').then(res => res.json());
+    return {
+      sent: 1876,
+      delivered: 1782,
+      inbox: 1675,
+      spam: 107,
+      deliverability: 94
+    };
+  },
+  
+  fetchAccountHealth: async () => {
+    // return await fetch('/api/account-health').then(res => res.json());
+    return {
+      score: 82,
+      status: 'Good',
+      issues: ['High bounce rate', 'Low engagement']
+    };
+  },
+  
+  fetchCampaignPerformance: async () => {
+    // return await fetch('/api/campaign-performance').then(res => res.json());
+    return [
+      { name: 'Monday', sent: 400, inbox: 380, spam: 20, deliverability: 95 },
+      { name: 'Tuesday', sent: 450, inbox: 405, spam: 45, deliverability: 90 },
+      { name: 'Wednesday', sent: 500, inbox: 450, spam: 50, deliverability: 90 },
+      { name: 'Thursday', sent: 550, inbox: 495, spam: 55, deliverability: 90 },
+      { name: 'Friday', sent: 600, inbox: 540, spam: 60, deliverability: 90 }
+    ];
+  },
+  
+  exportReport: async (data) => {
+    // TODO: Replace with actual export API call
+    // return await fetch('/api/export-report', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json' },
+    //   body: JSON.stringify(data)
+    // });
+    return new Promise(resolve => setTimeout(resolve, 2000));
+  }
 };
 
 // Health Distribution Item Component
@@ -338,6 +311,30 @@ const AnalyticsDashboard = () => {
     return () => clearInterval(interval);
   }, []);
 
+  // API PLACEHOLDER - Load data from API
+  useEffect(() => {
+    // TODO: Uncomment and implement API calls when backend is ready
+    /*
+    const loadData = async () => {
+      try {
+        const [stats, health, performance] = await Promise.all([
+          API.fetchEmailStats(),
+          API.fetchAccountHealth(),
+          API.fetchCampaignPerformance()
+        ]);
+        
+        setEmailStats(stats);
+        setAccountHealth(health);
+        setCampaignPerformance(performance);
+      } catch (error) {
+        console.error('Failed to load data:', error);
+      }
+    };
+    
+    loadData();
+    */
+  }, []);
+
   const getDeliverabilityData = (accountId) => {
     return [
       { name: 'Mon', inbox: 120, spam: 5 },
@@ -350,13 +347,33 @@ const AnalyticsDashboard = () => {
     ];
   };
 
-  const handleRefreshData = async () => {
-    setIsRefreshing(true);
-    showToast('Refreshing analytics data...', 'info', 2000);
-
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
+  const handleRefreshData = () => {
+    // API PLACEHOLDER - Refresh data from API
+    /*
+    const refreshData = async () => {
+      try {
+        const [stats, health, performance] = await Promise.all([
+          API.fetchEmailStats(),
+          API.fetchAccountHealth(),
+          API.fetchCampaignPerformance()
+        ]);
+        
+        setEmailStats(stats);
+        setAccountHealth(health);
+        setCampaignPerformance(performance);
+        setSelectedAccount(prev => ({
+          ...prev,
+          lastActive: new Date().toISOString()
+        }));
+      } catch (error) {
+        console.error('Failed to refresh data:', error);
+      }
+    };
+    
+    refreshData();
+    */
+    
+    // Temporary mock data refresh (remove when API is ready)
     const newEmailStats = {
       sent: Math.floor(1000 + Math.random() * 500),
       delivered: Math.floor(900 + Math.random() * 400),
@@ -385,22 +402,33 @@ const AnalyticsDashboard = () => {
 
   const handleExportReport = async () => {
     setIsExporting(true);
-    showToast('Preparing your analytics report...', 'info', 2000);
-
-    await new Promise(resolve => setTimeout(resolve, 2000));
-
-    const exportData = {
-      emailStats,
-      campaignPerformance,
-      accountData: selectedAccount,
-      accountScore: accountScores[1],
-      timestamp: new Date().toISOString()
-    };
-
+    
+    // API PLACEHOLDER - Export via API
     try {
+      /*
+      await API.exportReport({
+        emailStats,
+        campaignPerformance,
+        accountData: selectedAccount,
+        accountScore: accountScores[1],
+        timestamp: new Date().toISOString()
+      });
+      */
+      
+      // Temporary mock export (remove when API is ready)
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const exportData = {
+        emailStats,
+        campaignPerformance,
+        accountData: selectedAccount,
+        accountScore: accountScores[1],
+        timestamp: new Date().toISOString()
+      };
+      
       const dataStr = JSON.stringify(exportData, null, 2);
       const dataBlob = new Blob([dataStr], { type: 'application/json' });
-
+      
       const url = URL.createObjectURL(dataBlob);
       const link = document.createElement('a');
       link.href = url;
@@ -409,27 +437,14 @@ const AnalyticsDashboard = () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-
-      showToast('Report exported successfully! Check your downloads folder.', 'success');
+      
+      alert('Report exported successfully!');
     } catch (error) {
-      showToast('Failed to export report. Please try again.', 'error');
-      console.error('Export error:', error);
+      console.error('Export failed:', error);
+      alert('Failed to export report. Please try again.');
     } finally {
       setIsExporting(false);
     }
-  };
-
-  const handleTimeRangeChange = (timeRange) => {
-    showToast(`Time range updated to: ${timeRange}`, 'info', 2000);
-
-    // Simulate data change based on time range
-    const newCampaignPerformance = campaignPerformance.map(day => ({
-      ...day,
-      inbox: Math.floor(day.inbox * (0.8 + Math.random() * 0.4)),
-      spam: Math.floor(day.spam * (0.8 + Math.random() * 0.4))
-    }));
-
-    setCampaignPerformance(newCampaignPerformance);
   };
 
   const deliveryRate = ((emailStats.delivered / emailStats.sent) * 100).toFixed(1);
