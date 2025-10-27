@@ -43,8 +43,8 @@ exports.addAccount = async (req, res) => {
         if (existingPoolAccount) {
             return res.status(409).json({
                 success: false,
-                message: 'This email already exists as a pool account',
-                details: `Email ${email} is already registered as a pool account and cannot be added as a warmup account.`,
+                message: 'This email already exists in our system',
+                details: `Email ${email} is already registered`,
                 conflict_type: 'pool_account_exists'
             });
         }

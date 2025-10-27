@@ -118,8 +118,8 @@ class WarmupWorker {
                     throw new Error(`Receiver account not found: ${pair.receiverEmail}`);
                 }
 
-                // FIX: Don't pass senderType for pool accounts - let buildSenderConfig auto-detect
-                const senderConfig = buildSenderConfig(sender); // Remove the second parameter
+                // Use buildSenderConfig without second parameter
+                const senderConfig = buildSenderConfig(sender);
                 const safeReplyRate = pair.replyRate || 0.25;
 
                 // Add delay between emails
@@ -159,13 +159,42 @@ class WarmupWorker {
             console.log(`📧 Sending email from ${senderConfig.email} to ${receiver.email}`);
             console.log(`🔧 Email Type: ${isReply ? 'REPLY' : isInitialEmail ? 'INITIATION' : 'UNKNOWN'}`);
 
+            // Store original senderConfig for potential updates
+            const originalSenderConfig = { ...senderConfig };
+
             await warmupSingleEmail(senderConfig, receiver, replyRate, isReply, isCoordinatedJob, isInitialEmail);
+
+            // If senderConfig was updated with new tokens during the process, save them
+            if (senderConfig.access_token !== originalSenderConfig.access_token) {
+                await this.saveRefreshedTokens(senderConfig.email, {
+                    access_token: senderConfig.access_token,
+                    refresh_token: senderConfig.refresh_token,
+                    token_expires_at: senderConfig.token_expires_at
+                });
+            }
+
         } catch (error) {
             if (error.message.includes('IMAP') || error.message.includes('getaddrinfo')) {
                 console.log(`     ⚠️  IMAP issue but email was sent: ${error.message}`);
                 return;
             }
             throw error;
+        }
+    }
+
+    async saveRefreshedTokens(email, tokens) {
+        try {
+            await EmailPool.update(
+                {
+                    access_token: tokens.access_token,
+                    refresh_token: tokens.refresh_token,
+                    token_expires_at: tokens.token_expires_at
+                },
+                { where: { email } }
+            );
+            console.log(`💾 Saved refreshed tokens for ${email}`);
+        } catch (error) {
+            console.error('❌ Failed to save refreshed tokens:', error.message);
         }
     }
 
@@ -189,8 +218,7 @@ class WarmupWorker {
             return;
         }
 
-        // FIX: Don't pass senderType - let buildSenderConfig auto-detect
-        const senderConfig = buildSenderConfig(sender); // Remove the second parameter
+        const senderConfig = buildSenderConfig(sender);
         const safeReplyRate = Math.min(0.25, replyRate || 0.25);
 
         await warmupSingleEmail(senderConfig, receiver, safeReplyRate, false, true);
@@ -239,35 +267,45 @@ class WarmupWorker {
 
     async getPoolAccount(email) {
         try {
-            const poolAccount = await EmailPool.findOne({ where: { email, isActive: true } });
+            const poolAccount = await EmailPool.findOne({
+                where: { email, isActive: true },
+                raw: true
+            });
+
             if (!poolAccount) {
                 console.error(`❌ Active pool account not found: ${email}`);
                 return null;
             }
 
-            return this.convertToPlainObject(poolAccount);
+            console.log(`📋 RAW DATABASE FIELDS for ${email}:`);
+            console.log(`   access_token: ${poolAccount.access_token ? 'PRESENT' : 'MISSING'}`);
+            console.log(`   refresh_token: ${poolAccount.refresh_token ? 'PRESENT' : 'MISSING'}`);
+            console.log(`   token_expires_at: ${poolAccount.token_expires_at || 'NOT SET'}`);
+            console.log(`   providerType: ${poolAccount.providerType}`);
+
+            return poolAccount;
         } catch (error) {
             console.error(`❌ Error finding pool account ${email}:`, error.message);
             return null;
         }
     }
-
     async getSenderAccount(senderType, email) {
         try {
             if (senderType === 'pool') {
-                const poolAccount = await this.getPoolAccount(email);
+                let poolAccount = await this.getPoolAccount(email);
 
                 if (!poolAccount) {
                     throw new Error(`Pool account not found: ${email}`);
                 }
 
-                console.log(`🔍 DEEP DEBUG Pool Account ${email}:`);
-                Object.keys(poolAccount).forEach(key => {
-                    if (key.includes('Password') || key.includes('Host') || key.includes('Port') || key.includes('Token') || key === 'email' || key === 'providerType') {
-                        const value = poolAccount[key];
-                        console.log(`   ${key}: ${value ? (key.includes('Password') ? '***SET***' : value) : 'NULL/EMPTY'}`);
-                    }
-                });
+                // **FIX: Convert field names to match buildSenderConfig expectations**
+                poolAccount = this.normalizePoolAccountFields(poolAccount);
+
+                console.log(`🔍 NORMALIZED Pool Account ${email}:`);
+                console.log(`   access_token: ${poolAccount.access_token ? 'PRESENT' : 'MISSING'}`);
+                console.log(`   refresh_token: ${poolAccount.refresh_token ? 'PRESENT' : 'MISSING'}`);
+                console.log(`   token_expiry: ${poolAccount.token_expiry || 'NOT SET'}`);
+                console.log(`   token_expires_at (original): ${poolAccount.token_expires_at || 'NOT SET'}`);
 
                 return poolAccount;
             } else {
@@ -277,6 +315,28 @@ class WarmupWorker {
             console.error(`❌ Error fetching sender account ${email}:`, error.message);
             return null;
         }
+    }
+
+    normalizePoolAccountFields(account) {
+        const normalized = { ...account };
+
+        // Convert token_expires_at (BIGINT) to token_expiry (Date string)
+        if (normalized.token_expires_at && !normalized.token_expiry) {
+            // Convert from milliseconds timestamp to Date string
+            const expiryDate = new Date(Number(normalized.token_expires_at));
+            normalized.token_expiry = expiryDate.toISOString();
+            console.log(`   🔄 Converted token_expires_at to token_expiry: ${normalized.token_expiry}`);
+        }
+
+        // Ensure all expected fields are present
+        if (!normalized.access_token && normalized.accessToken) {
+            normalized.access_token = normalized.accessToken;
+        }
+        if (!normalized.refresh_token && normalized.refreshToken) {
+            normalized.refresh_token = normalized.refreshToken;
+        }
+
+        return normalized;
     }
 
     async getReceiverAccount(receiverType, email) {
@@ -308,4 +368,4 @@ class WarmupWorker {
     }
 }
 
-module.exports = { WarmupWorker };   
+module.exports = { WarmupWorker }; 

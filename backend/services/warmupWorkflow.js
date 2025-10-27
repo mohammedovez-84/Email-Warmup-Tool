@@ -94,24 +94,15 @@ async function computeEmailsToSend(account) {
 }
 
 async function computeReplyRate(account) {
-    const warmupDayCount = account.warmupDayCount || 0;
     const configuredReplyRate = account.replyRate || 0.25;
 
     console.log(`📨 Reply rate calculation for ${account.email}:`);
-    console.log(`   warmupDayCount: ${warmupDayCount}`);
-    console.log(`   configuredReplyRate: ${configuredReplyRate} (FROM DB)`);
+    console.log(`   configuredReplyRate from DB: ${configuredReplyRate}`);
 
-    const baseRate = 0.15;
-    const dailyIncrease = 0.02;
-    let calculatedRate = baseRate + (dailyIncrease * warmupDayCount);
+    // Always use the database value, capped at 100%
+    const finalRate = Math.min(configuredReplyRate, 1.0);
 
-    const maxAllowedRate = Math.min(configuredReplyRate, 0.25);
-    calculatedRate = Math.min(calculatedRate, maxAllowedRate);
-    calculatedRate = Math.max(calculatedRate, 0.15);
-
-    const finalRate = Math.round(calculatedRate * 100) / 100;
-
-    console.log(`   Calculated: ${(finalRate * 100).toFixed(1)}% reply rate`);
+    console.log(`   ✅ Final reply rate: ${(finalRate * 100).toFixed(1)}%`);
     return finalRate;
 }
 
@@ -136,13 +127,59 @@ async function getAccountFromDatabase(email) {
     }
 }
 
+// **KEEP ONLY THIS VERSION OF getFreshAccountData**
 async function getFreshAccountData(account) {
-    if (!account || !account.email) return account;
     try {
-        const freshAccount = await getAccountFromDatabase(account.email);
-        return freshAccount || account;
+        if (!account || !account.email) {
+            console.error('❌ Invalid account provided to getFreshAccountData:', account);
+            throw new Error('Invalid account provided to getFreshAccountData');
+        }
+
+        console.log(`🔍 Refreshing account data for: ${account.email}`);
+
+        // Re-fetch the account to ensure we have latest data
+        let freshAccount = null;
+
+        // Check all possible models
+        freshAccount = await EmailPool.findOne({ where: { email: account.email } });
+        if (!freshAccount) freshAccount = await GoogleUser.findOne({ where: { email: account.email } });
+        if (!freshAccount) freshAccount = await MicrosoftUser.findOne({ where: { email: account.email } });
+        if (!freshAccount) freshAccount = await SmtpAccount.findOne({ where: { email: account.email } });
+
+        if (!freshAccount) {
+            console.error(`❌ Account not found in database: ${account.email}`);
+            return account; // Return original as fallback
+        }
+
+        // **CRITICAL: Convert to plain object and ensure all fields are present**
+        const plainAccount = freshAccount.get ? freshAccount.get({ plain: true }) : freshAccount;
+
+        // **ENSURE PROVIDER TYPE IS SET**
+        if (!plainAccount.providerType) {
+            if (plainAccount.microsoft_id) {
+                plainAccount.providerType = 'MICROSOFT_ORGANIZATIONAL';
+            } else if (plainAccount.access_token || plainAccount.refresh_token) {
+                // Check email domain to determine if personal or organizational
+                if (plainAccount.email && (plainAccount.email.endsWith('@outlook.com') ||
+                    plainAccount.email.endsWith('@hotmail.com') ||
+                    plainAccount.email.endsWith('@live.com'))) {
+                    plainAccount.providerType = 'OUTLOOK_PERSONAL';
+                } else {
+                    plainAccount.providerType = 'MICROSOFT_ORGANIZATIONAL';
+                }
+            }
+        }
+
+        console.log(`✅ Refreshed account data for: ${plainAccount.email}`);
+        console.log(`   ProviderType: ${plainAccount.providerType}`);
+        console.log(`   Has access_token: ${!!plainAccount.access_token}`);
+        console.log(`   Has refresh_token: ${!!plainAccount.refresh_token}`);
+
+        return plainAccount;
+
     } catch (error) {
-        return account;
+        console.error('❌ Error in getFreshAccountData:', error.message);
+        return account; // Return original as fallback
     }
 }
 
@@ -157,16 +194,12 @@ function getReceiverTypeFromModel(receiver) {
     return getSenderType(receiver);
 }
 
-// FIXED: Updated warmupSingleEmail to accept pre-built senderConfig
 async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isScheduledReply = false, isCoordinatedJob = false, isInitialEmail = false) {
     let emailMetric = null;
     let messageId = null;
 
     try {
         console.log(`📧 Starting warmup: ${senderConfig.email} → ${receiver.email} [${isInitialEmail ? 'INITIAL' : 'REPLY'}]`);
-
-        // REMOVED: Don't call buildSenderConfig here - use the pre-built config from worker
-        // const senderConfig = buildSenderConfig(sender, getSenderTypeFromModel(sender));
 
         // Check rate limits for non-coordinated jobs
         if (!isCoordinatedJob) {
@@ -207,13 +240,13 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
         // Create email metric
         emailMetric = await EmailMetric.create({
             senderEmail: senderConfig.email,
-            senderType: senderConfig.type || getSenderTypeFromModel(receiver), // Use receiver to determine type for metrics
+            senderType: senderConfig.type || getSenderTypeFromModel(receiver),
             receiverEmail: receiver.email,
             receiverType: getReceiverTypeFromModel(receiver),
             messageId: messageId,
             subject: subject,
             sentAt: new Date(),
-            deliveredInbox: false,
+            deliveredInbox: sendResult.deliveredInbox || false, // Use the flag from sendResult
             replied: false,
             warmupDay: warmupDay,
             replyRate: replyRate,
@@ -221,39 +254,40 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
             industry: industry
         });
 
-        // Wait for delivery and check status
-        await delay(15000);
+        // Skip IMAP check for Graph API emails or if explicitly skipped
+        if (!sendResult.skipImapCheck) {
+            // Wait for delivery and check status
+            await delay(15000);
 
-        try {
-            const statusResult = await checkEmailStatus(receiver, messageId);
-            if (statusResult.success) {
-                const deliveredInbox = statusResult.folder === 'INBOX';
-                await EmailMetric.update({
-                    deliveredInbox,
-                    deliveryFolder: statusResult.folder
-                }, { where: { id: emailMetric.id } });
+            try {
+                const statusResult = await checkEmailStatus(receiver, messageId);
+                if (statusResult.success) {
+                    const deliveredInbox = statusResult.folder === 'INBOX';
+                    await EmailMetric.update({
+                        deliveredInbox,
+                        deliveryFolder: statusResult.folder
+                    }, { where: { id: emailMetric.id } });
 
-                // Try to move to inbox if not delivered
-                if (!deliveredInbox) {
-                    try {
-                        await moveEmailToInbox(receiver, messageId, statusResult.folder);
-                        console.log(`📥 Attempted to move email to inbox`);
-                    } catch (moveError) {
-                        console.log(`⚠️  Could not move email to inbox: ${moveError.message}`);
+                    // Try to move to inbox if not delivered
+                    if (!deliveredInbox) {
+                        try {
+                            await moveEmailToInbox(receiver, messageId, statusResult.folder);
+                            console.log(`📥 Attempted to move email to inbox`);
+                        } catch (moveError) {
+                            console.log(`⚠️  Could not move email to inbox: ${moveError.message}`);
+                        }
                     }
                 }
-
-                // For custom domains, mark as delivered even if filtered
-                if (!deliveredInbox && senderConfig.smtpHost && senderConfig.smtpHost.includes('ping-prospects.com')) {
-                    console.log(`⚠️  Custom domain email marked as delivered for warmup`);
-                    await EmailMetric.update({
-                        deliveredInbox: true,
-                        deliveryFolder: 'AUTO_MARKED'
-                    }, { where: { id: emailMetric.id } });
-                }
+            } catch (imapError) {
+                console.error(`❌ IMAP operation error: ${imapError.message}`);
             }
-        } catch (imapError) {
-            console.error(`❌ IMAP operation error: ${imapError.message}`);
+        } else {
+            console.log(`⏩ Skipping IMAP check for Graph API email`);
+            // For Graph API emails, mark as delivered immediately
+            await EmailMetric.update({
+                deliveredInbox: true,
+                deliveryFolder: 'GRAPH_API'
+            }, { where: { id: emailMetric.id } });
         }
 
         // Handle automatic replies based on reply rate (only for initial emails, not replies)
@@ -284,14 +318,11 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
         throw error;
     }
 }
-
-// FIXED: Updated processAutomaticReply to use senderConfig
 async function processAutomaticReply(senderConfig, originalReceiver, originalEmail, originalMessageId) {
     try {
         console.log(`🤖 Generating reply from ${originalReceiver.email} to ${senderConfig.email}`);
 
-        // Use getFreshAccountData to ensure we have latest account data
-        const freshReceiver = await getFreshAccountData(originalReceiver);
+        // **USE ORIGINAL SENDER INSTEAD OF RECEIVER - SIMPLER APPROACH**
         const aiReply = await generateReplyWithFallback(originalEmail);
 
         if (aiReply && aiReply.reply_content) {
@@ -300,8 +331,24 @@ async function processAutomaticReply(senderConfig, originalReceiver, originalEma
 
             await delay(10000);
 
-            const replyResult = await maybeReply(freshReceiver, {
-                to: senderConfig.email,
+            // **FIX: Get fresh account data from database for the replier**
+            const freshReplierAccount = await getFreshAccountData({ email: senderConfig.email });
+
+            if (!freshReplierAccount) {
+                console.error(`❌ Could not fetch fresh account data for: ${senderConfig.email}`);
+                return;
+            }
+
+            console.log(`🔧 Using fresh account data for reply:`, {
+                email: freshReplierAccount.email,
+                providerType: freshReplierAccount.providerType,
+                hasAppPassword: !!freshReplierAccount.app_password,
+                hasOAuth2: !!(freshReplierAccount.access_token || freshReplierAccount.accessToken)
+            });
+
+            // **FIX: Pass the RAW ACCOUNT DATA to maybeReply, not the built config**
+            const replyResult = await maybeReply(freshReplierAccount, {
+                to: originalReceiver.email, // Reply TO the original receiver
                 subject: replySubject,
                 html: aiReply.reply_content,
                 inReplyTo: originalMessageId,
@@ -309,12 +356,9 @@ async function processAutomaticReply(senderConfig, originalReceiver, originalEma
             }, 1.0);
 
             if (replyResult?.success) {
-                console.log(`✅ Reply sent successfully`);
+                console.log(`✅ Reply sent successfully from ${senderConfig.email}`);
 
-                // Mark the original email as seen and flagged
-                await markEmailAsSeenAndFlagged(senderConfig, originalMessageId);
-
-                // Update original email metric
+                // Update metrics
                 await EmailMetric.update({
                     replied: true,
                     repliedAt: new Date(),
@@ -324,12 +368,16 @@ async function processAutomaticReply(senderConfig, originalReceiver, originalEma
                         messageId: originalMessageId
                     }
                 });
+            } else {
+                console.error(`❌ Reply failed from ${senderConfig.email}: ${replyResult?.error}`);
             }
         }
     } catch (replyError) {
-        console.error(`❌ Reply error:`, replyError.message);
+        console.error(`❌ Reply error in processAutomaticReply:`, replyError.message);
     }
 }
+
+
 
 async function markEmailAsSeenAndFlagged(senderConfig, messageId) {
     try {
@@ -347,7 +395,6 @@ async function markEmailAsSeenAndFlagged(senderConfig, messageId) {
         await connection.end();
     } catch (err) {
         console.error(`❌ Error marking sender reply: ${err.message}`);
-        // Don't throw error, just log it
     }
 }
 

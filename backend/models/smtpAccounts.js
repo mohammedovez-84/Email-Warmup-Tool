@@ -72,7 +72,11 @@ const SmtpAccount = sequelize.define('smtpimap_accounts', {
     allowNull: false,
     defaultValue: true,
   },
-
+  // In your GoogleUser, MicrosoftUser, and SmtpAccount models, add:
+  warmupStartTime: {
+    type: DataTypes.DATE,
+    allowNull: true
+  }
 }, {
   tableName: 'smtpimap_accounts',
   timestamps: false
