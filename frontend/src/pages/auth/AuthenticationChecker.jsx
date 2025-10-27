@@ -81,34 +81,34 @@ const AuthenticationChecker = () => {
     }
   }, [history]);
 
-  
- // Circular meter animation effect
-useEffect(() => {
-  const animateScore = () => {
-    let currentScore = 0;
-    const finalScore = 85;
-    const duration = 1500; // 2 seconds
-    const steps = 40; // 60 steps for smooth animation
-    const increment = finalScore / steps;
-    const intervalTime = duration / steps;
 
-    const timer = setInterval(() => {
-      currentScore += increment;
-      if (currentScore >= finalScore) {
-        setScore(finalScore);
-        clearInterval(timer);
-      } else {
-        setScore(Math.floor(currentScore));
-      }
-    }, intervalTime);
+  // Circular meter animation effect
+  useEffect(() => {
+    const animateScore = () => {
+      let currentScore = 0;
+      const finalScore = 85;
+      const duration = 1500; // 2 seconds
+      const steps = 40; // 60 steps for smooth animation
+      const increment = finalScore / steps;
+      const intervalTime = duration / steps;
 
-    return () => clearInterval(timer);
-  };
+      const timer = setInterval(() => {
+        currentScore += increment;
+        if (currentScore >= finalScore) {
+          setScore(finalScore);
+          clearInterval(timer);
+        } else {
+          setScore(Math.floor(currentScore));
+        }
+      }, intervalTime);
 
-  // Start animation after component mounts
-  const timer = setTimeout(animateScore, 500);
-  return () => clearTimeout(timer);
-}, []);
+      return () => clearInterval(timer);
+    };
+
+    // Start animation after component mounts
+    const timer = setTimeout(animateScore, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Set responsive placeholder text based on screen size
   useEffect(() => {
@@ -133,19 +133,19 @@ useEffect(() => {
   // Typing animation effect
   useEffect(() => {
     if (!placeholderText) return;
-    
+
     const typeText = () => {
       if (isDeleting) {
         setDomainPlaceholder(placeholderText.substring(0, placeholderIndex - 1));
         setPlaceholderIndex(prev => prev - 1);
-        
+
         if (placeholderIndex === 1) {
           setIsDeleting(false);
         }
       } else {
         setDomainPlaceholder(placeholderText.substring(0, placeholderIndex + 1));
         setPlaceholderIndex(prev => prev + 1);
-        
+
         if (placeholderIndex === placeholderText.length) {
           setTimeout(() => setIsDeleting(true), 1000);
         }
@@ -187,7 +187,8 @@ useEffect(() => {
       let lookupDomain = domain;
       if (type === 'dkim') {
         // Try common DKIM selectors
-        const selectors = ['default', 'google', 'selector1', 'selector2', 'k1', 'dkim'];
+        const selectors = ['default', 'google', 'selector1', 'selector2', 'k1', 'dkim', 's1', 's2', 'key1', 'key2', 'mx', 'mail', 'email',
+          'protonmail', 'zoho', 'sendgrid', 'mandrill', 'ses'];
         for (const selector of selectors) {
           const dkimDomain = `${selector}._domainkey.${domain}`;
           try {
@@ -596,538 +597,538 @@ useEffect(() => {
   };
 
   const renderTabContent = () => {
-  switch (activeTab) {
-    case 'overview':
-      return (
-        <div className="p-0">
-          {results && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
-                  <div className="w-10 h-10 sm:w-14 sm:h-14 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-lg sm:text-2xl">
-                    <FiMail />
+    switch (activeTab) {
+      case 'overview':
+        return (
+          <div className="p-0">
+            {results && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-lg sm:text-2xl">
+                      <FiMail />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">SPF</h4>
+                      <p className={results.spf.exists ? 'text-teal-600 text-base sm:text-xl font-bold' : 'text-red-600 text-base sm:text-xl font-bold'}>
+                        {results.spf.exists ? 'Configured' : 'Not Found'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">SPF</h4>
-                    <p className={results.spf.exists ? 'text-teal-600 text-base sm:text-xl font-bold' : 'text-red-600 text-base sm:text-xl font-bold'}>
-                      {results.spf.exists ? 'Configured' : 'Not Found'}
-                    </p>
+
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-lg sm:text-2xl">
+                      <FiLock />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">DKIM</h4>
+                      <p className={results.dkim.exists ? 'text-teal-600 text-base sm:text-xl font-bold' : 'text-red-600 text-base sm:text-xl font-bold'}>
+                        {results.dkim.exists ? 'Configured' : 'Not Found'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center text-lg sm:text-2xl">
+                      <FiShield />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">DMARC</h4>
+                      <p className={results.dmarc.exists ? 'text-teal-600 text-base sm:text-xl font-bold' : 'text-red-600 text-base sm:text-xl font-bold'}>
+                        {results.dmarc.exists ? 'Configured' : 'Not Found'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
+                    <div className="w-10 h-10 sm:w-14 sm:h-14 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center text-lg sm:text-2xl">
+                      <FiList />
+                    </div>
+                    <div>
+                      <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">Blacklists</h4>
+                      <p className={results.blacklist.listed === 0 ? 'text-teal-600 text-base sm:text-xl font-bold' : 'text-red-600 text-base sm:text-xl font-bold'}>
+                        {results.blacklist.listed === 0 ? 'Clean' : `${results.blacklist.listed} Listed`}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
-                  <div className="w-10 h-10 sm:w-14 sm:h-14 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center text-lg sm:text-2xl">
-                    <FiLock />
+                {results.issues && results.issues.length > 0 && (
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 mb-6 shadow-sm w-full">
+                    <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 sm:mb-6">
+                      <h3 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-3">
+                        <FiAlertTriangle className="text-orange-500 text-xl" />
+                        Domain Health Issues
+                      </h3>
+                    </div>
+                    <div className="space-y-4">
+                      {results.issues.map((issue, index) => (
+                        <div key={index} className={`flex items-start gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl ${issue.type === 'error'
+                          ? 'bg-red-50 border-l-4 border-red-500'
+                          : issue.type === 'warning'
+                            ? 'bg-orange-50 border-l-4 border-orange-500'
+                            : 'bg-blue-50 border-l-4 border-blue-500'
+                          }`}>
+                          <div className="flex-shrink-0 mt-1">
+                            {issue.type === 'error' && <FiAlertTriangle className="text-red-500 text-xl" />}
+                            {issue.type === 'warning' && <FiAlertTriangle className="text-orange-500 text-xl" />}
+                            {issue.type === 'info' && <FiInfo className="text-blue-500 text-xl" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-gray-900 text-sm sm:text-base">{issue.category}: {issue.message}</h4>
+                            <p className="text-gray-600 mt-1 text-xs sm:text-sm">{issue.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">DKIM</h4>
-                    <p className={results.dkim.exists ? 'text-teal-600 text-base sm:text-xl font-bold' : 'text-red-600 text-base sm:text-xl font-bold'}>
-                      {results.dkim.exists ? 'Configured' : 'Not Found'}
-                    </p>
-                  </div>
-                </div>
+                )}
 
-                <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
-                  <div className="w-10 h-10 sm:w-14 sm:h-14 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center text-lg sm:text-2xl">
-                    <FiShield />
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">DMARC</h4>
-                    <p className={results.dmarc.exists ? 'text-teal-600 text-base sm:text-xl font-bold' : 'text-red-600 text-base sm:text-xl font-bold'}>
-                      {results.dmarc.exists ? 'Configured' : 'Not Found'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md">
-                  <div className="w-10 h-10 sm:w-14 sm:h-14 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center text-lg sm:text-2xl">
-                    <FiList />
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-sm text-gray-600 font-medium mb-1">Blacklists</h4>
-                    <p className={results.blacklist.listed === 0 ? 'text-teal-600 text-base sm:text-xl font-bold' : 'text-red-600 text-base sm:text-xl font-bold'}>
-                      {results.blacklist.listed === 0 ? 'Clean' : `${results.blacklist.listed} Listed`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {results.issues && results.issues.length > 0 && (
-                <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 mb-6 shadow-sm w-full">
+                <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm w-full">
                   <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 sm:mb-6">
                     <h3 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-3">
-                      <FiAlertTriangle className="text-orange-500 text-xl" />
-                      Domain Health Issues
+                      <FiCheckCircle className="text-teal-600 text-xl" />
+                      Recommendations
                     </h3>
                   </div>
-                  <div className="space-y-4">
-                    {results.issues.map((issue, index) => (
-                      <div key={index} className={`flex items-start gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl ${issue.type === 'error'
-                        ? 'bg-red-50 border-l-4 border-red-500'
-                        : issue.type === 'warning'
-                          ? 'bg-orange-50 border-l-4 border-orange-500'
-                          : 'bg-blue-50 border-l-4 border-blue-500'
-                        }`}>
-                        <div className="flex-shrink-0 mt-1">
-                          {issue.type === 'error' && <FiAlertTriangle className="text-red-500 text-xl" />}
-                          {issue.type === 'warning' && <FiAlertTriangle className="text-orange-500 text-xl" />}
-                          {issue.type === 'info' && <FiInfo className="text-blue-500 text-xl" />}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h4 className="font-semibold text-gray-900 text-sm sm:text-base">{issue.category}: {issue.message}</h4>
-                          <p className="text-gray-600 mt-1 text-xs sm:text-sm">{issue.description}</p>
+                  <div className="space-y-3">
+                    {results.spf.recommendation && (
+                      <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
+                        <div className="flex items-start">
+                          <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+                          <p className="text-gray-700 text-xs sm:text-sm">{results.spf.recommendation}</p>
                         </div>
                       </div>
-                    ))}
+                    )}
+
+                    {results.dkim.recommendation && (
+                      <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
+                        <div className="flex items-start">
+                          <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+                          <p className="text-gray-700 text-xs sm:text-sm">{results.dkim.recommendation}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {results.dmarc.recommendation && (
+                      <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
+                        <div className="flex items-start">
+                          <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+                          <p className="text-gray-700 text-xs sm:text-sm">{results.dmarc.recommendation}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {results.blacklist.recommendation && (
+                      <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
+                        <div className="flex items-start">
+                          <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+                          <p className="text-gray-700 text-xs sm:text-sm">{results.blacklist.recommendation}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {results.bimi.recommendation && (
+                      <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
+                        <div className="flex items-start">
+                          <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+                          <p className="text-gray-700 text-xs sm:text-sm">{results.bimi.recommendation}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              )}
+              </>
+            )}
+          </div>
+        );
 
-              <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm w-full">
-                <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 sm:mb-6">
-                  <h3 className="text-lg sm:text-xl font-bold text-gray-900 flex items-center gap-3">
-                    <FiCheckCircle className="text-teal-600 text-xl" />
-                    Recommendations
-                  </h3>
-                </div>
-                <div className="space-y-3">
-                  {results.spf.recommendation && (
-                    <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
-                      <div className="flex items-start">
-                        <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+      case 'spf':
+        return (
+          <div className="border border-gray-200 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md w-full">
+            <div
+              className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-teal-100 transition-colors"
+              onClick={() => toggleSection('spf')}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FiMail className="inline text-teal-600 text-base" />
+                SPF (Sender Policy Framework)
+                {results?.spf && getStatusIcon(results.spf.valid)}
+              </h3>
+              {expandedSections.spf ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
+            </div>
+
+            {expandedSections.spf && (
+              <div className="bg-white p-4 sm:p-6 animate-fade-in">
+                {results ? (
+                  <>
+                    <div className={`rounded-xl p-4 sm:p-6 ${results.spf.valid
+                      ? 'bg-teal-50 border-l-4 border-teal-600'
+                      : 'bg-orange-50 border-l-4 border-orange-500'
+                      }`}>
+                      <div className="mb-4">
+                        <p className="font-semibold text-lg text-gray-900 mb-1">
+                          {results.spf.exists ? 'SPF record found' : 'No SPF record found'}
+                        </p>
+                        <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
+                      </div>
+
+                      {results.spf.exists && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
+                            <div className="overflow-x-auto">
+                              <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-sm min-w-full">
+                                {results.spf.record}
+                              </SyntaxHighlighter>
+                            </div>
+                            <CopyToClipboard text={results.spf.record} onCopy={() => setCopied(true)}>
+                              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-xs sm:text-sm font-medium cursor-pointer transition-all duration-200 hover:from-teal-700 hover:to-teal-800 hover:-translate-y-0.5 shadow-md">
+                                <FiCopy className="text-sm" /> Copy Record
+                              </button>
+                            </CopyToClipboard>
+                          </div>
+
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Mechanisms</h4>
+                            <ul className="space-y-2">
+                              {results.spf.mechanisms.map((mechanism, idx) => (
+                                <li key={idx} className="flex items-center justify-between py-2 border-b border-gray-200 last:border-b-0">
+                                  <div className="flex items-center gap-3">
+                                    <span className="font-medium text-gray-700 text-xs sm:text-sm w-16 sm:w-20">{mechanism.type}</span>
+                                    <span className="font-mono text-xs sm:text-sm text-gray-600 flex-1 truncate">{mechanism.value}</span>
+                                  </div>
+                                  {mechanism.valid ? (
+                                    <FiCheckCircle className="text-teal-600 flex-shrink-0 text-base" />
+                                  ) : (
+                                    <FiAlertTriangle className="text-orange-500 flex-shrink-0 text-base" />
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                            <p className="text-xs sm:text-sm text-gray-500 mt-3">Total lookups: {results.spf.lookups}/10</p>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                        <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
                         <p className="text-gray-700 text-xs sm:text-sm">{results.spf.recommendation}</p>
                       </div>
                     </div>
-                  )}
+                  </>
+                ) : (
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm w-full">
+                    <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 sm:mb-6">
+                      <h4 className="font-semibold text-gray-900">SPF Check</h4>
+                    </div>
+                    <div className="space-y-4">
+                      <p className="text-gray-600 text-xs sm:text-sm">SPF (Sender Policy Framework) is an email authentication method designed to detect forging sender addresses during the delivery of the email.</p>
+                      <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                        <h5 className="font-semibold text-gray-900 mb-2">How it works:</h5>
+                        <ul className="list-disc list-inside space-y-1 text-gray-600 text-xs sm:text-sm">
+                          <li>SPF allows receiving mail servers to check that incoming mail from a domain comes from a host authorized by that domain's administrators</li>
+                          <li>It lists designated mail servers in a DNS TXT record</li>
+                          <li>Receiving servers verify the sending server's IP against the published SPF record</li>
+                          <li>If the check fails, the receiving server can reject or mark the email as suspicious</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
 
-                  {results.dkim.recommendation && (
-                    <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
-                      <div className="flex items-start">
-                        <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+      case 'dkim':
+        return (
+          <div className="border border-gray-200 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md w-full">
+            <div
+              className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-teal-100 transition-colors"
+              onClick={() => toggleSection('dkim')}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FiLock className="inline text-teal-600 text-base" />
+                DKIM (DomainKeys Identified Mail)
+                {results?.dkim && getStatusIcon(results.dkim.valid)}
+              </h3>
+              {expandedSections.dkim ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
+            </div>
+
+            {expandedSections.dkim && (
+              <div className="bg-white p-4 sm:p-6 animate-fade-in">
+                {results ? (
+                  <>
+                    <div className={`rounded-xl p-4 sm:p-6 ${results.dkim.valid
+                      ? 'bg-teal-50 border-l-4 border-teal-600'
+                      : 'bg-orange-50 border-l-4 border-orange-500'
+                      }`}>
+                      <div className="mb-4">
+                        <p className="font-semibold text-lg text-gray-900 mb-1">
+                          {results.dkim.exists ? 'DKIM record found' : 'No DKIM record found'}
+                        </p>
+                        <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
+                      </div>
+
+                      {results.dkim.exists && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
+                            <div className="overflow-x-auto">
+                              <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-sm min-w-full">
+                                {results.dkim.record}
+                              </SyntaxHighlighter>
+                            </div>
+                            <CopyToClipboard text={results.dkim.record} onCopy={() => setCopied(true)}>
+                              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-xs sm:text-sm font-medium cursor-pointer transition-all duration-200 hover:from-teal-700 hover:to-teal-800 hover:-translate-y-0.5 shadow-md">
+                                <FiCopy className="text-sm" /> Copy Record
+                              </button>
+                            </CopyToClipboard>
+                          </div>
+
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Key Information</h4>
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600 font-medium">Selector:</span>
+                                <span className="text-teal-600 font-medium">{results.dkim.selector}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600 font-medium">Key Length:</span>
+                                <span className="text-teal-600 font-medium">{results.dkim.keyLength} bits</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600 font-medium">Public Key Valid:</span>
+                                {results.dkim.publicKeyValid ? (
+                                  <FiCheckCircle className="text-teal-600 text-xl" />
+                                ) : (
+                                  <FiAlertTriangle className="text-orange-500 text-xl" />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                        <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
                         <p className="text-gray-700 text-xs sm:text-sm">{results.dkim.recommendation}</p>
                       </div>
                     </div>
-                  )}
+                  </>
+                ) : (
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm w-full">
+                    <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 sm:mb-6">
+                      <h4 className="font-semibold text-gray-900">DKIM Check</h4>
+                    </div>
+                    <div className="space-y-4">
+                      <p className="text-gray-600 text-xs sm:text-sm">DKIM (DomainKeys Identified Mail) is an email authentication method that allows the receiver to check that an email was indeed sent and authorized by the owner of that domain.</p>
+                      <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                        <h5 className="font-semibold text-gray-900 mb-2">How it works:</h5>
+                        <ul className="list-disc list-inside space-y-1 text-gray-600 text-xs sm:text-sm">
+                          <li>DKIM uses public-key cryptography to sign emails with a digital signature</li>
+                          <li>The sending server adds a DKIM signature header to outgoing emails</li>
+                          <li>Receiving servers verify the signature using the public key published in DNS</li>
+                          <li>If the signature is valid, the email hasn't been tampered with in transit</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
 
-                  {results.dmarc.recommendation && (
-                    <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
-                      <div className="flex items-start">
-                        <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+      case 'dmarc':
+        return (
+          <div className="border border-gray-200 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md w-full">
+            <div
+              className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-teal-100 transition-colors"
+              onClick={() => toggleSection('dmarc')}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FiShield className="inline text-teal-600 text-base" />
+                DMARC (Domain-based Message Authentication)
+                {results?.dmarc && getStatusIcon(results.dmarc.valid)}
+              </h3>
+              {expandedSections.dmarc ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
+            </div>
+
+            {expandedSections.dmarc && (
+              <div className="bg-white p-4 sm:p-6 animate-fade-in">
+                {results ? (
+                  <>
+                    <div className={`rounded-xl p-4 sm:p-6 ${results.dmarc.valid
+                      ? 'bg-teal-50 border-l-4 border-teal-600'
+                      : 'bg-orange-50 border-l-4 border-orange-500'
+                      }`}>
+                      <div className="mb-4">
+                        <p className="font-semibold text-lg text-gray-900 mb-1">
+                          {results.dmarc.exists ? 'DMARC record found' : 'No DMARC record found'}
+                        </p>
+                        <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
+                      </div>
+
+                      {results.dmarc.exists && (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
+                            <div className="overflow-x-auto">
+                              <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-sm min-w-full">
+                                {results.dmarc.record}
+                              </SyntaxHighlighter>
+                            </div>
+                            <CopyToClipboard text={results.dmarc.record} onCopy={() => setCopied(true)}>
+                              <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-xs sm:text-sm font-medium cursor-pointer transition-all duration-200 hover:from-teal-700 hover:to-teal-800 hover:-translate-y-0.5 shadow-md">
+                                <FiCopy className="text-sm" /> Copy Record
+                              </button>
+                            </CopyToClipboard>
+                          </div>
+
+                          <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                            <h4 className="font-semibold text-gray-900 mb-3">Policy Information</h4>
+                            <div className="space-y-3">
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600 font-medium">Policy:</span>
+                                <span className={`font-medium ${results.dmarc.policy === 'reject' ? 'text-teal-600' : results.dmarc.policy === 'quarantine' ? 'text-orange-500' : 'text-red-500'}`}>
+                                  {results.dmarc.policy}
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600 font-medium">Subdomain Policy:</span>
+                                <span className="text-teal-600 font-medium">{results.dmarc.subdomainPolicy || 'Same as domain'}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600 font-medium">Percentage:</span>
+                                <span className="text-teal-600 font-medium">{results.dmarc.percentage}%</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600 font-medium">SPF Alignment:</span>
+                                <span className="text-teal-600 font-medium">{results.dmarc.alignment.spf}</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-gray-600 font-medium">DKIM Alignment:</span>
+                                <span className="text-teal-600 font-medium">{results.dmarc.alignment.dkim}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                        <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
                         <p className="text-gray-700 text-xs sm:text-sm">{results.dmarc.recommendation}</p>
                       </div>
                     </div>
-                  )}
+                  </>
+                ) : (
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm w-full">
+                    <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 sm:mb-6">
+                      <h4 className="font-semibold text-gray-900">DMARC Check</h4>
+                    </div>
+                    <div className="space-y-4">
+                      <p className="text-gray-600 text-xs sm:text-sm">DMARC (Domain-based Message Authentication, Reporting & Conformance) is an email authentication protocol that builds on SPF and DKIM protocols.</p>
+                      <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                        <h5 className="font-semibold text-gray-900 mb-2">How it works:</h5>
+                        <ul className="list-disc list-inside space-y-1 text-gray-600 text-xs sm:text-sm">
+                          <li>DMARC tells receiving servers what to do with emails that fail SPF and DKIM checks</li>
+                          <li>It provides reporting capabilities to domain owners about email authentication results</li>
+                          <li>DMARC policies can be set to none (monitor), quarantine, or reject</li>
+                          <li>It helps prevent domain spoofing and phishing attacks</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
 
-                  {results.blacklist.recommendation && (
-                    <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
-                      <div className="flex items-start">
-                        <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
+      case 'blacklist':
+        return (
+          <div className="border border-gray-200 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md w-full">
+            <div
+              className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-teal-100 transition-colors"
+              onClick={() => toggleSection('blacklist')}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <FiList className="inline text-teal-600 text-base" />
+                Blacklist Status
+                {results?.blacklist && getStatusIcon(results.blacklist.listed === 0)}
+              </h3>
+              {expandedSections.blacklist ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
+            </div>
+
+            {expandedSections.blacklist && (
+              <div className="bg-white p-4 sm:p-6 animate-fade-in">
+                {results ? (
+                  <>
+                    <div className={`rounded-xl p-4 sm:p-6 ${results.blacklist.listed === 0
+                      ? 'bg-teal-50 border-l-4 border-teal-600'
+                      : 'bg-orange-50 border-l-4 border-orange-500'
+                      }`}>
+                      <div className="mb-4">
+                        <p className="font-semibold text-lg text-gray-900 mb-1">
+                          {results.blacklist.listed === 0 ? 'Domain is clean' : `Domain listed on ${results.blacklist.listed} blacklist(s)`}
+                        </p>
+                        <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
+                      </div>
+
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                        <h4 className="font-semibold text-gray-900 mb-3">Blacklist Results</h4>
+                        <div className="space-y-3">
+                          {results.blacklist.details.map((blacklist, index) => (
+                            <div key={index} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
+                              <span className="text-gray-700 font-medium text-sm">{blacklist.name}</span>
+                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${blacklist.listed
+                                ? 'bg-red-100 text-red-800 border border-red-200'
+                                : 'bg-teal-100 text-teal-800 border border-teal-200'
+                                }`}>
+                                {blacklist.response}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
+                        <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
                         <p className="text-gray-700 text-xs sm:text-sm">{results.blacklist.recommendation}</p>
                       </div>
                     </div>
-                  )}
-
-                  {results.bimi.recommendation && (
-                    <div className="bg-blue-50 rounded-xl p-3 sm:p-4 border-l-4 border-blue-500">
-                      <div className="flex items-start">
-                        <FiArrowRight className="mt-1 mr-2 text-blue-500 flex-shrink-0" />
-                        <p className="text-gray-700 text-xs sm:text-sm">{results.bimi.recommendation}</p>
+                  </>
+                ) : (
+                  <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm w-full">
+                    <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 sm:mb-6">
+                      <h4 className="font-semibold text-gray-900">Blacklist Check</h4>
+                    </div>
+                    <div className="space-y-4">
+                      <p className="text-gray-600 text-xs sm:text-sm">Email blacklists (DNSBLs) are databases of IP addresses and domains known to send spam or malicious emails.</p>
+                      <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
+                        <h5 className="font-semibold text-gray-900 mb-2">How it works:</h5>
+                        <ul className="list-disc list-inside space-y-1 text-gray-600 text-xs sm:text-sm">
+                          <li>Receiving mail servers check sending IPs/domains against multiple blacklists</li>
+                          <li>If listed, emails may be rejected, marked as spam, or quarantined</li>
+                          <li>Common reasons for listing include sending spam, having compromised systems, or poor email practices</li>
+                          <li>Regular monitoring helps maintain good email deliverability</li>
+                        </ul>
                       </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
-            </>
-          )}
-        </div>
-      );
-
-    case 'spf':
-      return (
-        <div className="border border-gray-200 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md w-full">
-          <div
-            className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-teal-100 transition-colors"
-            onClick={() => toggleSection('spf')}
-          >
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <FiMail className="inline text-teal-600 text-base" />
-              SPF (Sender Policy Framework)
-              {results?.spf && getStatusIcon(results.spf.valid)}
-            </h3>
-            {expandedSections.spf ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
+            )}
           </div>
+        );
 
-          {expandedSections.spf && (
-            <div className="bg-white p-4 sm:p-6 animate-fade-in">
-              {results ? (
-                <>
-                  <div className={`rounded-xl p-4 sm:p-6 ${results.spf.valid
-                    ? 'bg-teal-50 border-l-4 border-teal-600'
-                    : 'bg-orange-50 border-l-4 border-orange-500'
-                    }`}>
-                    <div className="mb-4">
-                      <p className="font-semibold text-lg text-gray-900 mb-1">
-                        {results.spf.exists ? 'SPF record found' : 'No SPF record found'}
-                      </p>
-                      <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
-                    </div>
+      default:
+        return null;
+    }
+  };
 
-                    {results.spf.exists && (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
-                        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-                          <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
-                          <div className="overflow-x-auto">
-                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-sm min-w-full">
-                              {results.spf.record}
-                            </SyntaxHighlighter>
-                          </div>
-                          <CopyToClipboard text={results.spf.record} onCopy={() => setCopied(true)}>
-                            <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-xs sm:text-sm font-medium cursor-pointer transition-all duration-200 hover:from-teal-700 hover:to-teal-800 hover:-translate-y-0.5 shadow-md">
-                              <FiCopy className="text-sm" /> Copy Record
-                            </button>
-                          </CopyToClipboard>
-                        </div>
-
-                        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-                          <h4 className="font-semibold text-gray-900 mb-3">Mechanisms</h4>
-                          <ul className="space-y-2">
-                            {results.spf.mechanisms.map((mechanism, idx) => (
-                              <li key={idx} className="flex items-center justify-between py-2 border-b border-gray-200 last:border-b-0">
-                                <div className="flex items-center gap-3">
-                                  <span className="font-medium text-gray-700 text-xs sm:text-sm w-16 sm:w-20">{mechanism.type}</span>
-                                  <span className="font-mono text-xs sm:text-sm text-gray-600 flex-1 truncate">{mechanism.value}</span>
-                                </div>
-                                {mechanism.valid ? (
-                                  <FiCheckCircle className="text-teal-600 flex-shrink-0 text-base" />
-                                ) : (
-                                  <FiAlertTriangle className="text-orange-500 flex-shrink-0 text-base" />
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                          <p className="text-xs sm:text-sm text-gray-500 mt-3">Total lookups: {results.spf.lookups}/10</p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
-                      <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
-                      <p className="text-gray-700 text-xs sm:text-sm">{results.spf.recommendation}</p>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm w-full">
-                  <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 sm:mb-6">
-                    <h4 className="font-semibold text-gray-900">SPF Check</h4>
-                  </div>
-                  <div className="space-y-4">
-                    <p className="text-gray-600 text-xs sm:text-sm">SPF (Sender Policy Framework) is an email authentication method designed to detect forging sender addresses during the delivery of the email.</p>
-                    <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
-                      <h5 className="font-semibold text-gray-900 mb-2">How it works:</h5>
-                      <ul className="list-disc list-inside space-y-1 text-gray-600 text-xs sm:text-sm">
-                        <li>SPF allows receiving mail servers to check that incoming mail from a domain comes from a host authorized by that domain's administrators</li>
-                        <li>It lists designated mail servers in a DNS TXT record</li>
-                        <li>Receiving servers verify the sending server's IP against the published SPF record</li>
-                        <li>If the check fails, the receiving server can reject or mark the email as suspicious</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-
-    case 'dkim':
-      return (
-        <div className="border border-gray-200 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md w-full">
-          <div
-            className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-teal-100 transition-colors"
-            onClick={() => toggleSection('dkim')}
-          >
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <FiLock className="inline text-teal-600 text-base" />
-              DKIM (DomainKeys Identified Mail)
-              {results?.dkim && getStatusIcon(results.dkim.valid)}
-            </h3>
-            {expandedSections.dkim ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
-          </div>
-
-          {expandedSections.dkim && (
-            <div className="bg-white p-4 sm:p-6 animate-fade-in">
-              {results ? (
-                <>
-                  <div className={`rounded-xl p-4 sm:p-6 ${results.dkim.valid
-                    ? 'bg-teal-50 border-l-4 border-teal-600'
-                    : 'bg-orange-50 border-l-4 border-orange-500'
-                    }`}>
-                    <div className="mb-4">
-                      <p className="font-semibold text-lg text-gray-900 mb-1">
-                        {results.dkim.exists ? 'DKIM record found' : 'No DKIM record found'}
-                      </p>
-                      <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
-                    </div>
-
-                    {results.dkim.exists && (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
-                        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-                          <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
-                          <div className="overflow-x-auto">
-                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-sm min-w-full">
-                              {results.dkim.record}
-                            </SyntaxHighlighter>
-                          </div>
-                          <CopyToClipboard text={results.dkim.record} onCopy={() => setCopied(true)}>
-                            <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-xs sm:text-sm font-medium cursor-pointer transition-all duration-200 hover:from-teal-700 hover:to-teal-800 hover:-translate-y-0.5 shadow-md">
-                              <FiCopy className="text-sm" /> Copy Record
-                            </button>
-                          </CopyToClipboard>
-                        </div>
-
-                        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-                          <h4 className="font-semibold text-gray-900 mb-3">Key Information</h4>
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600 font-medium">Selector:</span>
-                              <span className="text-teal-600 font-medium">{results.dkim.selector}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600 font-medium">Key Length:</span>
-                              <span className="text-teal-600 font-medium">{results.dkim.keyLength} bits</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600 font-medium">Public Key Valid:</span>
-                              {results.dkim.publicKeyValid ? (
-                                <FiCheckCircle className="text-teal-600 text-xl" />
-                              ) : (
-                                <FiAlertTriangle className="text-orange-500 text-xl" />
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
-                      <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
-                      <p className="text-gray-700 text-xs sm:text-sm">{results.dkim.recommendation}</p>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm w-full">
-                  <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 sm:mb-6">
-                    <h4 className="font-semibold text-gray-900">DKIM Check</h4>
-                  </div>
-                  <div className="space-y-4">
-                    <p className="text-gray-600 text-xs sm:text-sm">DKIM (DomainKeys Identified Mail) is an email authentication method that allows the receiver to check that an email was indeed sent and authorized by the owner of that domain.</p>
-                    <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
-                      <h5 className="font-semibold text-gray-900 mb-2">How it works:</h5>
-                      <ul className="list-disc list-inside space-y-1 text-gray-600 text-xs sm:text-sm">
-                        <li>DKIM uses public-key cryptography to sign emails with a digital signature</li>
-                        <li>The sending server adds a DKIM signature header to outgoing emails</li>
-                        <li>Receiving servers verify the signature using the public key published in DNS</li>
-                        <li>If the signature is valid, the email hasn't been tampered with in transit</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-
-    case 'dmarc':
-      return (
-        <div className="border border-gray-200 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md w-full">
-          <div
-            className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-teal-100 transition-colors"
-            onClick={() => toggleSection('dmarc')}
-          >
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <FiShield className="inline text-teal-600 text-base" />
-              DMARC (Domain-based Message Authentication)
-              {results?.dmarc && getStatusIcon(results.dmarc.valid)}
-            </h3>
-            {expandedSections.dmarc ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
-          </div>
-
-          {expandedSections.dmarc && (
-            <div className="bg-white p-4 sm:p-6 animate-fade-in">
-              {results ? (
-                <>
-                  <div className={`rounded-xl p-4 sm:p-6 ${results.dmarc.valid
-                    ? 'bg-teal-50 border-l-4 border-teal-600'
-                    : 'bg-orange-50 border-l-4 border-orange-500'
-                    }`}>
-                    <div className="mb-4">
-                      <p className="font-semibold text-lg text-gray-900 mb-1">
-                        {results.dmarc.exists ? 'DMARC record found' : 'No DMARC record found'}
-                      </p>
-                      <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
-                    </div>
-
-                    {results.dmarc.exists && (
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4">
-                        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-                          <h4 className="font-semibold text-gray-900 mb-3">Record Details</h4>
-                          <div className="overflow-x-auto">
-                            <SyntaxHighlighter language="dns" style={atomOneDark} className="rounded-md text-sm min-w-full">
-                              {results.dmarc.record}
-                            </SyntaxHighlighter>
-                          </div>
-                          <CopyToClipboard text={results.dmarc.record} onCopy={() => setCopied(true)}>
-                            <button className="inline-flex items-center gap-2 bg-gradient-to-r from-teal-600 to-teal-700 text-white border-none px-4 sm:px-5 py-2 sm:py-3 rounded-full mt-3 text-xs sm:text-sm font-medium cursor-pointer transition-all duration-200 hover:from-teal-700 hover:to-teal-800 hover:-translate-y-0.5 shadow-md">
-                              <FiCopy className="text-sm" /> Copy Record
-                            </button>
-                          </CopyToClipboard>
-                        </div>
-
-                        <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-                          <h4 className="font-semibold text-gray-900 mb-3">Policy Information</h4>
-                          <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600 font-medium">Policy:</span>
-                              <span className={`font-medium ${results.dmarc.policy === 'reject' ? 'text-teal-600' : results.dmarc.policy === 'quarantine' ? 'text-orange-500' : 'text-red-500'}`}>
-                                {results.dmarc.policy}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600 font-medium">Subdomain Policy:</span>
-                              <span className="text-teal-600 font-medium">{results.dmarc.subdomainPolicy || 'Same as domain'}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600 font-medium">Percentage:</span>
-                              <span className="text-teal-600 font-medium">{results.dmarc.percentage}%</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600 font-medium">SPF Alignment:</span>
-                              <span className="text-teal-600 font-medium">{results.dmarc.alignment.spf}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-gray-600 font-medium">DKIM Alignment:</span>
-                              <span className="text-teal-600 font-medium">{results.dmarc.alignment.dkim}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
-                      <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
-                      <p className="text-gray-700 text-xs sm:text-sm">{results.dmarc.recommendation}</p>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm w-full">
-                  <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 sm:mb-6">
-                    <h4 className="font-semibold text-gray-900">DMARC Check</h4>
-                  </div>
-                  <div className="space-y-4">
-                    <p className="text-gray-600 text-xs sm:text-sm">DMARC (Domain-based Message Authentication, Reporting & Conformance) is an email authentication protocol that builds on SPF and DKIM protocols.</p>
-                    <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
-                      <h5 className="font-semibold text-gray-900 mb-2">How it works:</h5>
-                      <ul className="list-disc list-inside space-y-1 text-gray-600 text-xs sm:text-sm">
-                        <li>DMARC tells receiving servers what to do with emails that fail SPF and DKIM checks</li>
-                        <li>It provides reporting capabilities to domain owners about email authentication results</li>
-                        <li>DMARC policies can be set to none (monitor), quarantine, or reject</li>
-                        <li>It helps prevent domain spoofing and phishing attacks</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-
-    case 'blacklist':
-      return (
-        <div className="border border-gray-200 rounded-xl mb-6 overflow-hidden transition-all duration-300 hover:shadow-md w-full">
-          <div
-            className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 sm:py-5 cursor-pointer flex justify-between items-center hover:bg-teal-100 transition-colors"
-            onClick={() => toggleSection('blacklist')}
-          >
-            <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <FiList className="inline text-teal-600 text-base" />
-              Blacklist Status
-              {results?.blacklist && getStatusIcon(results.blacklist.listed === 0)}
-            </h3>
-            {expandedSections.blacklist ? <FiChevronUp className="text-gray-500" /> : <FiChevronDown className="text-gray-500" />}
-          </div>
-
-          {expandedSections.blacklist && (
-            <div className="bg-white p-4 sm:p-6 animate-fade-in">
-              {results ? (
-                <>
-                  <div className={`rounded-xl p-4 sm:p-6 ${results.blacklist.listed === 0
-                    ? 'bg-teal-50 border-l-4 border-teal-600'
-                    : 'bg-orange-50 border-l-4 border-orange-500'
-                    }`}>
-                    <div className="mb-4">
-                      <p className="font-semibold text-lg text-gray-900 mb-1">
-                        {results.blacklist.listed === 0 ? 'Domain is clean' : `Domain listed on ${results.blacklist.listed} blacklist(s)`}
-                      </p>
-                      <span className="text-sm text-gray-500">Last checked: {new Date(results.lastChecked).toLocaleString()}</span>
-                    </div>
-
-                    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 shadow-sm">
-                      <h4 className="font-semibold text-gray-900 mb-3">Blacklist Results</h4>
-                      <div className="space-y-3">
-                        {results.blacklist.details.map((blacklist, index) => (
-                          <div key={index} className="flex justify-between items-center py-2 border-b border-gray-200 last:border-b-0">
-                            <span className="text-gray-700 font-medium text-sm">{blacklist.name}</span>
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${blacklist.listed
-                                ? 'bg-red-100 text-red-800 border border-red-200'
-                                : 'bg-teal-100 text-teal-800 border border-teal-200'
-                              }`}>
-                              {blacklist.response}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5 mt-4 shadow-sm">
-                      <h4 className="font-semibold text-gray-900 mb-2">Recommendation</h4>
-                      <p className="text-gray-700 text-xs sm:text-sm">{results.blacklist.recommendation}</p>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-6 shadow-sm w-full">
-                  <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 py-4 -mx-4 sm:-mx-6 -mt-4 sm:-mt-6 mb-4 sm:mb-6">
-                    <h4 className="font-semibold text-gray-900">Blacklist Check</h4>
-                  </div>
-                  <div className="space-y-4">
-                    <p className="text-gray-600 text-xs sm:text-sm">Email blacklists (DNSBLs) are databases of IP addresses and domains known to send spam or malicious emails.</p>
-                    <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
-                      <h5 className="font-semibold text-gray-900 mb-2">How it works:</h5>
-                      <ul className="list-disc list-inside space-y-1 text-gray-600 text-xs sm:text-sm">
-                        <li>Receiving mail servers check sending IPs/domains against multiple blacklists</li>
-                        <li>If listed, emails may be rejected, marked as spam, or quarantined</li>
-                        <li>Common reasons for listing include sending spam, having compromised systems, or poor email practices</li>
-                        <li>Regular monitoring helps maintain good email deliverability</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      );
-
-    default:
-      return null;
-  }
-};
-    
 
   if (!currentUser) {
     return null;
@@ -1139,45 +1140,45 @@ useEffect(() => {
         {/* Header Section */}
         <div className="text-center mb-6 sm:mb-12">
           <div className="mb-6 sm:mb-12">
-  <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 mb-4 sm:mb-6 w-full">
-    <div className="flex flex-col lg:flex-row items-center justify-between gap-4 sm:gap-6">
-      {/* Left Side - Title & Description */}
-      <div className="flex-1 text-center lg:text-left">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-700 mb-3 sm:mb-4">
-          <i className="fas fa-shield-alt mr-2 sm:mr-3 text-teal-600 text-xl sm:text-2xl lg:text-3xl"></i> 
-          Authentication Checker
-        </h1>
-        <p className="text-gray-600 text-sm sm:text-base lg:text-lg max-w-2xl mx-auto lg:mx-0">
-          Get email security insights and improvement recommendations.
-        </p>
-      </div>
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 mb-4 sm:mb-6 w-full">
+              <div className="flex flex-col lg:flex-row items-center justify-between gap-4 sm:gap-6">
+                {/* Left Side - Title & Description */}
+                <div className="flex-1 text-center lg:text-left">
+                  <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-700 mb-3 sm:mb-4">
+                    <i className="fas fa-shield-alt mr-2 sm:mr-3 text-teal-600 text-xl sm:text-2xl lg:text-3xl"></i>
+                    Authentication Checker
+                  </h1>
+                  <p className="text-gray-600 text-sm sm:text-base lg:text-lg max-w-2xl mx-auto lg:mx-0">
+                    Get email security insights and improvement recommendations.
+                  </p>
+                </div>
 
-      {/* Right Side - Animated Circular Meter */}
-      <div className="flex-shrink-0">
-        <div className="text-center">
-          <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-2">
-            <svg viewBox="0 0 36 36" className="w-full h-full">
-              <path
-                className="stroke-gray-200 fill-none stroke-[3.8]"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-              />
-              <path
-                className="fill-none stroke-teal-500 stroke-[2.8] stroke-linecap-round transition-all duration-2000 ease-out"
-                strokeDasharray={`${score}, 100`}
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                transform="rotate(-90 18 18)"
-              />
-            </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-sm sm:text-base font-bold text-gray-800">{score}%</span>
+                {/* Right Side - Animated Circular Meter */}
+                <div className="flex-shrink-0">
+                  <div className="text-center">
+                    <div className="relative w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-2">
+                      <svg viewBox="0 0 36 36" className="w-full h-full">
+                        <path
+                          className="stroke-gray-200 fill-none stroke-[3.8]"
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        />
+                        <path
+                          className="fill-none stroke-teal-500 stroke-[2.8] stroke-linecap-round transition-all duration-2000 ease-out"
+                          strokeDasharray={`${score}, 100`}
+                          d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          transform="rotate(-90 18 18)"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-sm sm:text-base font-bold text-gray-800">{score}%</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-600 font-medium">Security Score</p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <p className="text-xs text-gray-600 font-medium">Security Score</p>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
 
           {/* Input Section */}
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 mb-6 sm:mb-8 w-full">
@@ -1229,8 +1230,8 @@ useEffect(() => {
                     />
                     <path
                       className={`fill-none stroke-[2.8] stroke-linecap-round transition-all duration-1000 ${getScoreClass(results.overallScore) === 'excellent' ? 'stroke-teal-600' :
-                          getScoreClass(results.overallScore) === 'good' ? 'stroke-teal-500' :
-                            getScoreClass(results.overallScore) === 'fair' ? 'stroke-orange-500' : 'stroke-red-500'
+                        getScoreClass(results.overallScore) === 'good' ? 'stroke-teal-500' :
+                          getScoreClass(results.overallScore) === 'fair' ? 'stroke-orange-500' : 'stroke-red-500'
                         }`}
                       strokeDasharray={`${results.overallScore}, 100`}
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
@@ -1339,11 +1340,11 @@ useEffect(() => {
                       <span className="font-semibold text-gray-900 text-sm sm:text-base">{item.domain}</span>
                     </div>
                     <span className={`inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium border ${item.score >= 90
-                            ? 'bg-teal-100 text-teal-800 border-teal-200'
-                            : item.score >= 70
-                              ? 'bg-orange-100 text-orange-800 border-orange-200'
-                              : 'bg-red-100 text-red-800 border-red-200'
-                          }`}>
+                      ? 'bg-teal-100 text-teal-800 border-teal-200'
+                      : item.score >= 70
+                        ? 'bg-orange-100 text-orange-800 border-orange-200'
+                        : 'bg-red-100 text-red-800 border-red-200'
+                      }`}>
                       {item.score}%
                     </span>
                   </div>

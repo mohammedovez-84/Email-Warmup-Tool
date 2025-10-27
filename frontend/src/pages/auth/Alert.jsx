@@ -438,7 +438,7 @@ const Alert = () => {
             className="relative bg-white/80 backdrop-blur-sm rounded-xl p-4 sm:p-6 shadow-sm border border-gray-200/60 hover:shadow-md transition-all duration-300 group"
           >
             {/* Background Gradient Effect */}
-            <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-teal-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            {/* <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-teal-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div> */}
 
             <div className="flex items-center justify-between relative z-10">
               <div className="flex-1 min-w-0">
@@ -467,7 +467,7 @@ const Alert = () => {
             </div>
 
             {/* Bottom Border Effect */}
-            <div className="absolute bottom-0 left-0 right-0 h-0.5 sm:h-1 bg-gradient-to-r from-teal-500 to-blue-500 rounded-b-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            {/* <div className="absolute bottom-0 left-0 right-0 h-0.5 sm:h-1 bg-gradient-to-r from-teal-500 to-blue-500 rounded-b-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div> */}
           </motion.div>
         ))}
       </div>
@@ -511,17 +511,12 @@ const Alert = () => {
         <div className="w-16 h-16 border-4 border-teal-200 border-t-teal-500 rounded-full animate-spin mb-4"></div>
         <p className="text-gray-600 text-lg font-medium">Loading your alerts...</p>
         <p className="text-gray-500 text-sm mt-2">Getting everything ready for you</p>
-      </div>
+      </div >
     );
   }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-teal-50 w-full lg:w-[calc(100%)] xl:w-[calc(100%)] relative overflow-hidden font-sans">
-      {/* Animated Background Elements */}
-      <div className="absolute top-0 left-0 w-72 h-72 bg-teal-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
-      <div className="absolute top-0 right-0 w-72 h-72 bg-blue-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse delay-1000"></div>
-      <div className="absolute bottom-0 left-1/2 w-72 h-72 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse delay-500"></div>
-
       {/* Header Section */}
       <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200/60 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 relative z-10">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
@@ -580,10 +575,10 @@ const Alert = () => {
                           </div>
                           <span
                             className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${account.status === 'active'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : account.status === 'paused'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : 'bg-red-100 text-red-800'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : account.status === 'paused'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-red-100 text-red-800'
                               }`}
                           >
                             {account.status}
