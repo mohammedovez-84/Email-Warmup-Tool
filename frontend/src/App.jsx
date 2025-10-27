@@ -13,6 +13,7 @@ import LoadingSpinner from './components/LoadingSpinner';
 import MainLayout from './layouts/MainLayout';
 import AuthLayout from './layouts/AuthLayout';
 import { CreditProvider } from "./context/CreditContext";
+import AdminOAuthCallback from "./pages/superadmin/CallbackHandler";
 // Lazy load components
 const Login = lazy(() => import('./pages/auth/Login'));
 const Signup = lazy(() => import('./pages/auth/Signup'));
@@ -126,6 +127,14 @@ function App() {
                                 element={
                                     <SuperAdminRoute>
                                         <SuperAdminDashboard />
+                                    </SuperAdminRoute>
+                                }
+                            />
+                            <Route
+                                path="/superadmin/oauth-callback"
+                                element={
+                                    <SuperAdminRoute>
+                                        <AdminOAuthCallback />
                                     </SuperAdminRoute>
                                 }
                             />

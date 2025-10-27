@@ -9,7 +9,7 @@ const SuperAdminRoute = ({ children }) => {
     }
 
     if (!currentUser || currentUser.role !== 'superadmin') {
-        return <Navigate to="/admin/dashboard" />;
+        return <Navigate to="/login" />;
     }
 
     return children;
