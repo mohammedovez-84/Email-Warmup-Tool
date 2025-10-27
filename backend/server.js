@@ -18,7 +18,7 @@ const warmupRoutes = require('./routes/warmupRoutes');
 const userRoutes = require('./routes/users');
 const metricsRoutes = require('./routes/metricsRoutes');
 const healthRoutes = require('./routes/healthRoutes');
-
+const msoauthRoutesAdmin = require("./routes/ms-oauth-admin")
 const warmupScheduler = require('./services/Scheduler');
 
 
@@ -41,6 +41,7 @@ app.use(passport.session());
 // Routes
 app.use('/auth/microsoft2', microsoftAuthRoutes);
 app.use('/api/auth', authRoutes);
+// app.use("/api/ms-oauth_admin",)
 app.use('/api', googleRoutes);
 app.use('/auth', microsoftRoutes);
 app.use('/api', smtpImapRoutes);

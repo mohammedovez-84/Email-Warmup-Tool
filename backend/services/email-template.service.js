@@ -1,146 +1,123 @@
 // services/template-email-service.js
+const industryContexts = {
+    technology: {
+        topics: [
+            "digital transformation initiatives",
+            "emerging tech stack architectures",
+            "cloud migration strategies",
+            "AI and machine learning implementations",
+            "cybersecurity frameworks",
+            "devops and agile methodologies",
+            "data analytics and business intelligence"
+        ],
+        challenges: [
+            "scaling infrastructure efficiently",
+            "managing technical debt",
+            "staying ahead of security threats",
+            "hiring and retaining top tech talent",
+            "balancing innovation with stability"
+        ]
+    },
+    finance: {
+        topics: [
+            "portfolio optimization strategies",
+            "risk management frameworks",
+            "regulatory compliance updates",
+            "financial technology innovations",
+            "investment analysis methodologies",
+            "wealth management trends",
+            "market volatility strategies"
+        ],
+        challenges: [
+            "navigating regulatory changes",
+            "managing client expectations in volatile markets",
+            "digital transformation in traditional finance",
+            "cybersecurity in financial systems",
+            "sustainable investing integration"
+        ]
+    },
+    healthcare: {
+        topics: [
+            "telemedicine implementations",
+            "healthcare data interoperability",
+            "patient engagement technologies",
+            "value-based care models",
+            "medical device innovations",
+            "healthcare policy updates",
+            "precision medicine advances"
+        ],
+        challenges: [
+            "balancing technology with patient care",
+            "data privacy and security compliance",
+            "healthcare cost management",
+            "regulatory approval processes",
+            "health equity and access"
+        ]
+    },
+    marketing: {
+        topics: [
+            "customer journey optimization",
+            "data-driven campaign strategies",
+            "content marketing ROI measurement",
+            "social media algorithm changes",
+            "personalization at scale",
+            "brand storytelling techniques",
+            "influencer marketing effectiveness"
+        ],
+        challenges: [
+            "attribution modeling accuracy",
+            "adapting to privacy regulations",
+            "content saturation in digital spaces",
+            "measuring true marketing impact",
+            "staying relevant with changing consumer behavior"
+        ]
+    },
+    general: {
+        topics: [
+            "strategic business development",
+            "leadership in changing markets",
+            "operational efficiency improvements",
+            "team collaboration methodologies",
+            "professional development strategies",
+            "industry networking best practices",
+            "innovation management frameworks"
+        ],
+        challenges: [
+            "adapting to market disruptions",
+            "talent development and retention",
+            "maintaining competitive advantage",
+            "scaling operations effectively",
+            "balancing growth with sustainability"
+        ]
+    }
+};
+
+const professionalTones = [
+    "collaborative and insightful",
+    "strategic and forward-thinking",
+    "analytical and data-driven",
+    "innovative and progressive",
+    "experienced and pragmatic",
+    "visionary and inspiring",
+    "consultative and supportive"
+];
+
+const emailStructures = [
+    "insight-question",
+    "compliment-connection",
+    "shared-challenge",
+    "trend-discussion"
+];
+
 class TemplateEmailService {
     constructor() {
-        this.templates = this.initializeTemplates();
-        console.log(`✅ Template system ready with natural, human-like email templates`);
+        this.initialized = true;
+        console.log("✅ HTML Template-based email service initialized");
     }
 
-    initializeTemplates() {
-        return {
-            casual: this.generateCasualTemplates(50),
-            professional: this.generateProfessionalTemplates(30),
-            friendly: this.generateFriendlyTemplates(20)
-        };
-    }
-
-    generateCasualTemplates(count) {
-        const templates = [];
-
-        const subjects = [
-            "Hey {receiver_first} 👋",
-            "Quick question",
-            "Following up",
-            "Checking in",
-            "Hope you're doing well",
-            "Quick connect",
-            "Came across your profile",
-            "Loved your work on {topic}",
-            "Inspired by your approach",
-            "Had to reach out"
-        ];
-
-        const openings = [
-            "I hope everything is going well for you",
-            "Sending good vibes your way for the day",
-            "Hope you're having a productive week",
-            "Quick note coming your way",
-            "Just wanted to touch base",
-            "Hope this email finds you well",
-            "Wanted to quickly connect",
-            "Reaching out with a quick thought",
-            "Came across your work and had to reach out",
-            "Hope you're doing amazing"
-        ];
-
-        const bodies = [
-            "I've been testing out {product} and I'm blown away by its capabilities. How about we work together to see what kind of results we can get?",
-            "As someone in the {industry} space, I'm sure you know the importance of {topic}. That's why I wanted to see if you'd be interested in discussing how we can help improve your results.",
-            "I noticed we're both interested in {topic} and thought it would be great to connect. Would you be open to sharing experiences?",
-            "Been following your work on {topic} and really impressed with your approach. Would love to learn more about your process.",
-            "I've been experimenting with {approach} lately and getting some interesting results. Thought you might find it valuable given your work in {industry}.",
-            "Came across your profile while researching {topic} and was really impressed. Would you be open to a quick chat about shared interests?",
-            "I've been working on some exciting developments in {area} and thought you might find them interesting given your expertise.",
-            "Been meaning to connect with fellow {industry} professionals. Would you be open to sharing insights and experiences?",
-            "I've found some interesting patterns in {topic} recently and thought you might have valuable perspectives to share.",
-            "Working on something exciting in {area} and thought you'd be the perfect person to get feedback from."
-        ];
-
-        const closings = [
-            "Can't wait to hear your thoughts",
-            "Would love to get your perspective",
-            "Looking forward to connecting",
-            "Hope to hear from you soon",
-            "Would appreciate your thoughts",
-            "Let me know what you think",
-            "Excited to hear your take",
-            "Would value your input",
-            "Looking forward to your reply",
-            "Can't wait to connect"
-        ];
-
-        const signatures = [
-            "Best,\n{sender}",
-            "Cheers,\n{sender}",
-            "Thanks,\n{sender}",
-            "All the best,\n{sender}",
-            "Talk soon,\n{sender}",
-            "Warm regards,\n{sender}",
-            "Appreciate you,\n{sender}",
-            "Looking forward,\n{sender}",
-            "Best wishes,\n{sender}",
-            "Take care,\n{sender}"
-        ];
-
-        for (let i = 0; i < count; i++) {
-            templates.push({
-                id: `casual_${i}`,
-                type: 'casual',
-                subject: this.getRandomItem(subjects),
-                opening: this.getRandomItem(openings),
-                body: this.getRandomItem(bodies),
-                closing: this.getRandomItem(closings),
-                signature: this.getRandomItem(signatures),
-                variables: {
-                    product: ['Frintent', 'this new tool', 'our platform', 'this software', 'the system'][i % 5],
-                    industry: ['eCommerce', 'tech', 'marketing', 'sales', 'business'][i % 5],
-                    topic: ['outbound sales', 'conversion rates', 'growth strategies', 'team collaboration', 'digital transformation'][i % 5],
-                    approach: ['this new method', 'a different approach', 'innovative strategies', 'creative solutions', 'unique techniques'][i % 5],
-                    area: ['AI tools', 'automation', 'team efficiency', 'client engagement', 'process optimization'][i % 5]
-                }
-            });
-        }
-
-        return templates;
-    }
-
-    generateProfessionalTemplates(count) {
-        const templates = [];
-
-        const subjects = [
-            "Quick question about {topic}",
-            "Following up on {project}",
-            "Would love your thoughts on {idea}",
-            "Connecting re: {opportunity}",
-            "Quick chat about {subject}?",
-            "Your insights on {topic}",
-            "Potential collaboration",
-            "Industry insights exchange",
-            "Professional connection",
-            "Mutual interests in {area}"
-        ];
-
-        // ... similar structure for professional templates
-        return templates;
-    }
-
-    generateFriendlyTemplates(count) {
-        const templates = [];
-
-        const subjects = [
-            "Hey {receiver_first}! 👋",
-            "Quick hello",
-            "Thinking of you",
-            "Had to share this",
-            "You came to mind",
-            "Quick thought",
-            "Inspired by your work",
-            "Loved your recent post",
-            "Your work is amazing!",
-            "We should connect"
-        ];
-
-        // ... similar structure for friendly templates
-        return templates;
+    getIndustryContext(industry = "general") {
+        const normalizedIndustry = industry.toLowerCase();
+        return industryContexts[normalizedIndustry] || industryContexts.general;
     }
 
     getRandomItem(array) {
@@ -152,110 +129,313 @@ class TemplateEmailService {
     }
 
     async generateEmail(senderName, receiverName, industry = "general") {
-        console.log('📧 Generating natural, human-like email...');
+        try {
+            console.log('📧 Generating HTML professional email...');
 
-        const templateType = this.getRandomItem(['casual', 'professional', 'friendly']);
-        const templates = this.templates[templateType];
-        const template = this.getRandomItem(templates);
+            const industryData = this.getIndustryContext(industry);
+            const topic = this.getRandomItem(industryData.topics);
+            const challenge = this.getRandomItem(industryData.challenges);
+            const tone = this.getRandomItem(professionalTones);
+            const structure = this.getRandomItem(emailStructures);
 
-        const receiverFirst = this.extractFirstName(receiverName);
-        const senderFirst = this.extractFirstName(senderName);
+            const emailTemplate = this.selectEmailTemplate(structure, senderName, receiverName, industry, topic, challenge, tone);
 
-        // Replace variables
-        let subject = template.subject.replace(/{receiver_first}/g, receiverFirst);
-        let body = template.body;
+            console.log(`✅ Generated professional email: "${emailTemplate.subject}"`);
 
-        for (const [key, value] of Object.entries(template.variables)) {
-            subject = subject.replace(new RegExp(`{${key}}`, 'g'), value);
-            body = body.replace(new RegExp(`{${key}}`, 'g'), value);
+            return {
+                subject: emailTemplate.subject,
+                content: emailTemplate.content,
+                industry: industry,
+                tone: tone,
+                structure: structure,
+                provider: 'template',
+                format: 'html'
+            };
+        } catch (error) {
+            console.log('❌ Template email generation failed:', error);
+            throw error;
         }
-
-        // Build the email
-        const emailContent = `${template.opening}\n\n${body}\n\n${template.closing}\n\n${template.signature.replace(/{sender}/g, senderName)}`;
-
-        // Add random personal touches
-        const finalEmail = this.addPersonalTouches(emailContent);
-
-        console.log(`✅ Generated ${templateType} email: "${subject}"`);
-
-        return {
-            subject: subject,
-            content: finalEmail,
-            style: templateType,
-            provider: 'template'
-        };
     }
 
-    addPersonalTouches(content) {
-        // Add some natural variations
-        const variations = [
-            "\n\nPS. Let me know if you have any questions!",
-            "\n\nPS. Would love to hear what you're working on these days!",
-            "\n\nPS. Hope you're having a great week!",
-            "\n\nPS. Excited to hear your thoughts!",
-            "" // Sometimes no PS
-        ];
+    selectEmailTemplate(structure, senderName, receiverName, industry, topic, challenge, tone) {
+        const receiverFirst = this.extractFirstName(receiverName);
 
-        return content + this.getRandomItem(variations);
+        const templates = {
+            "insight-question": {
+                subject: `${topic} - Quick Question`,
+                content: `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Connection</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9f9f9; }
+        .email-container { background: #ffffff; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; text-align: center; }
+        .content { padding: 30px; }
+        .topic { background: #f8f9fa; padding: 15px; border-left: 4px solid #667eea; margin: 20px 0; border-radius: 4px; }
+        .question { background: #fff3cd; padding: 15px; border-radius: 6px; margin: 25px 0; border-left: 4px solid #ffc107; }
+        .signature { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e9ecef; }
+        .footer { background: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #6c757d; }
+        @media (max-width: 600px) { .content { padding: 20px; } .header { padding: 20px; } }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h1 style="margin: 0; font-size: 24px;">Professional Connection</h1>
+            <p style="margin: 5px 0 0 0; opacity: 0.9;">${industry.charAt(0).toUpperCase() + industry.slice(1)} Industry</p>
+        </div>
+        
+        <div class="content">
+            <p>Dear <strong>${receiverFirst}</strong>,</p>
+            
+            <div class="topic">
+                <p><strong>Topic:</strong> ${topic}</p>
+                <p><strong>Focus:</strong> ${challenge}</p>
+            </div>
+            
+            <p>I've been following developments in this area and wanted to connect.</p>
+            
+            <div class="question">
+                <p><strong>What approaches have you found most effective in addressing this challenge?</strong></p>
+            </div>
+            
+            <p>I'd appreciate your perspective.</p>
+            
+            <div class="signature">
+                <p>Best regards,<br>
+                <strong style="color: #2c3e50;">${senderName}</strong></p>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Professional networking email • ${industry} industry insights</p>
+        </div>
+    </div>
+</body>
+</html>`
+            },
+            "compliment-connection": {
+                subject: `Industry Insights - ${topic}`,
+                content: `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Industry Connection</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.7; color: #2c3e50; max-width: 600px; margin: 0 auto; padding: 20px; background: #f5f7fa; }
+        .email-container { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; }
+        .content { padding: 30px; }
+        .highlight { background: linear-gradient(120deg, #a8edea 0%, #fed6e3 100%); padding: 20px; border-radius: 8px; margin: 20px 0; }
+        .signature { margin-top: 30px; text-align: center; }
+        .footer { background: #2c3e50; color: white; padding: 15px; text-align: center; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="header">
+            <h1 style="margin: 0; font-size: 22px;">Industry Insights Exchange</h1>
+        </div>
+        
+        <div class="content">
+            <p>Dear <strong>${receiverFirst}</strong>,</p>
+            
+            <div class="highlight">
+                <p style="margin: 0; font-size: 16px; line-height: 1.5;">Your expertise in <strong>${topic}</strong> within the ${industry} space is impressive and highly relevant to current industry discussions.</p>
+            </div>
+            
+            <p>I'm reaching out because I believe your perspective on <strong>${challenge}</strong> would be valuable.</p>
+            
+            <p>Would you be open to sharing your insights on current best practices?</p>
+            
+            <div class="signature">
+                <p>Warm regards,<br>
+                <strong style="font-size: 16px;">${senderName}</strong></p>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Professional Networking • ${new Date().getFullYear()}</p>
+        </div>
+    </div>
+</body>
+</html>`
+            },
+            "shared-challenge": {
+                subject: `Navigating ${challenge}`,
+                content: `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Professional Discussion</title>
+    <style>
+        body { font-family: Georgia, serif; line-height: 1.7; color: #444; max-width: 580px; margin: 0 auto; padding: 20px; background: #fefefe; }
+        .email-container { background: white; padding: 30px; border: 1px solid #e0e0e0; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .challenge-box { background: #f8f9fa; border-left: 4px solid #6c757d; padding: 20px; margin: 25px 0; border-radius: 0 8px 8px 0; }
+        .signature { margin-top: 30px; padding-top: 20px; border-top: 2px solid #e9ecef; }
+        .industry-tag { display: inline-block; background: #667eea; color: white; padding: 5px 12px; border-radius: 20px; font-size: 12px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="industry-tag">${industry.toUpperCase()}</div>
+        
+        <p>Dear ${receiverFirst},</p>
+        
+        <div class="challenge-box">
+            <p style="margin: 0; font-size: 15px; line-height: 1.6;">
+                <strong style="display: block; margin-bottom: 8px;">Industry Focus:</strong>
+                ${topic}<br><br>
+                <strong style="display: block; margin-bottom: 8px;">Current Challenge:</strong>
+                ${challenge}
+            </p>
+        </div>
+        
+        <p>Many professionals in our field are addressing this while advancing strategic objectives.</p>
+        
+        <p><strong>What strategies are you finding most impactful in your current work?</strong></p>
+        
+        <div class="signature">
+            <p>Best regards,<br>
+            <strong>${senderName}</strong></p>
+        </div>
+    </div>
+</body>
+</html>`
+            },
+            "trend-discussion": {
+                subject: `Industry Perspective: ${topic}`,
+                content: `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Industry Trends</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 0; background: #f0f2f5; }
+        .container { background: #ffffff; }
+        .header { background: #4a90e2; color: white; padding: 25px; text-align: center; }
+        .body { padding: 30px; }
+        .bullet-point { margin: 20px 0; padding-left: 20px; border-left: 3px solid #4a90e2; }
+        .signature { margin-top: 30px; padding-top: 20px; border-top: 1px solid #eeeeee; }
+        .cta { background: #4a90e2; color: white; padding: 12px 20px; border-radius: 5px; text-align: center; margin: 25px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin: 0; font-size: 22px;">Industry Perspective</h1>
+        </div>
+        
+        <div class="body">
+            <p>Dear ${receiverFirst},</p>
+            
+            <div class="bullet-point">
+                <p><strong>Topic of Interest:</strong> ${topic}</p>
+            </div>
+            
+            <div class="bullet-point">
+                <p><strong>Current Focus:</strong> ${challenge}</p>
+            </div>
+            
+            <p>I'm interested in your perspective on emerging approaches in this area.</p>
+            
+            <div class="cta">
+                <p style="margin: 0; font-weight: bold;">Would you be open to sharing your insights?</p>
+            </div>
+            
+            <div class="signature">
+                <p>Sincerely,<br>
+                <strong>${senderName}</strong></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>`
+            }
+        };
+
+        return templates[structure] || templates["insight-question"];
     }
 
     async generateReply(originalEmail) {
-        console.log('📧 Generating natural reply...');
+        console.log('📧 Generating HTML professional reply...');
 
-        const replyStyles = [
-            // Casual reply
-            `Hey {sender_first} 👋\n\nThanks for reaching out! {original_subject} sounds interesting.\n\n{response}\n\nLooking forward to connecting!\n\nBest,\n{receiver}`,
-
-            // Friendly reply  
-            `Hi {sender_first}!\n\nAppreciate you getting in touch about {original_subject}. {response}\n\nWould love to continue the conversation!\n\nCheers,\n{receiver}`,
-
-            // Professional reply
-            `Hi {sender_first},\n\nThank you for your email regarding {original_subject}. {response}\n\nLooking forward to your thoughts.\n\nBest regards,\n{receiver}`
+        const replyTemplates = [
+            `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; background: #f9f9f9; }
+        .email-container { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .content { margin: 20px 0; }
+        .signature { margin-top: 25px; padding-top: 15px; border-top: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <div class="content">
+            <p>Thank you for your email regarding <strong>${originalEmail.subject || 'this important topic'}</strong>.</p>
+            
+            <p>I appreciate you sharing your insights. Your perspective aligns with current industry discussions and adds valuable context.</p>
+            
+            <p>I'd be interested to learn more about your approach. Would you be available for a brief discussion next week?</p>
+        </div>
+        
+        <div class="signature">
+            <p>Best regards,<br>
+            <strong>${originalEmail.receiverName || 'Team'}</strong></p>
+        </div>
+    </div>
+</body>
+</html>`
         ];
 
-        const responses = [
-            "I'd be happy to discuss this further. When would be a good time to connect?",
-            "This aligns with some work I've been doing recently. Would love to compare notes!",
-            "Interesting approach! I've been exploring similar ideas and would value your perspective.",
-            "Thanks for sharing! I've been working on something related and would appreciate your insights.",
-            "Great timing! I was just looking into this area and would love to hear more about your approach.",
-            "Fascinating! I've had similar thoughts about this topic and would enjoy exchanging ideas.",
-            "Appreciate you reaching out! This is definitely an area I'm passionate about.",
-            "Thanks for the thoughtful email! I'd be interested in learning more about your work."
-        ];
-
-        const template = this.getRandomItem(replyStyles);
-        const response = this.getRandomItem(responses);
-
-        const senderFirst = this.extractFirstName(originalEmail.senderName || '');
-        const originalSubject = originalEmail.subject?.toLowerCase() || 'your email';
-
-        const replyContent = template
-            .replace(/{sender_first}/g, senderFirst)
-            .replace(/{original_subject}/g, originalSubject)
-            .replace(/{response}/g, response)
-            .replace(/{receiver}/g, originalEmail.receiverName || '');
+        const replyContent = this.getRandomItem(replyTemplates);
 
         return {
             reply_content: replyContent,
-            provider: 'template'
+            provider: 'template',
+            format: 'html'
         };
     }
 
     async generateReplyWithRetry(originalEmail, maxRetries = 2) {
         return this.generateReply(originalEmail);
     }
+
+    getIndustryExpertise(industry) {
+        const expertise = {
+            technology: "digital transformation, cloud architecture, and emerging technologies",
+            finance: "investment strategies, risk management, and financial innovation",
+            healthcare: "healthcare technology, patient care models, and regulatory compliance",
+            marketing: "brand strategy, digital marketing, and customer engagement",
+            general: "business strategy, leadership, and operational excellence"
+        };
+        return expertise[industry] || expertise.general;
+    }
 }
 
-// Export singleton instance
-const templateService = new TemplateEmailService();
+// Export functions
+const emailService = new TemplateEmailService();
+
 module.exports = {
     generateEmail: (senderName, receiverName, industry) =>
-        templateService.generateEmail(senderName, receiverName, industry),
+        emailService.generateEmail(senderName, receiverName, industry),
 
     generateReply: (originalEmail) =>
-        templateService.generateReply(originalEmail),
+        emailService.generateReply(originalEmail),
 
     generateReplyWithRetry: (originalEmail, maxRetries) =>
-        templateService.generateReplyWithRetry(originalEmail, maxRetries)
+        emailService.generateReplyWithRetry(originalEmail, maxRetries),
+
+    getIndustryExpertise: (industry) =>
+        emailService.getIndustryExpertise(industry)
 };

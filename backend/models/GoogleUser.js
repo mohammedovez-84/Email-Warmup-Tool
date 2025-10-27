@@ -62,7 +62,11 @@ const GoogleUser = sequelize.define('google_users', {
     allowNull: false,
     defaultValue: true, // default connected when added
   },
-
+  // In your GoogleUser, MicrosoftUser, and SmtpAccount models, add:
+  warmupStartTime: {
+    type: DataTypes.DATE,
+    allowNull: true
+  }
 }, {
   timestamps: false,
   tableName: 'google_users'
