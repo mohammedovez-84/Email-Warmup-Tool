@@ -38,7 +38,7 @@ const Sidebar = memo(() => {
             color: "from-teal-800 to-teal-600"
         },
         {
-            name: "Template Checker",
+            name: "Template",
             icon: <FiCheckSquare className="w-4 h-4 md:w-5 md:h-5" />,
             path: "/template-checker",
             color: "from-teal-800 to-teal-600"
