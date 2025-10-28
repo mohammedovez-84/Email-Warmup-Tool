@@ -66,26 +66,37 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
-    // Format email account data with guaranteed active warmup status
-    const formatEmailAccount = useCallback((account) => ({
-        ...account,
-        id: account._id || account.email,
-        name: account.name || account.sender_name || 'Unknown',
-        address: account.email,
-        status: account.status || 'unknown',
-        deliverability: account.deliverability || 0,
-        provider: account.provider || 'unknown',
-        warmupStatus: 'active',
-        warmupSettings: account.warmupSettings || {
-            startEmailsPerDay: 3,
-            increaseByPerDay: 3,
-            maxEmailsPerDay: 25,
-            replyRate: 0,
-            senderName: account.name || '',
-            customFolderName: ''
-        },
-        connectedAt: account.connectedAt || new Date().toISOString()
-    }), []);
+    // PERFECTED: Format email account data with proper warmup status handling
+    const formatEmailAccount = useCallback((account) => {
+        // Get the actual warmup status from backend data with proper fallbacks
+        const warmupStatus = account.warmup_status ||
+            account.warmupStatus ||
+            account.status ||
+            (account.warmup_settings && account.warmup_settings.status) ||
+            'active';
+
+        return {
+            ...account,
+            id: account._id || account.email || account.id,
+            name: account.name || account.sender_name || account.displayName || 'Unknown',
+            address: account.email || account.address || account.userPrincipalName,
+            status: account.status || 'connected',
+            deliverability: account.deliverability || 0,
+            provider: account.provider || 'unknown',
+            // PERFECTED: Use actual warmup status from backend
+            warmupStatus: warmupStatus,
+            warmupSettings: account.warmupSettings || account.warmup_settings || {
+                startEmailsPerDay: 3,
+                increaseByPerDay: 3,
+                maxEmailsPerDay: 25,
+                replyRate: 0,
+                senderName: account.name || account.sender_name || account.displayName || '',
+                customFolderName: '',
+                status: warmupStatus
+            },
+            connectedAt: account.connectedAt || account.created_at || account.createdDate || new Date().toISOString()
+        };
+    }, []);
 
     // Handle unauthorized access
     const handleUnauthorized = useCallback(() => {
@@ -94,7 +105,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         toast.info('Session expired. Please login again.');
     }, [navigate]);
 
-    // Enhanced fetch emails with better error handling
+    // PERFECTED: Enhanced fetch emails with automatic warmup start detection
     const fetchWarmupEmails = useCallback(async () => {
         try {
             setLoading(true);
@@ -112,12 +123,18 @@ const Dashboard = ({ isSidebarCollapsed }) => {
 
             const { googleUsers = [], smtpAccounts = [], microsoftUsers = [] } = response.data;
 
-            // Process all emails with guaranteed active warmup status
+            // Process all emails with actual warmup status from backend
             const allEmails = [
                 ...googleUsers.map(user => formatEmailAccount({ ...user, provider: 'google' })),
                 ...smtpAccounts.map(account => formatEmailAccount({ ...account, provider: 'smtp' })),
                 ...microsoftUsers.map(a => formatEmailAccount({ ...a, provider: 'microsoft' }))
-            ].filter(acc => acc.email);
+            ].filter(acc => acc.email || acc.address);
+
+            console.log('Fetched emails with warmup status:', allEmails.map(e => ({
+                address: e.address,
+                warmupStatus: e.warmupStatus,
+                name: e.name
+            })));
 
             // Enhanced email stats with realistic data
             const stats = {};
@@ -156,11 +173,33 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         }
     }, [formatEmailAccount, handleUnauthorized]);
 
-    // Enhanced success handler
+    // PERFECTED: Enhanced success handler with automatic warmup start
     const handleProviderSuccess = useCallback(async (newEmailData = null) => {
         try {
             if (newEmailData) {
                 const formattedEmail = formatEmailAccount(newEmailData);
+
+                // PERFECTED: Automatically start warmup for new email
+                try {
+                    const token = localStorage.getItem('token');
+                    if (token) {
+                        // Start warmup automatically for new email
+                        await axios.post(
+                            `${API_BASE_URL}/api/warmup/start`,
+                            {
+                                email: formattedEmail.address,
+                                settings: formattedEmail.warmupSettings
+                            },
+                            {
+                                headers: { Authorization: `Bearer ${token}` },
+                                timeout: 5000
+                            }
+                        );
+                        console.log('Auto-started warmup for:', formattedEmail.address);
+                    }
+                } catch (warmupError) {
+                    console.log('Auto warmup start attempted, may already be running:', warmupError);
+                }
 
                 setWarmupEmails(prev => {
                     const exists = prev.find(email => email.address === formattedEmail.address);
@@ -192,18 +231,17 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 draggable: true,
             });
 
+            // Refresh to get latest status from backend
             await fetchWarmupEmails();
 
         } catch (error) {
             console.error('Error in success handler:', error);
-            toast.success('🎉 Email account connected successfully! Warmup has been started automatically.', {
+            toast.success('🎉 Email account connected successfully!', {
                 position: "top-right",
                 autoClose: 5000,
-                hideProgressBar: false,
-                closeOnClick: true,
-                pauseOnHover: true,
-                draggable: true,
             });
+            // Still refresh to get the data
+            fetchWarmupEmails();
         }
     }, [fetchWarmupEmails, formatEmailAccount]);
 
@@ -450,7 +488,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         }
     };
 
-    // Enhanced toggle functionality
+    // PERFECTED: Enhanced toggle functionality with proper status persistence
     const showPauseConfirmation = (emailAddress, currentWarmupStatus) => {
         const email = warmupEmails.find(e => e.address === emailAddress);
         if (email) {
@@ -474,7 +512,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         try {
             setTogglingEmails(prev => ({ ...prev, [emailAddress]: true }));
 
-            // Optimistic update
+            // PERFECTED: Optimistic update with proper status
             setWarmupEmails(prev =>
                 prev.map(email =>
                     email.address === emailAddress ? { ...email, warmupStatus: newStatus } : email
@@ -487,7 +525,8 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 return;
             }
 
-            await axios.put(
+            // PERFECTED: Make API call to update status in backend
+            const response = await axios.put(
                 `${API_BASE_URL}/api/warmup/emails/${encodeURIComponent(emailAddress)}/status`,
                 { status: newStatus },
                 {
@@ -496,10 +535,18 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 }
             );
 
+            console.log(`Status updated for ${emailAddress}: ${currentWarmupStatus} -> ${newStatus}`, response.data);
+
             toast.success(`🔄 Warmup ${newStatus === 'active' ? 'started' : 'paused'} successfully`, {
                 position: "top-right",
                 autoClose: 3000,
             });
+
+            // PERFECTED: Refresh data to ensure consistency with backend
+            setTimeout(() => {
+                fetchWarmupEmails();
+            }, 1500);
+
         } catch (error) {
             console.error('Toggle failed:', error);
 
@@ -528,7 +575,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         }
     };
 
-    // Enhanced save warmup settings
+    // PERFECTED: Enhanced save warmup settings with proper closing
     const saveWarmupSettings = async (settings) => {
         try {
             const token = localStorage.getItem('token');
@@ -559,7 +606,11 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 position: "top-right",
                 autoClose: 3000,
             });
+
+            // PERFECTED: Close the settings panel immediately after successful save
             setShowWarmupSettings(false);
+            setWarmupSettingsEmail(null);
+
         } catch (error) {
             console.error('Error saving warmup settings:', error);
             fetchWarmupEmails();
@@ -597,7 +648,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         }
     }, [activeFilter, warmupEmails.length]);
 
-    // Initialize component
+    // Initialize component - PERFECTED: Proper initial data fetch
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (token) {
@@ -1121,7 +1172,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         );
     };
 
-    // Enhanced Warmup Settings Panel
+    // PERFECTED: Enhanced Warmup Settings Panel with proper closing behavior
     const WarmupSettingsPanel = ({ email, onClose, onSave }) => {
         const [settings, setSettings] = useState({
             startEmailsPerDay: email?.warmupSettings?.startEmailsPerDay || 3,
@@ -1162,6 +1213,9 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             setSaving(true);
             try {
                 await onSave(settings);
+                // PERFECTED: The panel will be closed in the onSave function after successful save
+            } catch (error) {
+                console.error('Error saving settings:', error);
             } finally {
                 setSaving(false);
             }
@@ -1192,6 +1246,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                         <button
                             className="text-gray-500 hover:text-gray-700 p-1 flex-shrink-0 ml-2"
                             onClick={onClose}
+                            disabled={saving}
                         >
                             <FiX className="w-5 h-5" />
                         </button>
@@ -1219,6 +1274,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                     onChange={handleChange}
                                     min={field.min}
                                     max={field.max}
+                                    disabled={saving}
                                 />
                                 {errors[field.name] && (
                                     <p className="text-red-600 text-xs">{errors[field.name]}</p>
@@ -1234,6 +1290,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
                                 value={settings.senderName}
                                 onChange={handleChange}
+                                disabled={saving}
                             />
                         </div>
 
@@ -1249,6 +1306,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                         customFolderName: e.target.checked ? "Custom Folder" : "",
                                     }))
                                 }
+                                disabled={saving}
                             />
                             <label htmlFor="customFolder" className="text-sm text-gray-700">
                                 + Add custom name for warmup folder
@@ -1264,6 +1322,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                     value={settings.customFolderName}
                                     onChange={handleChange}
                                     placeholder="Enter folder name"
+                                    disabled={saving}
                                 />
                             </div>
                         )}
@@ -1271,7 +1330,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
 
                     <div className="flex justify-between p-4 sm:p-6 border-t border-gray-200 gap-3">
                         <button
-                            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-all flex-1"
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-all flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={onClose}
                             disabled={saving}
                         >
@@ -1610,7 +1669,10 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 {showWarmupSettings && (
                     <WarmupSettingsPanel
                         email={warmupSettingsEmail}
-                        onClose={() => setShowWarmupSettings(false)}
+                        onClose={() => {
+                            setShowWarmupSettings(false);
+                            setWarmupSettingsEmail(null);
+                        }}
                         onSave={saveWarmupSettings}
                     />
                 )}
