@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { FiPieChart, FiBarChart2, FiInfo, FiExternalLink, FiRefreshCw, FiDownload, FiMail, FiInbox, FiFilter, FiAlertTriangle, FiCheck, FiX } from 'react-icons/fi';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import 'react-circular-progressbar/dist/styles.css';
 
 // API PLACEHOLDER - Add your API calls here later
@@ -18,7 +18,7 @@ const API = {
       deliverability: 94
     };
   },
-  
+
   fetchAccountHealth: async () => {
     // return await fetch('/api/account-health').then(res => res.json());
     return {
@@ -27,7 +27,7 @@ const API = {
       issues: ['High bounce rate', 'Low engagement']
     };
   },
-  
+
   fetchCampaignPerformance: async () => {
     // return await fetch('/api/campaign-performance').then(res => res.json());
     return [
@@ -38,7 +38,7 @@ const API = {
       { name: 'Friday', sent: 600, inbox: 540, spam: 60, deliverability: 90 }
     ];
   },
-  
+
   exportReport: async (data) => {
     // TODO: Replace with actual export API call
     // return await fetch('/api/export-report', {
@@ -280,7 +280,6 @@ const AnalyticsDashboard = () => {
   const [currentTime, setCurrentTime] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
   const [isExporting, setIsExporting] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [selectedAccount, setSelectedAccount] = useState({
     id: 1,
@@ -296,9 +295,6 @@ const AnalyticsDashboard = () => {
   });
 
   const BAR_COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
-
-  // Initialize toast manager
-  const { toasts, showToast, removeToast } = useToast();
 
   useEffect(() => {
     const updateTime = () => {
@@ -322,7 +318,7 @@ const AnalyticsDashboard = () => {
           API.fetchAccountHealth(),
           API.fetchCampaignPerformance()
         ]);
-        
+       
         setEmailStats(stats);
         setAccountHealth(health);
         setCampaignPerformance(performance);
@@ -330,7 +326,7 @@ const AnalyticsDashboard = () => {
         console.error('Failed to load data:', error);
       }
     };
-    
+   
     loadData();
     */
   }, []);
@@ -357,7 +353,7 @@ const AnalyticsDashboard = () => {
           API.fetchAccountHealth(),
           API.fetchCampaignPerformance()
         ]);
-        
+       
         setEmailStats(stats);
         setAccountHealth(health);
         setCampaignPerformance(performance);
@@ -369,10 +365,10 @@ const AnalyticsDashboard = () => {
         console.error('Failed to refresh data:', error);
       }
     };
-    
+   
     refreshData();
     */
-    
+
     // Temporary mock data refresh (remove when API is ready)
     const newEmailStats = {
       sent: Math.floor(1000 + Math.random() * 500),
@@ -395,14 +391,11 @@ const AnalyticsDashboard = () => {
       ...prev,
       lastActive: new Date().toISOString()
     }));
-
-    showToast('Analytics data refreshed successfully!', 'success');
-    setIsRefreshing(false);
   };
 
   const handleExportReport = async () => {
     setIsExporting(true);
-    
+
     // API PLACEHOLDER - Export via API
     try {
       /*
@@ -414,10 +407,10 @@ const AnalyticsDashboard = () => {
         timestamp: new Date().toISOString()
       });
       */
-      
+
       // Temporary mock export (remove when API is ready)
       await new Promise(resolve => setTimeout(resolve, 2000));
-      
+
       const exportData = {
         emailStats,
         campaignPerformance,
@@ -425,10 +418,10 @@ const AnalyticsDashboard = () => {
         accountScore: accountScores[1],
         timestamp: new Date().toISOString()
       };
-      
+
       const dataStr = JSON.stringify(exportData, null, 2);
       const dataBlob = new Blob([dataStr], { type: 'application/json' });
-      
+
       const url = URL.createObjectURL(dataBlob);
       const link = document.createElement('a');
       link.href = url;
@@ -437,7 +430,7 @@ const AnalyticsDashboard = () => {
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      
+
       alert('Report exported successfully!');
     } catch (error) {
       console.error('Export failed:', error);
@@ -452,265 +445,233 @@ const AnalyticsDashboard = () => {
   const spamRate = ((emailStats.spam / emailStats.delivered) * 100).toFixed(1);
 
   return (
-    <>
-      {/* Toast Notifications */}
-      <AnimatePresence>
-        {toasts.map((toast) => (
-          <Toast
-            key={toast.id}
-            message={toast.message}
-            type={toast.type}
-            onClose={() => removeToast(toast.id)}
-          />
-        ))}
-      </AnimatePresence>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 flex justify-center items-start p-4 sm:p-6 font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
+      {/* Changed: Removed max-w-7xl mx-auto */}
+      <div className="w-full">
+        {/* Content */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6 sm:space-y-8">
+            {/* Email Warmup Stats Cards - Now at the top */}
+            <AnalyticsStatisticsCards
+              emailStats={emailStats}
+              deliveryRate={deliveryRate}
+              inboxRate={inboxRate}
+              spamRate={spamRate}
+            />
 
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 flex justify-center items-start p-4 sm:p-6 font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
-        <div className="w-full">
-          {/* Header with Refresh Button */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-8 gap-4">
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Email Analytics Dashboard</h1>
-              <p className="text-gray-600 mt-1">Real-time email performance and deliverability metrics</p>
+            {/* Email Health Pie Chart Section - Fixed */}
+            {/* Changed: Added w-full */}
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
+              <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-700 flex items-center gap-2 sm:gap-3">
+                  <i className="fas fa-chart-pie text-teal-600 text-lg sm:text-xl"></i>
+                  Email Health Overview
+                </h2>
+              </div>
+              <div className="p-4 sm:p-6 lg:p-8">
+                <UltraStablePieChart />
+              </div>
             </div>
-            <motion.button
-              onClick={handleRefreshData}
-              disabled={isRefreshing}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg font-semibold text-sm hover:bg-gray-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <FiRefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-              {isRefreshing ? 'Refreshing...' : 'Refresh Data'}
-            </motion.button>
-          </div>
 
-          {/* Content */}
-          {activeTab === 'overview' && (
-            <div className="space-y-6 sm:space-y-8">
-              {/* Email Warmup Stats Cards - Now at the top */}
-              <AnalyticsStatisticsCards
-                emailStats={emailStats}
-                deliveryRate={deliveryRate}
-                inboxRate={inboxRate}
-                spamRate={spamRate}
-              />
-
-              {/* Email Health Pie Chart Section - Fixed */}
-              <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
-                <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+            {/* Campaign Performance Section */}
+            {/* Changed: Added w-full */}
+            <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
+              <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <h2 className="text-xl sm:text-2xl font-bold text-gray-700 flex items-center gap-2 sm:gap-3">
-                    <FiPieChart className="text-teal-600 text-lg sm:text-xl" />
-                    Email Health Overview
+                    <i className="fas fa-trending-up text-teal-600 text-lg sm:text-xl"></i>
+                    Daily Warmup Performance
                   </h2>
-                </div>
-                <div className="p-4 sm:p-6 lg:p-8">
-                  <UltraStablePieChart />
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                    <select className="px-3 sm:px-4 py-2 border border-gray-300 rounded-lg sm:rounded-xl bg-white text-gray-700 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all text-xs sm:text-sm">
+                      <option>Last 7 days</option>
+                      <option>Last 30 days</option>
+                      <option>Last 90 days</option>
+                    </select>
+                    <button
+                      className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 border-none rounded-lg sm:rounded-xl font-semibold transition-all duration-300 bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md hover:from-teal-700 hover:to-teal-800 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer text-xs sm:text-sm ${isExporting ? 'opacity-70 cursor-not-allowed' : ''
+                        }`}
+                      onClick={handleExportReport}
+                      disabled={isExporting}
+                    >
+                      <FiDownload className={isExporting ? 'animate-spin' : ''} />
+                      {isExporting ? 'Exporting...' : 'Export Report'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              {/* Campaign Performance Section */}
-              <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
-                <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <h2 className="text-xl sm:text-2xl font-bold text-gray-700 flex items-center gap-2 sm:gap-3">
-                      <FiBarChart2 className="text-teal-600 text-lg sm:text-xl" />
-                      Daily Warmup Performance
-                    </h2>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                      <select
-                        className="px-3 sm:px-4 py-2 border border-gray-300 rounded-lg sm:rounded-xl bg-white text-gray-700 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all text-xs sm:text-sm"
-                        onChange={(e) => handleTimeRangeChange(e.target.value)}
+              <div className="p-4 sm:p-6 lg:p-8">
+                <div className="h-64 sm:h-72 lg:h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={campaignPerformance}
+                      margin={{
+                        top: 20,
+                        right: 10,
+                        left: 10,
+                        bottom: 25
+                      }}
+                    >
+                      <CartesianGrid
+                        strokeDasharray="3 3"
+                        vertical={false}
+                        stroke="#f0f0f0"
+                        strokeWidth={0.5}
+                      />
+
+                      <XAxis
+                        dataKey="name"
+                        tick={{
+                          fontSize: 12,
+                          fill: '#6B7280',
+                          fontWeight: 500,
+                        }}
+                        axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
+                        tickLine={{ stroke: '#E5E7EB' }}
+                        tickMargin={10}
+                      />
+
+                      <YAxis
+                        tick={{
+                          fontSize: 12,
+                          fill: '#6B7280',
+                          fontWeight: 500,
+                        }}
+                        axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
+                        tickLine={{ stroke: '#E5E7EB' }}
+                        tickMargin={10}
+                        tickFormatter={(value) => value.toLocaleString()}
+                      />
+
+                      <Tooltip
+                        contentStyle={{
+                          borderRadius: '12px',
+                          border: '1px solid #E5E7EB',
+                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+                          background: 'white',
+                          fontFamily: 'inherit',
+                          fontSize: '14px',
+                          fontWeight: '500'
+                        }}
+                        cursor={{ fill: 'rgba(243, 244, 246, 0.5)' }}
+                        formatter={(value, name) => [
+                          <span key="value" className="font-semibold text-gray-900">{value.toLocaleString()}</span>,
+                          name
+                        ]}
+                        labelFormatter={(label) => (
+                          <span className="font-semibold text-gray-900">{label}</span>
+                        )}
+                      />
+
+                      <Legend
+                        verticalAlign="top"
+                        height={36}
+                        iconSize={12}
+                        iconType="circle"
+                        wrapperStyle={{
+                          paddingBottom: '20px',
+                          fontSize: '13px',
+                          fontWeight: '600'
+                        }}
+                        formatter={(value) => (
+                          <span className="text-gray-700 text-sm font-medium">{value}</span>
+                        )}
+                      />
+
+                      <Bar
+                        dataKey="inbox"
+                        name="Landed in Inbox"
+                        radius={[6, 6, 0, 0]}
+                        fill="url(#inboxGradient)"
+                        animationBegin={0}
+                        animationDuration={1500}
+                        animationEasing="ease-out"
                       >
-                        <option>Last 7 days</option>
-                        <option>Last 30 days</option>
-                        <option>Last 90 days</option>
-                      </select>
-                      <button
-                        className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 border-none rounded-lg sm:rounded-xl font-semibold transition-all duration-300 bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md hover:from-teal-700 hover:to-teal-800 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer text-xs sm:text-sm ${isExporting ? 'opacity-70 cursor-not-allowed' : ''
-                          }`}
-                        onClick={handleExportReport}
-                        disabled={isExporting}
+                        {campaignPerformance.map((entry, index) => (
+                          <Cell
+                            key={`inbox-${index}`}
+                            fill="url(#inboxGradient)"
+                            opacity={0.9}
+                          />
+                        ))}
+                      </Bar>
+
+                      <Bar
+                        dataKey="spam"
+                        name="Landed in Spam"
+                        radius={[6, 6, 0, 0]}
+                        fill="url(#spamGradient)"
+                        animationBegin={400}
+                        animationDuration={1500}
+                        animationEasing="ease-out"
                       >
-                        <FiDownload className={isExporting ? 'animate-spin' : ''} />
-                        {isExporting ? 'Exporting...' : 'Export Report'}
-                      </button>
-                    </div>
-                  </div>
+                        {campaignPerformance.map((entry, index) => (
+                          <Cell
+                            key={`spam-${index}`}
+                            fill="url(#spamGradient)"
+                            opacity={0.9}
+                          />
+                        ))}
+                      </Bar>
+
+                      <defs>
+                        <linearGradient id="inboxGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10B981" stopOpacity={0.9} />
+                          <stop offset="100%" stopColor="#059669" stopOpacity={0.9} />
+                        </linearGradient>
+                        <linearGradient id="spamGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#EF4444" stopOpacity={0.9} />
+                          <stop offset="100%" stopColor="#DC2626" stopOpacity={0.9} />
+                        </linearGradient>
+                      </defs>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
 
-                <div className="p-4 sm:p-6 lg:p-8">
-                  <div className="h-64 sm:h-72 lg:h-80">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart
-                        data={campaignPerformance}
-                        margin={{
-                          top: 20,
-                          right: 10,
-                          left: 10,
-                          bottom: 25
-                        }}
-                      >
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          vertical={false}
-                          stroke="#f0f0f0"
-                          strokeWidth={0.5}
-                        />
-
-                        <XAxis
-                          dataKey="name"
-                          tick={{
-                            fontSize: 12,
-                            fill: '#6B7280',
-                            fontWeight: 500,
-                          }}
-                          axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
-                          tickLine={{ stroke: '#E5E7EB' }}
-                          tickMargin={10}
-                        />
-
-                        <YAxis
-                          tick={{
-                            fontSize: 12,
-                            fill: '#6B7280',
-                            fontWeight: 500,
-                          }}
-                          axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
-                          tickLine={{ stroke: '#E5E7EB' }}
-                          tickMargin={10}
-                          tickFormatter={(value) => value.toLocaleString()}
-                        />
-
-                        <Tooltip
-                          contentStyle={{
-                            borderRadius: '12px',
-                            border: '1px solid #E5E7EB',
-                            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
-                            background: 'white',
-                            fontFamily: 'inherit',
-                            fontSize: '14px',
-                            fontWeight: '500'
-                          }}
-                          cursor={{ fill: 'rgba(243, 244, 246, 0.5)' }}
-                          formatter={(value, name) => [
-                            <span key="value" className="font-semibold text-gray-900">{value.toLocaleString()}</span>,
-                            name
-                          ]}
-                          labelFormatter={(label) => (
-                            <span className="font-semibold text-gray-900">{label}</span>
-                          )}
-                        />
-
-                        <Legend
-                          verticalAlign="top"
-                          height={36}
-                          iconSize={12}
-                          iconType="circle"
-                          wrapperStyle={{
-                            paddingBottom: '20px',
-                            fontSize: '13px',
-                            fontWeight: '600'
-                          }}
-                          formatter={(value) => (
-                            <span className="text-gray-700 text-sm font-medium">{value}</span>
-                          )}
-                        />
-
-                        <Bar
-                          dataKey="inbox"
-                          name="Landed in Inbox"
-                          radius={[6, 6, 0, 0]}
-                          fill="url(#inboxGradient)"
-                          animationBegin={0}
-                          animationDuration={1500}
-                          animationEasing="ease-out"
-                        >
-                          {campaignPerformance.map((entry, index) => (
-                            <Cell
-                              key={`inbox-${index}`}
-                              fill="url(#inboxGradient)"
-                              opacity={0.9}
-                            />
-                          ))}
-                        </Bar>
-
-                        <Bar
-                          dataKey="spam"
-                          name="Landed in Spam"
-                          radius={[6, 6, 0, 0]}
-                          fill="url(#spamGradient)"
-                          animationBegin={400}
-                          animationDuration={1500}
-                          animationEasing="ease-out"
-                        >
-                          {campaignPerformance.map((entry, index) => (
-                            <Cell
-                              key={`spam-${index}`}
-                              fill="url(#spamGradient)"
-                              opacity={0.9}
-                            />
-                          ))}
-                        </Bar>
-
-                        <defs>
-                          <linearGradient id="inboxGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#10B981" stopOpacity={0.9} />
-                            <stop offset="100%" stopColor="#059669" stopOpacity={0.9} />
-                          </linearGradient>
-                          <linearGradient id="spamGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#EF4444" stopOpacity={0.9} />
-                            <stop offset="100%" stopColor="#DC2626" stopOpacity={0.9} />
-                          </linearGradient>
-                        </defs>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* Performance Summary */}
-                  <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-                      <div className="text-center p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl border border-gray-200">
-                        <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-1">
-                          {campaignPerformance.reduce((sum, day) => sum + day.inbox, 0).toLocaleString()}
-                        </div>
-                        <div className="text-xs sm:text-sm font-semibold text-teal-600 flex items-center justify-center">
-                          <div className="w-2 h-2 rounded-full bg-teal-500 mr-2"></div>
-                          Total Inbox
-                        </div>
+                {/* Performance Summary */}
+                <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                    <div className="text-center p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl border border-gray-200">
+                      <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-1">
+                        {campaignPerformance.reduce((sum, day) => sum + day.inbox, 0).toLocaleString()}
                       </div>
-
-                      <div className="text-center p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl border border-gray-200">
-                        <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-1">
-                          {campaignPerformance.reduce((sum, day) => sum + day.spam, 0).toLocaleString()}
-                        </div>
-                        <div className="text-xs sm:text-sm font-semibold text-red-600 flex items-center justify-center">
-                          <div className="w-2 h-2 rounded-full bg-red-500 mr-2"></div>
-                          Total Spam
-                        </div>
+                      <div className="text-xs sm:text-sm font-semibold text-teal-600 flex items-center justify-center">
+                        <div className="w-2 h-2 rounded-full bg-teal-500 mr-2"></div>
+                        Total Inbox
                       </div>
+                    </div>
 
-                      <div className="text-center p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl border border-gray-200">
-                        <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-1">
-                          {Math.round(
-                            (campaignPerformance.reduce((sum, day) => sum + day.inbox, 0) /
-                              campaignPerformance.reduce((sum, day) => sum + day.sent, 0)) * 100
-                          )}%
-                        </div>
-                        <div className="text-xs sm:text-sm font-semibold text-blue-600 flex items-center justify-center">
-                          <div className="w-2 h-2 rounded-full bg-blue-500 mr-2"></div>
-                          Avg. Inbox Rate
-                        </div>
+                    <div className="text-center p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl border border-gray-200">
+                      <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-1">
+                        {campaignPerformance.reduce((sum, day) => sum + day.spam, 0).toLocaleString()}
+                      </div>
+                      <div className="text-xs sm:text-sm font-semibold text-red-600 flex items-center justify-center">
+                        <div className="w-2 h-2 rounded-full bg-red-500 mr-2"></div>
+                        Total Spam
+                      </div>
+                    </div>
+
+                    <div className="text-center p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl border border-gray-200">
+                      <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-1">
+                        {Math.round(
+                          (campaignPerformance.reduce((sum, day) => sum + day.inbox, 0) /
+                            campaignPerformance.reduce((sum, day) => sum + day.sent, 0)) * 100
+                        )}%
+                      </div>
+                      <div className="text-xs sm:text-sm font-semibold text-blue-600 flex items-center justify-center">
+                        <div className="w-2 h-2 rounded-full bg-blue-500 mr-2"></div>
+                        Avg. Inbox Rate
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-    </>
+    </div>
   );
 };
 
