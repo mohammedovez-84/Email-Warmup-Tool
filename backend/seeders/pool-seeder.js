@@ -8,6 +8,21 @@ const poolAccounts = [
         providerType: 'GMAIL',
         appPassword: 'qjxdklxqutsxyaht'
     },
+    {
+        email: 'hissan1.dcm@gmail.com',
+        providerType: 'GMAIL',
+        appPassword: 'fqzmadvjprpkoudn'
+    },
+    {
+        email: 'jinendra.dcm@gmail.com',
+        providerType: 'GMAIL',
+        appPassword: 'ygztusvpxvrblzwv'
+    },
+    {
+        email: 'demandjeevan10@gmail.com',
+        providerType: 'GMAIL',
+        appPassword: 'eaffjgpwftkdtdgc'
+    },
     // {
     //     email: 'business.warmup1@gmail.com',
     //     providerType: 'GMAIL',
@@ -39,7 +54,7 @@ const poolAccounts = [
         imapHost: 'prospect-edge.com',
         imapPort: 993,
         imapSecure: true,
-        imapUser: 'ovez',
+        imapUser: 'vikas@prospect-edge.com',
         imapPassword: 'Demand@786'
     },
     // {
@@ -70,9 +85,9 @@ async function seedEmailPool() {
         await EmailPool.sync();
         console.log('✅ Table synced/created');
 
-        // Clear existing data (optional)
         await EmailPool.destroy({ where: {} });
         console.log('✅ Cleared existing data');
+
 
         // Insert new data
         const createdAccounts = await EmailPool.bulkCreate(poolAccounts);

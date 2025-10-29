@@ -122,45 +122,7 @@ router.get('/callback', async (req, res) => {
 
     console.log(`✅ Account saved successfully: ${email}`);
 
-    res.send(`
-      <html>
-        <head>
-          <title>Microsoft Account Connected</title>
-          <style>
-            body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-            .success { background: #d4edda; color: #155724; padding: 15px; border-radius: 5px; }
-            .warning { background: #fff3cd; color: #856404; padding: 15px; border-radius: 5px; margin-top: 10px; }
-            .debug { background: #e9ecef; color: #495057; padding: 15px; border-radius: 5px; margin-top: 10px; font-size: 12px; }
-          </style>
-        </head>
-        <body>
-          <div class="success">
-            <h2>✅ Microsoft account connected successfully!</h2>
-            <p><strong>Email:</strong> ${email}</p>
-            <p><strong>Name:</strong> ${profile.displayName || 'Not provided'}</p>
-            <p><strong>Account Type:</strong> ${providerType}</p>
-            <p>You can close this window and return to the app.</p>
-          </div>
-          <div class="debug">
-            <h3>🔧 Debug Info:</h3>
-            <p><strong>Access Token:</strong> ${token.access_token ? '✅ Present' : '❌ Missing'}</p>
-            <p><strong>Refresh Token:</strong> ${token.refresh_token ? '✅ Present' : '❌ Missing'}</p>
-            <p><strong>Token Expiry:</strong> ${tokenExpiry}</p>
-          </div>
-          ${providerType === 'OUTLOOK_PERSONAL' ? `
-          <div class="warning">
-            <h3>⚠️ Important Note for Personal Accounts:</h3>
-            <p>For personal Outlook accounts, you may need to:</p>
-            <ol>
-              <li>Enable IMAP in your Outlook.com settings</li>
-              <li>Allow "less secure apps" or use app-specific settings</li>
-              <li>Some features may use Microsoft Graph API instead of IMAP/SMTP</li>
-            </ol>
-          </div>
-          ` : ''}
-        </body>
-      </html>
-    `);
+    res.redirect('http://localhost:5173/superadmin/dashboard');
   } catch (err) {
     console.error('OAuth callback error:', err);
 
@@ -189,27 +151,6 @@ router.get('/callback', async (req, res) => {
   }
 });
 
-// Add debug route to check token storage
-router.get('/debug-tokens', async (req, res) => {
-  try {
-    const accounts = await EmailPool.findAll({
-      where: { providerType: ['OUTLOOK_PERSONAL', 'MICROSOFT_ORGANIZATIONAL'] },
-      attributes: ['email', 'providerType', 'access_token', 'refresh_token', 'token_expiry', 'token_expires_at']
-    });
 
-    const debugInfo = accounts.map(acc => ({
-      email: acc.email,
-      providerType: acc.providerType,
-      access_token: acc.access_token ? `PRESENT (${acc.access_token.length} chars)` : 'MISSING',
-      refresh_token: acc.refresh_token ? `PRESENT (${acc.refresh_token.length} chars)` : 'MISSING',
-      token_expiry: acc.token_expiry || 'NOT SET',
-      token_expires_at: acc.token_expires_at || 'NOT SET'
-    }));
-
-    res.json(debugInfo);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 module.exports = router;
