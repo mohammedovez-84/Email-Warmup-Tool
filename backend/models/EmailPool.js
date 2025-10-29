@@ -4,7 +4,7 @@ const { sequelize } = require('../config/db');
 const EmailPool = sequelize.define('pool_emails', {
     email: {
         type: DataTypes.STRING,
-        unique: true, // This creates an index
+        unique: true,
         allowNull: false,
         validate: { isEmail: true }
     },
@@ -13,6 +13,28 @@ const EmailPool = sequelize.define('pool_emails', {
         allowNull: false,
         defaultValue: 'OUTLOOK'
     },
+
+    // DAILY LIMITS - Same as warmup accounts
+    startEmailsPerDay: {
+        type: DataTypes.INTEGER,
+        defaultValue: 10, // Higher default for pool accounts
+        allowNull: false,
+    },
+    maxEmailsPerDay: {
+        type: DataTypes.INTEGER,
+        defaultValue: 50, // Higher max for pool accounts
+        allowNull: false,
+    },
+    currentDaySent: {
+        type: DataTypes.INTEGER,
+        defaultValue: 0,
+        allowNull: false,
+    },
+    lastResetDate: {
+        type: DataTypes.DATE,
+        allowNull: true,
+    },
+
     // For Gmail/Outlook personal accounts
     appPassword: {
         type: DataTypes.STRING,
@@ -88,17 +110,19 @@ const EmailPool = sequelize.define('pool_emails', {
 }, {
     tableName: 'pool_emails',
     timestamps: false,
-    // **CRITICAL: Disable automatic indexing**
     indexes: [
         {
             unique: true,
-            fields: ['email'] // Only keep the essential unique index
+            fields: ['email']
         },
         {
-            fields: ['isActive'] // Add only necessary indexes
+            fields: ['isActive']
         },
         {
             fields: ['providerType']
+        },
+        {
+            fields: ['lastResetDate'] // For daily reset queries
         }
     ]
 });

@@ -1,4 +1,5 @@
-imaps = require('imap-simple');
+const imaps = require('imap-simple');
+const { getSenderType } = require('../utils/senderConfig');
 
 function detectAccountType(account) {
     // Handle pool accounts properly
@@ -14,61 +15,33 @@ function detectAccountType(account) {
         return poolTypeMap[poolType] || poolType;
     }
 
-    // Handle regular accounts
-    if (account.provider === 'google' || account.roundRobinIndexGoogle !== undefined || account.app_password) {
-        return 'google';
-    }
-    if (account.provider === 'microsoft' || account.roundRobinIndexMicrosoft !== undefined || account.access_token) {
-        if (account.email && (account.email.endsWith('@outlook.com') || account.email.endsWith('@hotmail.com') || account.email.endsWith('@live.com'))) {
-            return 'outlook_personal';
-        }
-        return 'microsoft_organizational';
-    }
-    if (account.provider === 'smtp' || account.roundRobinIndexCustom !== undefined || account.smtp_host) {
-        return 'smtp';
-    }
-
-    // Email domain fallback
-    if (account.email) {
-        const email = account.email.toLowerCase();
-        if (email.endsWith('@gmail.com') || email.endsWith('@googlemail.com')) {
-            return 'google';
-        }
-        if (email.endsWith('@outlook.com') || email.endsWith('@hotmail.com') || email.endsWith('@live.com')) {
-            return 'outlook_personal';
-        }
-        return 'microsoft_organizational';
-    }
-
-
-    if (account.access_token) {
-        if (account.email && (account.email.endsWith('@outlook.com') ||
-            account.email.endsWith('@hotmail.com') ||
-            account.email.endsWith('@live.com'))) {
-            return 'outlook_personal';
-        }
-        return 'microsoft_organizational';
-    }
-
-    return 'smtp';
+    // Use the existing getSenderType function for consistency
+    return getSenderType(account);
 }
 
-// **FIX: Enhanced email status check with better error handling**
-async function checkEmailStatus(receiver, messageId) {
+// **ENHANCED: Email status check with bidirectional support**
+async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL') {
     const accountType = detectAccountType(receiver);
 
     // **FIX: Skip IMAP checks for problematic accounts with clear messaging**
     const hasPassword = receiver.smtp_pass || receiver.smtpPassword || receiver.password || receiver.app_password || receiver.imap_pass;
     const hasOAuthToken = receiver.access_token;
 
+    console.log(`🔍 Checking email status for ${direction}: ${messageId}`);
+    console.log(`   Receiver: ${receiver.email}, Type: ${accountType}`);
+    console.log(`   Has Password: ${!!hasPassword}, Has OAuth: ${!!hasOAuthToken}`);
+
+    // Skip IMAP for Graph API emails
     if (messageId && messageId.startsWith('graph-')) {
         console.log(`⏩ Skipping IMAP check for Graph API email: ${messageId}`);
         return {
             success: true,
             folder: 'GRAPH_API',
-            exists: true
+            exists: true,
+            deliveredInbox: true
         };
     }
+
     // Skip IMAP for Microsoft accounts using OAuth without passwords
     if ((accountType === 'microsoft_organizational' || accountType === 'outlook_personal') &&
         hasOAuthToken && !hasPassword) {
@@ -76,7 +49,7 @@ async function checkEmailStatus(receiver, messageId) {
         return {
             success: true,
             folder: 'SKIPPED_OAUTH',
-            found: true,
+            exists: true,
             deliveredInbox: true
         };
     }
@@ -87,7 +60,7 @@ async function checkEmailStatus(receiver, messageId) {
         return {
             success: true,
             folder: 'SKIPPED_NO_CREDENTIALS',
-            found: true,
+            exists: true,
             deliveredInbox: true
         };
     }
@@ -98,7 +71,18 @@ async function checkEmailStatus(receiver, messageId) {
         return {
             success: true,
             folder: 'SKIPPED_NO_IMAP',
-            found: true,
+            exists: true,
+            deliveredInbox: true
+        };
+    }
+
+    // **NEW: Skip IMAP for pool accounts in POOL_TO_WARMUP direction to avoid double-checking**
+    if (direction === 'POOL_TO_WARMUP' && receiver.providerType) {
+        console.log(`⏩ Skipping IMAP check for pool account in inbound direction`);
+        return {
+            success: true,
+            folder: 'SKIPPED_POOL_INBOUND',
+            exists: true,
             deliveredInbox: true
         };
     }
@@ -137,13 +121,14 @@ async function checkEmailStatus(receiver, messageId) {
                 const results = await connection.search(searchCriteria, { bodies: [''], struct: true });
 
                 if (results.length > 0) {
-                    console.log(`✅ Email found in: ${folder}`);
+                    const deliveredInbox = folder === 'INBOX' || folder === 'Important' || folder === '[Gmail]/Important';
+                    console.log(`✅ Email found in: ${folder} (Inbox: ${deliveredInbox})`);
                     await connection.end();
                     return {
                         success: true,
                         folder: folder,
-                        found: true,
-                        deliveredInbox: folder === 'INBOX' || folder === 'Important' || folder === '[Gmail]/Important'
+                        exists: true,
+                        deliveredInbox: deliveredInbox
                     };
                 }
             } catch (folderError) {
@@ -157,7 +142,7 @@ async function checkEmailStatus(receiver, messageId) {
         return {
             success: true,
             folder: 'NOT_FOUND',
-            found: false,
+            exists: false,
             deliveredInbox: false
         };
 
@@ -186,7 +171,7 @@ async function checkEmailStatus(receiver, messageId) {
         return {
             success: false,
             error: err.message,
-            found: false,
+            exists: false,
             deliveredInbox: false
         };
     }
@@ -231,7 +216,7 @@ function getImapConfig(account) {
                 };
 
             case 'outlook_personal':
-
+                // For Outlook personal accounts, we need to use OAuth2
                 if (!account.access_token) {
                     throw new Error(`Outlook personal account ${email} requires OAuth 2.0 access_token. Basic authentication is disabled by Microsoft.`);
                 }
@@ -299,11 +284,14 @@ function getImapConfig(account) {
     }
 }
 
-// **FIX: Enhanced moveEmailToInbox with better error handling**
-async function moveEmailToInbox(receiver, messageId, currentFolder) {
+// **ENHANCED: moveEmailToInbox with bidirectional awareness**
+async function moveEmailToInbox(receiver, messageId, currentFolder, direction = 'WARMUP_TO_POOL') {
     const accountType = detectAccountType(receiver);
     const hasOAuthToken = receiver.access_token;
     const hasPassword = receiver.smtp_pass || receiver.smtpPassword || receiver.password || receiver.app_password;
+
+    console.log(`📦 Attempting to move email for ${direction}: ${messageId}`);
+    console.log(`   Current folder: ${currentFolder}, Account: ${receiver.email}`);
 
     // Skip for OAuth accounts without passwords
     if ((accountType === 'microsoft_organizational' || accountType === 'outlook_personal') &&
@@ -322,8 +310,15 @@ async function moveEmailToInbox(receiver, messageId, currentFolder) {
     }
 
     // Skip if already in inbox or doesn't exist
-    if (currentFolder === 'INBOX' || currentFolder === 'NOT_FOUND') {
+    if (currentFolder === 'INBOX' || currentFolder === 'NOT_FOUND' ||
+        currentFolder === 'GRAPH_API' || currentFolder.includes('SKIPPED')) {
         console.log(`⏩ Skipping move - email is in ${currentFolder}`);
+        return { success: true, skipped: true };
+    }
+
+    // Skip for pool accounts in inbound direction
+    if (direction === 'POOL_TO_WARMUP' && receiver.providerType) {
+        console.log(`⏩ Skipping move for pool account in inbound direction`);
         return { success: true, skipped: true };
     }
 
@@ -340,6 +335,7 @@ async function moveEmailToInbox(receiver, messageId, currentFolder) {
 
         if (results.length === 0) {
             await connection.end();
+            console.log(`❌ Email not found in current folder: ${currentFolder}`);
             return { success: false, error: 'Email not found in current folder' };
         }
 
@@ -369,28 +365,32 @@ async function moveEmailToInbox(receiver, messageId, currentFolder) {
     }
 }
 
-// **FIX: Enhanced testImapConnection with better diagnostics**
-async function testImapConnection(account) {
+// **ENHANCED: testImapConnection with bidirectional context**
+async function testImapConnection(account, context = 'warmup') {
     let connection;
 
     try {
-        console.log(`🔌 Testing IMAP connection for: ${account.email}`);
+        console.log(`🔌 Testing IMAP connection for ${context}: ${account.email}`);
         const config = getImapConfig(account);
         connection = await imaps.connect(config);
 
         await connection.openBox('INBOX', false);
         const boxes = await connection.getBoxes();
 
-        console.log(`   📂 Available folders: ${Object.keys(boxes).slice(0, 5).join(', ')}${Object.keys(boxes).length > 5 ? '...' : ''}`);
-        console.log(`   📊 Total folders: ${Object.keys(boxes).length}`);
+        const folderCount = Object.keys(boxes).length;
+        const sampleFolders = Object.keys(boxes).slice(0, 5).join(', ');
+
+        console.log(`   📂 Available folders: ${sampleFolders}${folderCount > 5 ? '...' : ''}`);
+        console.log(`   📊 Total folders: ${folderCount}`);
 
         await connection.end();
 
-        console.log(`✅ IMAP connection successful for: ${account.email}`);
+        console.log(`✅ IMAP connection successful for ${context}: ${account.email}`);
         return {
             success: true,
             message: 'IMAP connection successful',
-            folders: Object.keys(boxes).length
+            folders: folderCount,
+            sampleFolders: sampleFolders
         };
 
     } catch (error) {
@@ -399,10 +399,17 @@ async function testImapConnection(account) {
         // **FIX: Provide specific solutions based on error type**
         if (error.message.includes('Authentication failed')) {
             console.error(`   🔐 AUTHENTICATION ISSUE: Check your password/app password`);
+            if (account.providerType === 'google') {
+                console.error(`   💡 For Gmail: Use App Password (16 characters), not your regular password`);
+            } else if (account.providerType === 'outlook_personal') {
+                console.error(`   💡 For Outlook Personal: Enable IMAP access in settings or use OAuth2`);
+            }
         } else if (error.message.includes('ECONNREFUSED')) {
             console.error(`   🌐 CONNECTION REFUSED: Check IMAP host/port settings`);
         } else if (error.message.includes('ETIMEDOUT')) {
             console.error(`   ⏰ TIMEOUT: Server might be down or network issue`);
+        } else if (error.message.includes('OAUTH')) {
+            console.error(`   🔑 OAUTH ISSUE: Token might be expired or invalid`);
         }
 
         if (connection) {
@@ -415,22 +422,41 @@ async function testImapConnection(account) {
         return {
             success: false,
             error: error.message,
-            details: 'Check credentials and IMAP settings'
+            details: 'Check credentials and IMAP settings',
+            accountType: detectAccountType(account)
         };
     }
 }
 
-// Keep other functions the same (replyToEmail, markEmailAsSeenAndFlagged, getMailboxStats)
-async function replyToEmail(account, options) {
-    const { sendEmail } = require('./emailSender');
-    return await sendEmail(account, {
-        ...options,
-        subject: options.subject.startsWith('Re:') ? options.subject : `Re: ${options.subject}`
-    });
+// **NEW: Bulk check email status for multiple messages**
+async function bulkCheckEmailStatus(receiver, messageIds, direction = 'WARMUP_TO_POOL') {
+    const results = {};
+
+    for (const messageId of messageIds) {
+        try {
+            const result = await checkEmailStatus(receiver, messageId, direction);
+            results[messageId] = result;
+        } catch (error) {
+            results[messageId] = {
+                success: false,
+                error: error.message,
+                exists: false,
+                deliveredInbox: false
+            };
+        }
+    }
+
+    return results;
 }
 
-async function markEmailAsSeenAndFlagged(account, messageId) {
-    // Implementation remains the same
+// **ENHANCED: markEmailAsSeenAndFlagged with bidirectional support**
+async function markEmailAsSeenAndFlagged(account, messageId, direction = 'WARMUP_TO_POOL') {
+    // Skip for pool accounts in inbound direction
+    if (direction === 'POOL_TO_WARMUP' && account.providerType) {
+        console.log(`⏩ Skipping mark as seen for pool account in inbound direction`);
+        return { success: true, skipped: true };
+    }
+
     let connection;
     try {
         const config = getImapConfig(account);
@@ -443,21 +469,41 @@ async function markEmailAsSeenAndFlagged(account, messageId) {
         if (results.length > 0) {
             const uid = results[0].attributes.uid;
             await connection.imap.addFlags(uid, ['\\Seen', '\\Flagged']);
-            console.log(`✅ Email marked as Seen + Flagged`);
+            console.log(`✅ Email marked as Seen + Flagged for ${direction}`);
+        } else {
+            console.log(`⚠️  Email not found for marking: ${messageId}`);
         }
 
         await connection.end();
         return { success: true };
     } catch (err) {
         console.error(`❌ Error marking email: ${err.message}`);
-        if (connection) await connection.end().catch(() => { });
+        if (connection) {
+            try {
+                await connection.end();
+            } catch (e) {
+                console.error('   ⚠️  Error closing connection:', e.message);
+            }
+        }
         return { success: false, error: err.message };
     }
 }
 
-async function getMailboxStats(account) {
+// Keep other functions with minor enhancements
+async function replyToEmail(account, options, direction = 'WARMUP_TO_POOL') {
+    const { sendEmail } = require('./emailSender');
+    console.log(`📧 Sending reply for ${direction}: ${account.email}`);
+
+    return await sendEmail(account, {
+        ...options,
+        subject: options.subject.startsWith('Re:') ? options.subject : `Re: ${options.subject}`
+    });
+}
+
+async function getMailboxStats(account, context = 'warmup') {
     let connection;
     try {
+        console.log(`📊 Getting mailbox stats for ${context}: ${account.email}`);
         const config = getImapConfig(account);
         connection = await imaps.connect(config);
         await connection.openBox('INBOX', false);
@@ -465,14 +511,67 @@ async function getMailboxStats(account) {
         const status = await connection.status('INBOX', { messages: true, recent: true, unseen: true });
         await connection.end();
 
+        console.log(`   Messages: ${status.messages}, Recent: ${status.recent}, Unseen: ${status.unseen}`);
+
         return {
             success: true,
             totalMessages: status.messages,
             recentMessages: status.recent,
-            unseenMessages: status.unseen
+            unseenMessages: status.unseen,
+            context: context
         };
     } catch (error) {
-        console.error(`❌ Error getting mailbox stats: ${error.message}`);
+        console.error(`❌ Error getting mailbox stats for ${account.email}: ${error.message}`);
+        if (connection) {
+            try {
+                await connection.end();
+            } catch (e) {
+                console.error('   ⚠️  Error closing connection:', e.message);
+            }
+        }
+        return {
+            success: false,
+            error: error.message,
+            context: context
+        };
+    }
+}
+
+// **NEW: Get folder statistics for better warmup analytics**
+async function getFolderStats(account) {
+    let connection;
+    try {
+        const config = getImapConfig(account);
+        connection = await imaps.connect(config);
+
+        const boxes = await connection.getBoxes();
+        const folderStats = {};
+
+        // Check main folders
+        const mainFolders = ['INBOX', 'Spam', 'Junk', 'Important', 'Sent'];
+
+        for (const folderName of mainFolders) {
+            try {
+                await connection.openBox(folderName, false);
+                const status = await connection.status(folderName, { messages: true, recent: true, unseen: true });
+                folderStats[folderName] = {
+                    total: status.messages,
+                    recent: status.recent,
+                    unseen: status.unseen
+                };
+            } catch (folderError) {
+                folderStats[folderName] = { error: folderError.message };
+            }
+        }
+
+        await connection.end();
+        return {
+            success: true,
+            folderStats: folderStats,
+            totalFolders: Object.keys(boxes).length
+        };
+    } catch (error) {
+        console.error(`❌ Error getting folder stats: ${error.message}`);
         if (connection) await connection.end().catch(() => { });
         return { success: false, error: error.message };
     }
@@ -486,5 +585,7 @@ module.exports = {
     markEmailAsSeenAndFlagged,
     testImapConnection,
     detectAccountType,
-    getMailboxStats
-}; 
+    getMailboxStats,
+    getFolderStats,
+    bulkCheckEmailStatus
+};
