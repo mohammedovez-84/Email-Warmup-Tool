@@ -516,28 +516,26 @@ const Alert = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-teal-50 w-full lg:w-[calc(100%)] xl:w-[calc(100%)] relative overflow-hidden font-sans">
+   <div className="min-h-screen bg-gray-50 w-full lg:w-[calc(100%)] xl:w-[calc(100%)] relative overflow-hidden font-sans">
       {/* Header Section */}
-      <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200/60 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 relative z-10">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-4 sm:space-y-0">
-          <div>
-            <h1 className="text-xl sm:text-3xl font-bold text-gray-900">Alerts & Notifications</h1>
-            <p className="text-gray-600 mt-1 text-sm sm:text-base">Monitor your email account performance and issues</p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              onClick={refreshData}
-              disabled={refreshing}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 disabled:opacity-50 text-sm"
-            >
-              <FiRefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Refresh</span>
-            </motion.button>
-          </div>
-        </div>
-      </div>
+      <div className="mb-8">
+  <div className="text-center px-4">
+    <div className="inline-flex items-center justify-center w-14 h-14 md:w-20 md:h-20 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl md:rounded-2xl shadow-xl mb-3 md:mb-4 mt-3">
+      <FiBell className="w-6 h-6 md:w-10 md:h-10 text-white" />
+    </div>
+    
+    <h1 className="text-2xl md:text-4xl font-bold text-gray-900 mb-2 md:mb-3 bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent">
+      Alerts & Notifications
+    </h1>
+    <p className="text-base md:text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed mb-4 md:mb-6">
+      Monitor your email account performance and security alerts
+    </p>
+  </div>
+
+    </div>
+  
+
+      
 
       {/* Stats Cards */}
       <div className="p-4 sm:p-6 lg:p-8 relative z-10">
