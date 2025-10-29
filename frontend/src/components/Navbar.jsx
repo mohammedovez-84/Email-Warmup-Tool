@@ -86,7 +86,7 @@ const Navbar = memo(() => {
     const BuyCreditsButton = memo(() => (
         <button
             onClick={() => navigate('/billing')}
-            className="flex items-center justify-center space-x-2 font-medium transition-all duration-200 
+            className="flex items-center justify-center space-x-2 font-medium transition-all duration-200
                 bg-gradient-to-r from-teal-800 to-teal-500 hover:from-teal-900 hover:to-teal-600
                 text-white shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95
                 px-3 py-2 md:px-4 md:py-2.5 rounded-lg md:rounded-xl text-xs md:text-sm font-sans"
@@ -249,7 +249,7 @@ const Navbar = memo(() => {
 
     return (
         <>
-            <nav className="fixed top-0 left-0 lg:left-64 xl:left-72 right-0 h-14 md:h-16 bg-white shadow-sm border-b border-teal-200 z-30 font-sans">
+            <nav className="fixed top-0 left-0 lg:left-64 xl:left-72 right-0 h-14 md:h-24 md:px-3 bg-white shadow-sm border-b border-teal-200 z-30 font-sans">
                 <div className="h-full px-3 md:px-4 lg:px-6">
                     <div className="flex items-center justify-between h-full">
                         {/* Left Section - Breadcrumb */}
