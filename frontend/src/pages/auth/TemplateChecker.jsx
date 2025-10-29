@@ -937,15 +937,16 @@ Best regards,
               <div className="space-y-6 md:space-y-8">
                 {/* Results Header - Improved Layout & Responsive */}
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 md:gap-6">
-                  <div className="flex items-start gap-3 md:gap-4 flex-shrink-0">
-                    <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl md:rounded-2xl flex items-center justify-center shadow-xl">
-                      <FiBarChart2 className="w-6 h-6 md:w-8 md:h-8 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h2 className="text-2xl md:text-3xl font-bold text-gray-900">Template Analysis Results</h2>
-                      <p className="text-gray-600 text-base md:text-lg mt-1 md:mt-2">Comprehensive insights and actionable recommendations</p>
-                    </div>
-                  </div>
+  <div className="flex items-start gap-3 md:gap-4 flex-shrink-0">
+    <div className="w-12 h-12 md:w-16 md:h-16 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl md:rounded-2xl flex items-center justify-center shadow-xl">
+      <FiBarChart2 className="w-6 h-6 md:w-8 md:h-8 text-white" />
+    </div>
+    <div className="flex-1 min-w-0">
+      <h2 className="text-2xl md:text-3xl font-bold text-gray-900">Template Analysis Results</h2>
+      <p className="text-gray-600 text-base md:text-lg mt-1 md:mt-2">Comprehensive insights and actionable recommendations</p>
+    </div>
+  </div>
+
                   <div className="flex gap-2 md:gap-3 flex-shrink-0">
                     <button
                       onClick={() => setActiveTab('editor')}
