@@ -1,7 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { FiPieChart, FiBarChart2, FiInfo, FiExternalLink, FiRefreshCw, FiDownload, FiMail, FiInbox, FiFilter, FiAlertTriangle, FiCheck, FiX } from 'react-icons/fi';
-import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
+import React, { useState, useEffect,} from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell,} from 'recharts';
+import { FiDownload, FiMail, FiInbox, FiAlertTriangle, FiCheck,} from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import 'react-circular-progressbar/dist/styles.css';
 
@@ -27,15 +26,17 @@ const API = {
       issues: ['High bounce rate', 'Low engagement']
     };
   },
-
-  fetchCampaignPerformance: async () => {
-    // return await fetch('/api/campaign-performance').then(res => res.json());
+  
+  fetchWarmupPerformance: async () => {
+    // return await fetch('/api/warmup-performance').then(res => res.json());
     return [
       { name: 'Monday', sent: 400, inbox: 380, spam: 20, deliverability: 95 },
       { name: 'Tuesday', sent: 450, inbox: 405, spam: 45, deliverability: 90 },
       { name: 'Wednesday', sent: 500, inbox: 450, spam: 50, deliverability: 90 },
       { name: 'Thursday', sent: 550, inbox: 495, spam: 55, deliverability: 90 },
-      { name: 'Friday', sent: 600, inbox: 540, spam: 60, deliverability: 90 }
+      { name: 'Friday', sent: 600, inbox: 540, spam: 60, deliverability: 90 },
+      { name: 'Saturday', sent: 350, inbox: 315, spam: 35, deliverability: 90 },
+      { name: 'Sunday', sent: 300, inbox: 270, spam: 30, deliverability: 90 }
     ];
   },
 
@@ -54,8 +55,8 @@ const API = {
 const HealthDistributionItem = ({ item, index }) => (
   <div key={item.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-white transition-colors duration-200">
     <div className="flex items-center space-x-3">
-      <div
-        className="w-4 h-4 rounded-full"
+      <div 
+        className="w-4 h-4 rounded-full" 
         style={{ backgroundColor: item.color }}
       />
       <span className="font-medium text-gray-700 text-sm">{item.name}</span>
@@ -63,9 +64,9 @@ const HealthDistributionItem = ({ item, index }) => (
     <div className="flex items-center space-x-2">
       <span className="text-sm font-semibold text-gray-900">{item.value}%</span>
       <div className="w-16 bg-gray-200 rounded-full h-2">
-        <div
+        <div 
           className="h-2 rounded-full transition-all duration-500"
-          style={{
+          style={{ 
             width: `${item.value}%`,
             backgroundColor: item.color
           }}
@@ -78,7 +79,7 @@ const HealthDistributionItem = ({ item, index }) => (
 // Ultra Stable Pie Chart with Smooth Initial Animation
 const UltraStablePieChart = () => {
   const [animationCompleted, setAnimationCompleted] = useState(false);
-
+  
   const pieData = [
     { name: 'Excellent', value: 40, color: '#059669' },
     { name: 'Good', value: 30, color: '#2563EB' },
@@ -92,18 +93,18 @@ const UltraStablePieChart = () => {
     cx, cy, midAngle, innerRadius, outerRadius, percent, index
   }) => {
     if (percent < 0.05) return null;
-
+    
     const RADIAN = Math.PI / 180;
     const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
     return (
-      <text
-        x={x}
-        y={y}
-        fill="white"
-        textAnchor={x > cx ? 'start' : 'end'}
+      <text 
+        x={x} 
+        y={y} 
+        fill="white" 
+        textAnchor={x > cx ? 'start' : 'end'} 
         dominantBaseline="central"
         className="text-xs font-semibold"
         fontSize={12}
@@ -145,18 +146,18 @@ const UltraStablePieChart = () => {
                 paddingAngle={1}
               >
                 {pieData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={COLORS[index % COLORS.length]}
+                  <Cell 
+                    key={`cell-${index}`} 
+                    fill={COLORS[index % COLORS.length]} 
                     stroke="#ffffff"
                     strokeWidth={1.5}
                   />
                 ))}
               </Pie>
-              <Tooltip
+              <Tooltip 
                 formatter={(value, name) => [`${value}%`, name]}
-                contentStyle={{
-                  borderRadius: '8px',
+                contentStyle={{ 
+                  borderRadius: '8px', 
                   border: '1px solid #E5E7EB',
                   boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                   fontFamily: 'inherit',
@@ -230,15 +231,15 @@ const AnalyticsStatisticsCards = ({ emailStats, deliveryRate, inboxRate, spamRat
         >
           {/* Green gradient line at the bottom */}
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-500 to-teal-600 rounded-b-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
+          
           {/* Very subtle green tint overlay (5% opacity) */}
           <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-teal-500 to-teal-600 opacity-0 group-hover:opacity-5 transition-opacity duration-300"></div>
-
+          
           {/* Icon with scaling effect */}
           <div className={`w-12 h-12 sm:w-14 sm:h-14 ${card.bgColor} rounded-xl flex items-center justify-center text-xl sm:text-2xl group-hover:scale-110 transition-transform duration-300 relative z-10`}>
             <card.icon className={card.color} />
           </div>
-
+          
           {/* Content */}
           <div className="relative z-10">
             <h4 className="text-sm text-gray-600 font-medium mb-1">{card.label}</h4>
@@ -269,17 +270,20 @@ const AnalyticsDashboard = () => {
     issues: ['High bounce rate', 'Low engagement']
   });
 
-  const [campaignPerformance, setCampaignPerformance] = useState([
+  const [warmupPerformance, setWarmupPerformance] = useState([
     { name: 'Monday', sent: 400, inbox: 380, spam: 20, deliverability: 95 },
     { name: 'Tuesday', sent: 450, inbox: 405, spam: 45, deliverability: 90 },
     { name: 'Wednesday', sent: 500, inbox: 450, spam: 50, deliverability: 90 },
     { name: 'Thursday', sent: 550, inbox: 495, spam: 55, deliverability: 90 },
-    { name: 'Friday', sent: 600, inbox: 540, spam: 60, deliverability: 90 }
+    { name: 'Friday', sent: 600, inbox: 540, spam: 60, deliverability: 90 },
+      { name: 'Saturday', sent: 350, inbox: 315, spam: 35, deliverability: 90 },
+  { name: 'Sunday', sent: 300, inbox: 270, spam: 30, deliverability: 90 }
   ]);
 
   const [currentTime, setCurrentTime] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
   const [isExporting, setIsExporting] = useState(false);
+  const [selectedTimeRange, setSelectedTimeRange] = useState('7');
 
   const [selectedAccount, setSelectedAccount] = useState({
     id: 1,
@@ -316,12 +320,12 @@ const AnalyticsDashboard = () => {
         const [stats, health, performance] = await Promise.all([
           API.fetchEmailStats(),
           API.fetchAccountHealth(),
-          API.fetchCampaignPerformance()
+          API.fetchWarmupPerformance()
         ]);
        
         setEmailStats(stats);
         setAccountHealth(health);
-        setCampaignPerformance(performance);
+        setWarmupPerformance(performance);
       } catch (error) {
         console.error('Failed to load data:', error);
       }
@@ -343,33 +347,41 @@ const AnalyticsDashboard = () => {
     ];
   };
 
-  const handleRefreshData = () => {
-    // API PLACEHOLDER - Refresh data from API
-    /*
-    const refreshData = async () => {
-      try {
-        const [stats, health, performance] = await Promise.all([
-          API.fetchEmailStats(),
-          API.fetchAccountHealth(),
-          API.fetchCampaignPerformance()
-        ]);
-       
-        setEmailStats(stats);
-        setAccountHealth(health);
-        setCampaignPerformance(performance);
-        setSelectedAccount(prev => ({
-          ...prev,
-          lastActive: new Date().toISOString()
-        }));
-      } catch (error) {
-        console.error('Failed to refresh data:', error);
-      }
-    };
-   
-    refreshData();
-    */
-
-    // Temporary mock data refresh (remove when API is ready)
+const generateTimeRangeData = (range) => {
+  if (range === '7') {
+    return [
+      { name: 'Mon', sent: 400, inbox: 380, spam: 20, deliverability: 95 },
+      { name: 'Tue', sent: 450, inbox: 405, spam: 45, deliverability: 90 },
+      { name: 'Wed', sent: 500, inbox: 450, spam: 50, deliverability: 90 },
+      { name: 'Thu', sent: 550, inbox: 495, spam: 55, deliverability: 90 },
+      { name: 'Fri', sent: 600, inbox: 540, spam: 60, deliverability: 90 },
+      { name: 'Sat', sent: 350, inbox: 315, spam: 35, deliverability: 90 },
+      { name: 'Sun', sent: 300, inbox: 270, spam: 30, deliverability: 90 }
+    ];
+  } else if (range === '30') {
+    return [
+      { name: 'Week 1', sent: 2800, inbox: 2520, spam: 280, deliverability: 90 },
+      { name: 'Week 2', sent: 3150, inbox: 2835, spam: 315, deliverability: 90 },
+      { name: 'Week 3', sent: 3500, inbox: 3150, spam: 350, deliverability: 90 },
+      { name: 'Week 4', sent: 3850, inbox: 3465, spam: 385, deliverability: 90 }
+    ];
+  } else if (range === '90') {
+    return [
+      { name: 'Month 1', sent: 11200, inbox: 10080, spam: 1120, deliverability: 90 },
+      { name: 'Month 2', sent: 12600, inbox: 11340, spam: 1260, deliverability: 90 },
+      { name: 'Month 3', sent: 14000, inbox: 12600, spam: 1400, deliverability: 90 }
+    ];
+  } else {
+    return [
+      { name: 'Mon', sent: 400, inbox: 380, spam: 20, deliverability: 95 },
+      { name: 'Tue', sent: 450, inbox: 405, spam: 45, deliverability: 90 },
+      { name: 'Wed', sent: 500, inbox: 450, spam: 50, deliverability: 90 },
+      { name: 'Thu', sent: 550, inbox: 495, spam: 55, deliverability: 90 },
+      { name: 'Fri', sent: 600, inbox: 540, spam: 60, deliverability: 90 },
+      { name: 'Sat', sent: 350, inbox: 315, spam: 35, deliverability: 90 },
+      { name: 'Sun', sent: 300, inbox: 270, spam: 30, deliverability: 90 }
+    ];
+  }
     const newEmailStats = {
       sent: Math.floor(1000 + Math.random() * 500),
       delivered: Math.floor(900 + Math.random() * 400),
@@ -379,11 +391,11 @@ const AnalyticsDashboard = () => {
     };
 
     setEmailStats(newEmailStats);
-
+    
     setAccountScores({
-      1: {
-        score: Math.floor(70 + Math.random() * 30),
-        reputation: Math.random() > 0.3 ? 'good' : 'excellent'
+      1: { 
+        score: Math.floor(70 + Math.random() * 30), 
+        reputation: Math.random() > 0.3 ? 'good' : 'excellent' 
       }
     });
 
@@ -401,7 +413,7 @@ const AnalyticsDashboard = () => {
       /*
       await API.exportReport({
         emailStats,
-        campaignPerformance,
+        warmupPerformance,
         accountData: selectedAccount,
         accountScore: accountScores[1],
         timestamp: new Date().toISOString()
@@ -413,7 +425,7 @@ const AnalyticsDashboard = () => {
 
       const exportData = {
         emailStats,
-        campaignPerformance,
+        warmupPerformance,
         accountData: selectedAccount,
         accountScore: accountScores[1],
         timestamp: new Date().toISOString()
@@ -445,21 +457,21 @@ const AnalyticsDashboard = () => {
   const spamRate = ((emailStats.spam / emailStats.delivered) * 100).toFixed(1);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 text-gray-900 flex justify-center items-start p-4 sm:p-6 font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
+    <div className="min-h-screen text-gray-900 flex justify-center items-start p-4 sm:p-6 font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
       {/* Changed: Removed max-w-7xl mx-auto */}
       <div className="w-full">
         {/* Content */}
         {activeTab === 'overview' && (
           <div className="space-y-6 sm:space-y-8">
             {/* Email Warmup Stats Cards - Now at the top */}
-            <AnalyticsStatisticsCards
+            <AnalyticsStatisticsCards 
               emailStats={emailStats}
               deliveryRate={deliveryRate}
               inboxRate={inboxRate}
               spamRate={spamRate}
             />
 
-            {/* Email Health Pie Chart Section - Fixed */}
+            
             {/* Changed: Added w-full */}
             <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
               <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
@@ -473,24 +485,31 @@ const AnalyticsDashboard = () => {
               </div>
             </div>
 
-            {/* Campaign Performance Section */}
+            
             {/* Changed: Added w-full */}
             <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
               <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                   <h2 className="text-xl sm:text-2xl font-bold text-gray-700 flex items-center gap-2 sm:gap-3">
-                    <i className="fas fa-trending-up text-teal-600 text-lg sm:text-xl"></i>
-                    Daily Warmup Performance
-                  </h2>
+  <i className="fas fa-trending-up text-teal-600 text-lg sm:text-xl"></i>
+  {selectedTimeRange === '7' && 'Daily Warmup Performance'}
+  {selectedTimeRange === '30' && 'Weekly Warmup Performance'}
+  {selectedTimeRange === '90' && 'Monthly Warmup Performance'}
+</h2>
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <select className="px-3 sm:px-4 py-2 border border-gray-300 rounded-lg sm:rounded-xl bg-white text-gray-700 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all text-xs sm:text-sm">
-                      <option>Last 7 days</option>
-                      <option>Last 30 days</option>
-                      <option>Last 90 days</option>
-                    </select>
-                    <button
-                      className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 border-none rounded-lg sm:rounded-xl font-semibold transition-all duration-300 bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md hover:from-teal-700 hover:to-teal-800 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer text-xs sm:text-sm ${isExporting ? 'opacity-70 cursor-not-allowed' : ''
-                        }`}
+                    <select 
+  value={selectedTimeRange}
+  onChange={(e) => setSelectedTimeRange(e.target.value)}
+  className="px-3 sm:px-4 py-2 border border-gray-300 rounded-lg sm:rounded-xl bg-white text-gray-700 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all text-xs sm:text-sm"
+>
+  <option value="7">Last 7 days</option>
+  <option value="30">Last 30 days</option>
+  <option value="90">Last 90 days</option>
+</select>
+                    <button 
+                      className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 border-none rounded-lg sm:rounded-xl font-semibold transition-all duration-300 bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md hover:from-teal-700 hover:to-teal-800 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer text-xs sm:text-sm ${
+                        isExporting ? 'opacity-70 cursor-not-allowed' : ''
+                      }`}
                       onClick={handleExportReport}
                       disabled={isExporting}
                     >
@@ -500,29 +519,30 @@ const AnalyticsDashboard = () => {
                   </div>
                 </div>
               </div>
-
+              
               <div className="p-4 sm:p-6 lg:p-8">
                 <div className="h-64 sm:h-72 lg:h-80">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
-                      data={campaignPerformance}
-                      margin={{
-                        top: 20,
-                        right: 10,
-                        left: 10,
-                        bottom: 25
+  data={generateTimeRangeData(selectedTimeRange)}
+  margin={{ 
+
+                        top: 20, 
+                        right: 10, 
+                        left: 10, 
+                        bottom: 25 
                       }}
                     >
-                      <CartesianGrid
-                        strokeDasharray="3 3"
-                        vertical={false}
+                      <CartesianGrid 
+                        strokeDasharray="3 3" 
+                        vertical={false} 
                         stroke="#f0f0f0"
                         strokeWidth={0.5}
                       />
-
-                      <XAxis
-                        dataKey="name"
-                        tick={{
+                      
+                      <XAxis 
+                        dataKey="name" 
+                        tick={{ 
                           fontSize: 12,
                           fill: '#6B7280',
                           fontWeight: 500,
@@ -531,9 +551,9 @@ const AnalyticsDashboard = () => {
                         tickLine={{ stroke: '#E5E7EB' }}
                         tickMargin={10}
                       />
-
-                      <YAxis
-                        tick={{
+                      
+                      <YAxis 
+                        tick={{ 
                           fontSize: 12,
                           fill: '#6B7280',
                           fontWeight: 500,
@@ -543,8 +563,8 @@ const AnalyticsDashboard = () => {
                         tickMargin={10}
                         tickFormatter={(value) => value.toLocaleString()}
                       />
-
-                      <Tooltip
+                      
+                      <Tooltip 
                         contentStyle={{
                           borderRadius: '12px',
                           border: '1px solid #E5E7EB',
@@ -556,15 +576,15 @@ const AnalyticsDashboard = () => {
                         }}
                         cursor={{ fill: 'rgba(243, 244, 246, 0.5)' }}
                         formatter={(value, name) => [
-                          <span key="value" className="font-semibold text-gray-900">{value.toLocaleString()}</span>,
+                          <span key="value" className="font-semibold text-gray-900">{value.toLocaleString()}</span>, 
                           name
                         ]}
                         labelFormatter={(label) => (
                           <span className="font-semibold text-gray-900">{label}</span>
                         )}
                       />
-
-                      <Legend
+                      
+                      <Legend 
                         verticalAlign="top"
                         height={36}
                         iconSize={12}
@@ -578,42 +598,46 @@ const AnalyticsDashboard = () => {
                           <span className="text-gray-700 text-sm font-medium">{value}</span>
                         )}
                       />
+  <Bar 
+  dataKey="inbox" 
+  name="Landed in Inbox"
+  radius={[4, 4, 0, 0]}  
+  fill="url(#inboxGradient)"
+  animationBegin={0}
+  animationDuration={400} 
+  animationEasing="ease-out"
+  barSize={28}
+  minPointSize={2}
+>
+  {generateTimeRangeData(selectedTimeRange).map((entry, index) => (  
+    <Cell 
+      key={`inbox-${selectedTimeRange}-${index}`} 
+      fill="url(#inboxGradient)"
+      opacity={0.9}
+    />
+  ))}
+</Bar>
 
-                      <Bar
-                        dataKey="inbox"
-                        name="Landed in Inbox"
-                        radius={[6, 6, 0, 0]}
-                        fill="url(#inboxGradient)"
-                        animationBegin={0}
-                        animationDuration={1500}
-                        animationEasing="ease-out"
-                      >
-                        {campaignPerformance.map((entry, index) => (
-                          <Cell
-                            key={`inbox-${index}`}
-                            fill="url(#inboxGradient)"
-                            opacity={0.9}
-                          />
-                        ))}
-                      </Bar>
-
-                      <Bar
-                        dataKey="spam"
-                        name="Landed in Spam"
-                        radius={[6, 6, 0, 0]}
-                        fill="url(#spamGradient)"
-                        animationBegin={400}
-                        animationDuration={1500}
-                        animationEasing="ease-out"
-                      >
-                        {campaignPerformance.map((entry, index) => (
-                          <Cell
-                            key={`spam-${index}`}
-                            fill="url(#spamGradient)"
-                            opacity={0.9}
-                          />
-                        ))}
-                      </Bar>
+<Bar 
+  dataKey="spam" 
+  name="Landed in Spam"
+  radius={[4, 4, 0, 0]}  
+  fill="url(#spamGradient)"
+  animationBegin={150} 
+  animationDuration={400} 
+  animationEasing="ease-out"
+  barSize={28}
+  minPointSize={2} 
+> {/* ADD THIS CLOSING ANGLE BRACKET */}
+  {generateTimeRangeData(selectedTimeRange).map((entry, index) => (  
+    <Cell 
+      key={`spam-${selectedTimeRange}-${index}`} 
+      fill="url(#spamGradient)"
+      opacity={0.9}
+    />
+  ))}
+</Bar>
+                      
 
                       <defs>
                         <linearGradient id="inboxGradient" x1="0" y1="0" x2="0" y2="1">
@@ -627,46 +651,8 @@ const AnalyticsDashboard = () => {
                       </defs>
                     </BarChart>
                   </ResponsiveContainer>
-                </div>
-
-                {/* Performance Summary */}
-                <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-gray-200">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
-                    <div className="text-center p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl border border-gray-200">
-                      <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-1">
-                        {campaignPerformance.reduce((sum, day) => sum + day.inbox, 0).toLocaleString()}
-                      </div>
-                      <div className="text-xs sm:text-sm font-semibold text-teal-600 flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-teal-500 mr-2"></div>
-                        Total Inbox
-                      </div>
-                    </div>
-
-                    <div className="text-center p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl border border-gray-200">
-                      <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-1">
-                        {campaignPerformance.reduce((sum, day) => sum + day.spam, 0).toLocaleString()}
-                      </div>
-                      <div className="text-xs sm:text-sm font-semibold text-red-600 flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-red-500 mr-2"></div>
-                        Total Spam
-                      </div>
-                    </div>
-
-                    <div className="text-center p-3 sm:p-4 bg-gray-50 rounded-lg sm:rounded-xl border border-gray-200">
-                      <div className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 mb-1">
-                        {Math.round(
-                          (campaignPerformance.reduce((sum, day) => sum + day.inbox, 0) /
-                            campaignPerformance.reduce((sum, day) => sum + day.sent, 0)) * 100
-                        )}%
-                      </div>
-                      <div className="text-xs sm:text-sm font-semibold text-blue-600 flex items-center justify-center">
-                        <div className="w-2 h-2 rounded-full bg-blue-500 mr-2"></div>
-                        Avg. Inbox Rate
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+                </div>              
+             </div>
             </div>
           </div>
         )}
