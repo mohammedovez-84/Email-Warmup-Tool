@@ -20,7 +20,6 @@ import GoogleConnect from './GoogleConnect';
 import MicrosoftConnect from './MicrosoftConnect';
 import SMTPConnect from './SMTPConnect';
 import WarmupReport from './WarmupReport';
-
 const API_BASE_URL = 'http://localhost:5000';
 
 const Dashboard = ({ isSidebarCollapsed }) => {
@@ -245,17 +244,29 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         }
     }, [fetchWarmupEmails, formatEmailAccount]);
 
-    // Enhanced settings panel with proper positioning
+    // FIXED: Enhanced settings panel with proper positioning that stays within viewport
     const handleSettingsClick = useCallback((email, event) => {
         const button = event.currentTarget;
         const buttonRect = button.getBoundingClientRect();
+        const panelHeight = 200; // Approximate height of settings panel
+        const panelWidth = 256; // Width of settings panel
 
         if (window.innerWidth >= 768) {
-            // Desktop positioning - fixed to avoid layout shifts
-            setSettingsPanelPosition({
-                top: buttonRect.bottom + window.scrollY,
-                right: window.innerWidth - buttonRect.right
-            });
+            // Desktop positioning - ensure panel stays within viewport
+            let top = buttonRect.bottom + window.scrollY;
+            let right = window.innerWidth - buttonRect.right;
+
+            // Check if panel would go below viewport bottom
+            if (top + panelHeight > window.innerHeight + window.scrollY) {
+                top = buttonRect.top + window.scrollY - panelHeight;
+            }
+
+            // Check if panel would go beyond left edge
+            if (right + panelWidth > window.innerWidth) {
+                right = Math.max(10, window.innerWidth - panelWidth - 10);
+            }
+
+            setSettingsPanelPosition({ top, right });
         } else {
             // Mobile - just set the email
             setSettingsPanelPosition({
@@ -1303,7 +1314,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                                 onChange={(e) =>
                                     setSettings(prev => ({
                                         ...prev,
-                                        customFolderName: e.target.checked ? "Custom Folder" : "",
+                                        customFolderName: e.target.checked ? " " : "",
                                     }))
                                 }
                                 disabled={saving}
@@ -1360,7 +1371,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         );
     };
 
-    // Enhanced Mobile Settings Menu - FIXED POSITIONING
+    // FIXED: Enhanced Mobile Settings Menu - Better positioning
     const MobileSettingsMenu = () => {
         if (!showSettingsPanel || !selectedEmail || !isMobile) return null;
 
@@ -1370,9 +1381,9 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     initial={{ y: '100%' }}
                     animate={{ y: 0 }}
                     exit={{ y: '100%' }}
-                    className="bg-white rounded-t-2xl w-full max-w-sm mx-auto shadow-2xl border border-gray-200"
+                    className="bg-white rounded-t-2xl w-full max-w-sm mx-auto shadow-2xl border border-teal-200 max-h-[80vh] overflow-hidden"
                 >
-                    <div className="flex justify-between items-center p-4 border-b border-gray-200">
+                    <div className="flex justify-between items-center p-4 border-b border-teal-200 sticky top-0 bg-white">
                         <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-gray-900 text-sm">Account Settings</h3>
                             <p className="text-gray-500 text-xs mt-1 truncate">{selectedEmail.address}</p>
@@ -1409,7 +1420,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
         );
     };
 
-    // Enhanced Desktop Settings Panel - FIXED POSITIONING AND STYLING
+    // FIXED: Enhanced Desktop Settings Panel - SMART POSITIONING that stays within viewport
     const DesktopSettingsPanel = () => {
         if (!showSettingsPanel || !selectedEmail || isMobile) return null;
 
@@ -1428,12 +1439,12 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                     exit={{ opacity: 0, scale: 0.95, y: -10 }}
                     className="fixed bg-white rounded-xl shadow-2xl border border-gray-200 z-50 w-64"
                     style={{
-                        top: `${settingsPanelPosition.top}px`,
-                        right: `${settingsPanelPosition.right}px`,
+                        top: `${Math.max(10, Math.min(settingsPanelPosition.top, window.innerHeight - 250))}px`,
+                        right: `${Math.max(10, Math.min(settingsPanelPosition.right, window.innerWidth - 270))}px`,
                         transformOrigin: 'top right'
                     }}
                 >
-                    <div className="flex justify-between items-center p-4 border-b border-gray-200">
+                    <div className="flex justify-between items-center p-4 border-b border-teal-200">
                         <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-gray-900 text-sm">Account Settings</h3>
                             <p className="text-gray-500 text-xs mt-1 truncate">{selectedEmail.address}</p>
@@ -1476,10 +1487,10 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-6">
                 <div className="w-full lg:max-w-md">
                     <div className="relative">
-                        <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                        <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-indigo-400 w-4 h-4" />
                         <input
                             type="text"
-                            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all bg-white text-sm"
+                            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all bg-teal text-sm"
                             placeholder="Search emails..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
