@@ -11,26 +11,31 @@ const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
 const EmailPool = require('../models/EmailPool');
 const { buildSenderConfig, getSenderType } = require('../utils/senderConfig');
+const { sequelize } = require('../config/db');
 
-// Rate limiting configuration
+// Enhanced Rate limiting configuration for bidirectional flow
 const RATE_LIMIT_CONFIG = {
     minDelayBetweenEmails: 15 * 60 * 1000,
     maxEmailsPerHour: 8,
     maxEmailsPerDay: 20,
     maxConcurrentJobs: 2,
-    dailyResetTime: '00:00'
+    dailyResetTime: '00:00',
+    // Pool-specific limits
+    POOL_MAX_DAILY: 50,
+    POOL_START_DAILY: 10
 };
 
-// Track rate limiting state
+// Enhanced rate limiting state with pool tracking
 const rateLimitState = {
     hourlyCounts: new Map(),
     dailyCounts: new Map(),
+    poolDailyCounts: new Map(), // Track pool account usage separately
     lastReset: Date.now(),
     lastDailyReset: new Date().setHours(0, 0, 0, 0),
     concurrentJobs: 0
 };
 
-// Reset hourly counts every hour
+// Reset counts every hour
 setInterval(() => {
     rateLimitState.hourlyCounts.clear();
     rateLimitState.lastReset = Date.now();
@@ -39,6 +44,7 @@ setInterval(() => {
 // Reset daily counts every 24 hours
 setInterval(() => {
     rateLimitState.dailyCounts.clear();
+    rateLimitState.poolDailyCounts.clear();
     rateLimitState.lastDailyReset = new Date().setHours(0, 0, 0, 0);
 }, 24 * 60 * 60 * 1000);
 
@@ -48,31 +54,64 @@ function extractNameFromEmail(email) {
     return localPart.split(/[._-]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
-function checkRateLimit(senderEmail, isCoordinatedJob = false) {
+// ENHANCED: Check rate limits with pool account support
+function checkRateLimit(senderEmail, senderType = 'warmup', isCoordinatedJob = false) {
     if (!isCoordinatedJob) {
-        const hourlyCount = rateLimitState.hourlyCounts.get(senderEmail) || 0;
-        const dailyCount = rateLimitState.dailyCounts.get(senderEmail) || 0;
+        if (senderType === 'pool') {
+            // Pool account rate limiting
+            const dailyCount = rateLimitState.poolDailyCounts.get(senderEmail) || 0;
+            if (dailyCount >= RATE_LIMIT_CONFIG.POOL_MAX_DAILY) {
+                throw new Error(`Pool daily rate limit exceeded for ${senderEmail}: ${dailyCount}/${RATE_LIMIT_CONFIG.POOL_MAX_DAILY}`);
+            }
+        } else {
+            // Warmup account rate limiting
+            const hourlyCount = rateLimitState.hourlyCounts.get(senderEmail) || 0;
+            const dailyCount = rateLimitState.dailyCounts.get(senderEmail) || 0;
 
-        if (hourlyCount >= RATE_LIMIT_CONFIG.maxEmailsPerHour) {
-            throw new Error(`Hourly rate limit exceeded for ${senderEmail}: ${hourlyCount}/${RATE_LIMIT_CONFIG.maxEmailsPerHour}`);
-        }
-        if (dailyCount >= RATE_LIMIT_CONFIG.maxEmailsPerDay) {
-            throw new Error(`Daily rate limit exceeded for ${senderEmail}: ${dailyCount}/${RATE_LIMIT_CONFIG.maxEmailsPerDay}`);
+            if (hourlyCount >= RATE_LIMIT_CONFIG.maxEmailsPerHour) {
+                throw new Error(`Hourly rate limit exceeded for ${senderEmail}: ${hourlyCount}/${RATE_LIMIT_CONFIG.maxEmailsPerHour}`);
+            }
+            if (dailyCount >= RATE_LIMIT_CONFIG.maxEmailsPerDay) {
+                throw new Error(`Daily rate limit exceeded for ${senderEmail}: ${dailyCount}/${RATE_LIMIT_CONFIG.maxEmailsPerDay}`);
+            }
         }
     }
     return true;
 }
 
-function updateRateLimit(senderEmail, isCoordinatedJob = false) {
+// ENHANCED: Update rate limits with pool account support
+function updateRateLimit(senderEmail, senderType = 'warmup', isCoordinatedJob = false) {
     if (!isCoordinatedJob) {
-        const hourlyCount = rateLimitState.hourlyCounts.get(senderEmail) || 0;
-        const dailyCount = rateLimitState.dailyCounts.get(senderEmail) || 0;
-        rateLimitState.hourlyCounts.set(senderEmail, hourlyCount + 1);
-        rateLimitState.dailyCounts.set(senderEmail, dailyCount + 1);
+        if (senderType === 'pool') {
+            const dailyCount = rateLimitState.poolDailyCounts.get(senderEmail) || 0;
+            rateLimitState.poolDailyCounts.set(senderEmail, dailyCount + 1);
+        } else {
+            const hourlyCount = rateLimitState.hourlyCounts.get(senderEmail) || 0;
+            const dailyCount = rateLimitState.dailyCounts.get(senderEmail) || 0;
+            rateLimitState.hourlyCounts.set(senderEmail, hourlyCount + 1);
+            rateLimitState.dailyCounts.set(senderEmail, dailyCount + 1);
+        }
     }
 }
 
+// ENHANCED: Compute emails with pool account support
 async function computeEmailsToSend(account) {
+    // Handle pool accounts differently
+    if (account.providerType || account.isActive !== undefined) {
+        // This is likely a pool account
+        const currentSent = account.currentDaySent || 0;
+        const maxAllowed = account.maxEmailsPerDay || RATE_LIMIT_CONFIG.POOL_MAX_DAILY;
+        const remaining = Math.max(0, maxAllowed - currentSent);
+
+        console.log(`📊 Pool capacity for ${account.email}:`);
+        console.log(`   Current sent: ${currentSent}`);
+        console.log(`   Max allowed: ${maxAllowed}`);
+        console.log(`   Remaining capacity: ${remaining}`);
+
+        return remaining;
+    }
+
+    // Original warmup account logic
     const warmupDayCount = account.warmupDayCount || 0;
     const startEmailsPerDay = account.startEmailsPerDay || 3;
     const increaseEmailsPerDay = account.increaseEmailsPerDay || 3;
@@ -95,13 +134,9 @@ async function computeEmailsToSend(account) {
 
 async function computeReplyRate(account) {
     const configuredReplyRate = account.replyRate || 0.25;
-
     console.log(`📨 Reply rate calculation for ${account.email}:`);
     console.log(`   configuredReplyRate from DB: ${configuredReplyRate}`);
-
-    // Always use the database value, capped at 100%
     const finalRate = Math.min(configuredReplyRate, 1.0);
-
     console.log(`   ✅ Final reply rate: ${(finalRate * 100).toFixed(1)}%`);
     return finalRate;
 }
@@ -127,7 +162,6 @@ async function getAccountFromDatabase(email) {
     }
 }
 
-// **KEEP ONLY THIS VERSION OF getFreshAccountData**
 async function getFreshAccountData(account) {
     try {
         if (!account || !account.email) {
@@ -194,16 +228,89 @@ function getReceiverTypeFromModel(receiver) {
     return getSenderType(receiver);
 }
 
-async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isScheduledReply = false, isCoordinatedJob = false, isInitialEmail = false) {
+// NEW: Check if pool account can send more emails
+async function canPoolSendMore(poolAccount) {
+    try {
+        // Refresh pool account data to get current counts
+        const freshPool = await getFreshAccountData(poolAccount);
+        if (!freshPool) return false;
+
+        const today = new Date().toDateString();
+
+        // Reset if new day
+        if (freshPool.lastResetDate && new Date(freshPool.lastResetDate).toDateString() !== today) {
+            console.log(`🔄 Resetting daily count for pool: ${freshPool.email}`);
+            await resetPoolDailyCount(freshPool.email);
+            return true; // Reset to 0, so can send
+        }
+
+        const currentSent = freshPool.currentDaySent || 0;
+        const maxAllowed = freshPool.maxEmailsPerDay || RATE_LIMIT_CONFIG.POOL_MAX_DAILY;
+
+        const canSend = currentSent < maxAllowed;
+
+        if (!canSend) {
+            console.log(`⏩ Pool ${freshPool.email} at daily limit: ${currentSent}/${maxAllowed}`);
+        }
+
+        return canSend;
+    } catch (error) {
+        console.error(`❌ Error checking pool capacity for ${poolAccount.email}:`, error);
+        return false;
+    }
+}
+
+// NEW: Update pool account sent count
+async function updatePoolSentCount(poolEmail) {
+    try {
+        await EmailPool.update(
+            {
+                currentDaySent: sequelize.literal('currentDaySent + 1'),
+                lastResetDate: new Date()
+            },
+            { where: { email: poolEmail } }
+        );
+        console.log(`📈 Updated pool sent count for: ${poolEmail}`);
+    } catch (error) {
+        console.error(`❌ Error updating pool sent count for ${poolEmail}:`, error);
+    }
+}
+
+// NEW: Reset pool daily count
+async function resetPoolDailyCount(poolEmail) {
+    try {
+        await EmailPool.update(
+            {
+                currentDaySent: 0,
+                lastResetDate: new Date()
+            },
+            { where: { email: poolEmail } }
+        );
+        console.log(`🔄 Reset daily count for pool: ${poolEmail}`);
+    } catch (error) {
+        console.error(`❌ Error resetting pool daily count for ${poolEmail}:`, error);
+    }
+}
+
+async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isScheduledReply = false, isCoordinatedJob = false, isInitialEmail = false, direction = 'WARMUP_TO_POOL') {
     let emailMetric = null;
     let messageId = null;
 
     try {
-        console.log(`📧 Starting warmup: ${senderConfig.email} → ${receiver.email} [${isInitialEmail ? 'INITIAL' : 'REPLY'}]`);
+        console.log(`📧 Starting ${direction}: ${senderConfig.email} → ${receiver.email} [${isInitialEmail ? 'INITIAL' : 'REPLY'}]`);
 
-        // Check rate limits for non-coordinated jobs
+        // Determine sender type for rate limiting
+        const senderType = direction === 'POOL_TO_WARMUP' ? 'pool' : 'warmup';
+        console.log(`   Sender type: ${senderType}, Coordinated: ${isCoordinatedJob}`);
+
+        // Check rate limits with sender type support
         if (!isCoordinatedJob) {
-            checkRateLimit(senderConfig.email, isCoordinatedJob);
+            checkRateLimit(senderConfig.email, senderType, isCoordinatedJob);
+        }
+
+        // For pool accounts, check database capacity
+        if (senderType === 'pool' && !await canPoolSendMore(senderConfig)) {
+            throw new Error(`Pool account ${senderConfig.email} has reached daily limit`);
         }
 
         const senderName = extractNameFromEmail(senderConfig.email);
@@ -226,32 +333,35 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
             html: html.trim()
         });
 
-        if (!sendResult.success) {
-            throw new Error(`Email sending failed: ${sendResult.error}`);
-        }
-
         messageId = sendResult.messageId;
 
-        // Update rate limit for non-coordinated jobs
+        // Update rate limits with sender type support
         if (!isCoordinatedJob) {
-            updateRateLimit(senderConfig.email, isCoordinatedJob);
+            updateRateLimit(senderConfig.email, senderType, isCoordinatedJob);
         }
 
-        // Create email metric
+        // For pool accounts, update database count
+        if (senderType === 'pool') {
+            await updatePoolSentCount(senderConfig.email);
+        }
+
+        // Create email metric with direction information
         emailMetric = await EmailMetric.create({
             senderEmail: senderConfig.email,
-            senderType: senderConfig.type || getSenderTypeFromModel(receiver),
+            senderType: senderType,
             receiverEmail: receiver.email,
             receiverType: getReceiverTypeFromModel(receiver),
             messageId: messageId,
             subject: subject,
             sentAt: new Date(),
-            deliveredInbox: sendResult.deliveredInbox || false, // Use the flag from sendResult
+            deliveredInbox: sendResult.deliveredInbox || false,
             replied: false,
             warmupDay: warmupDay,
             replyRate: replyRate,
             emailType: isInitialEmail ? 'warmup_send' : 'warmup_reply',
-            industry: industry
+            industry: industry,
+            isCoordinated: isCoordinatedJob,
+            direction: direction
         });
 
         // Skip IMAP check for Graph API emails or if explicitly skipped
@@ -291,7 +401,7 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
         }
 
         // Handle automatic replies based on reply rate (only for initial emails, not replies)
-        if (isInitialEmail && !isScheduledReply) {
+        if (isInitialEmail && !isScheduledReply && direction === 'WARMUP_TO_POOL') {
             const shouldReply = Math.random() < replyRate;
             if (shouldReply) {
                 console.log(`🔄 Processing reply (${(replyRate * 100).toFixed(1)}% rate)`);
@@ -306,8 +416,11 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
             status: 'completed'
         }, { where: { id: emailMetric.id } });
 
+        console.log(`✅ ${direction} email completed: ${senderConfig.email} → ${receiver.email}`);
+
     } catch (error) {
         console.error(`❌ Error in warmupSingleEmail:`, error);
+
         if (emailMetric) {
             await EmailMetric.update({
                 error: error.message.substring(0, 500),
@@ -318,11 +431,11 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
         throw error;
     }
 }
+
 async function processAutomaticReply(senderConfig, originalReceiver, originalEmail, originalMessageId) {
     try {
         console.log(`🤖 Generating reply from ${originalReceiver.email} to ${senderConfig.email}`);
 
-        // **USE ORIGINAL SENDER INSTEAD OF RECEIVER - SIMPLER APPROACH**
         const aiReply = await generateReplyWithFallback(originalEmail);
 
         if (aiReply && aiReply.reply_content) {
@@ -331,7 +444,7 @@ async function processAutomaticReply(senderConfig, originalReceiver, originalEma
 
             await delay(10000);
 
-            // **FIX: Get fresh account data from database for the replier**
+            // Get fresh account data from database for the replier
             const freshReplierAccount = await getFreshAccountData({ email: senderConfig.email });
 
             if (!freshReplierAccount) {
@@ -346,7 +459,7 @@ async function processAutomaticReply(senderConfig, originalReceiver, originalEma
                 hasOAuth2: !!(freshReplierAccount.access_token || freshReplierAccount.accessToken)
             });
 
-            // **FIX: Pass the RAW ACCOUNT DATA to maybeReply, not the built config**
+            // Pass the RAW ACCOUNT DATA to maybeReply, not the built config
             const replyResult = await maybeReply(freshReplierAccount, {
                 to: originalReceiver.email, // Reply TO the original receiver
                 subject: replySubject,
@@ -374,27 +487,6 @@ async function processAutomaticReply(senderConfig, originalReceiver, originalEma
         }
     } catch (replyError) {
         console.error(`❌ Reply error in processAutomaticReply:`, replyError.message);
-    }
-}
-
-
-
-async function markEmailAsSeenAndFlagged(senderConfig, messageId) {
-    try {
-        const imaps = require('imap-simple');
-        const config = getImapConfig(senderConfig);
-        const connection = await imaps.connect(config);
-        await connection.openBox('INBOX', false);
-        const searchCriteria = [['HEADER', 'Message-ID', messageId]];
-        const results = await connection.search(searchCriteria, { bodies: [''], struct: true });
-        if (results.length > 0) {
-            const uid = results[0].attributes.uid;
-            await connection.imap.addFlags(uid, ['\\Seen', '\\Flagged']);
-            console.log(`✅ Sender side reply marked as Seen + Flagged`);
-        }
-        await connection.end();
-    } catch (err) {
-        console.error(`❌ Error marking sender reply: ${err.message}`);
     }
 }
 
@@ -429,10 +521,12 @@ function generateFallbackReply(originalEmail) {
     return { reply_content: randomReply, is_fallback: true };
 }
 
+// ENHANCED: Get rate limit stats with pool tracking
 function getRateLimitStats() {
     return {
         hourlyCounts: Object.fromEntries(rateLimitState.hourlyCounts),
         dailyCounts: Object.fromEntries(rateLimitState.dailyCounts),
+        poolDailyCounts: Object.fromEntries(rateLimitState.poolDailyCounts),
         concurrentJobs: rateLimitState.concurrentJobs,
         lastReset: rateLimitState.lastReset,
         lastDailyReset: rateLimitState.lastDailyReset,
@@ -468,5 +562,8 @@ module.exports = {
     getAccountFromDatabase,
     getFreshAccountData,
     getRateLimitStats,
+    canPoolSendMore,
+    updatePoolSentCount,
+    resetPoolDailyCount,
     RATE_LIMIT_CONFIG
 };

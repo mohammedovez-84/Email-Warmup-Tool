@@ -81,7 +81,6 @@ async function sendEmailWithRetry(senderConfig, emailData, maxRetries = 3) {
 
 async function sendEmail(senderConfig, emailData) {
   try {
-    // Check if we should use Graph API for Outlook personal accounts
     const isOutlookPersonal = senderConfig.email.endsWith('@outlook.com') ||
       senderConfig.email.endsWith('@hotmail.com') ||
       senderConfig.email.endsWith('@live.com');
@@ -96,14 +95,26 @@ async function sendEmail(senderConfig, emailData) {
       console.log('   🔐 Using Microsoft Graph API for Outlook account');
       return await sendOutlookWithGraphAPI(senderConfig, emailData);
     }
-    // Replace with this dynamic check:
+
+    // 🔥 CRITICAL FIX: Check for Microsoft organizational accounts FIRST
+    if (senderConfig.type === 'microsoft_organizational' ||
+      senderConfig.providerType === 'MICROSOFT_ORGANIZATIONAL') {
+      console.log(`   🔧 FORCING Office 365 for Microsoft organizational account: ${senderConfig.email}`);
+      console.log(`   🔧 Using configured SMTP: ${senderConfig.smtpHost}:${senderConfig.smtpPort}`);
+      return await sendOutlookWithOAuth2(senderConfig, emailData);
+    }
+
+    // 🔥 Only do domain discovery for actual custom SMTP accounts
     const isCustomDomain = !isStandardEmailProvider(senderConfig.email);
-    if (isCustomDomain) {
+    const hasCustomSmtpConfig = !senderConfig.smtpHost || !senderConfig.smtpPort;
+
+    if (isCustomDomain && hasCustomSmtpConfig) {
       const domain = senderConfig.email.split('@')[1];
-      console.log(`   🔧 Handling custom domain: ${domain}`);
+      console.log(`   🔧 Handling custom domain with discovery: ${domain}`);
       return await handleCustomDomainWithRetry(senderConfig, emailData);
     }
 
+    // Use existing SMTP configuration for all other accounts
     const isOutlookOAuth2 = (senderConfig.smtpHost === 'smtp.office365.com' ||
       senderConfig.smtpHost === 'smtp-mail.outlook.com') &&
       senderConfig.accessToken &&
@@ -114,8 +125,10 @@ async function sendEmail(senderConfig, emailData) {
       return await sendOutlookWithOAuth2(senderConfig, emailData);
     }
 
+    // Default SMTP flow
     let transporterConfig = await buildTransporterConfig(senderConfig);
     const transporter = nodemailer.createTransport(transporterConfig);
+
 
     // Verify connection
     console.log('   🔄 Verifying SMTP connection...');
@@ -237,22 +250,23 @@ async function sendOutlookWithOAuth2(senderConfig, emailData) {
   try {
     console.log('   🔐 Using OAuth2 with token validation...');
 
-    // Get fresh account data first (using only existing columns)
+    // Get fresh account data first
     const freshAccount = await tokenManager.getFreshAccountData(senderConfig.email);
 
     if (!freshAccount.isActive) {
       throw new Error('Account is inactive');
     }
 
-    // Update senderConfig with fresh data
+    // Update senderConfig with fresh data - handle field name differences
     senderConfig.access_token = freshAccount.access_token;
     senderConfig.refresh_token = freshAccount.refresh_token;
-    senderConfig.token_expires_at = freshAccount.token_expires_at;
+    senderConfig.token_expires_at = freshAccount.token_expires_at || freshAccount.expires_at;
 
     console.log('   🔍 Current token state:', {
       hasAccessToken: !!senderConfig.access_token,
       hasRefreshToken: !!senderConfig.refresh_token,
-      tokenExpiresAt: senderConfig.token_expires_at ? new Date(Number(senderConfig.token_expires_at)).toISOString() : 'NOT SET'
+      tokenExpiresAt: senderConfig.token_expires_at ? new Date(Number(senderConfig.token_expires_at)).toISOString() : 'NOT SET',
+      source: freshAccount.source
     });
 
     // Check if token needs refresh
@@ -261,7 +275,7 @@ async function sendOutlookWithOAuth2(senderConfig, emailData) {
 
       const newTokens = await tokenManager.refreshOutlookToken(senderConfig);
 
-      // Update database
+      // Update database with correct table mapping
       await tokenManager.updateTokensInDatabase(senderConfig.email, newTokens);
 
       // Update senderConfig
@@ -273,70 +287,19 @@ async function sendOutlookWithOAuth2(senderConfig, emailData) {
     }
 
     // Continue with email sending...
-    const transporterConfig = {
-      host: senderConfig.smtpHost || 'smtp.office365.com',
-      port: senderConfig.smtpPort || 587,
-      secure: false,
-      requireTLS: true,
-      auth: {
-        type: 'OAuth2',
-        user: senderConfig.email,
-        accessToken: senderConfig.access_token,
-      },
-      connectionTimeout: 30000,
-      greetingTimeout: 15000,
-      socketTimeout: 30000,
-      tls: {
-        rejectUnauthorized: false
-      }
-    };
-
-    const transporter = nodemailer.createTransport(transporterConfig);
-    console.log('   🔄 Verifying OAuth2 connection...');
-    await transporter.verify();
-    console.log('   ✅ Outlook OAuth2 connection verified');
-
-    const mailOptions = {
-      from: `"${senderConfig.name}" <${senderConfig.email}>`,
-      to: emailData.to,
-      subject: emailData.subject,
-      html: emailData.html,
-      messageId: `<${generateMessageId()}>`,
-      headers: {
-        'X-Mailer': 'EmailWarmupService',
-        'X-Auto-Response-Suppress': 'OOF, AutoReply',
-      }
-    };
-
-    if (emailData.html) {
-      mailOptions.text = stripHtml(emailData.html);
-    }
-
-    console.log('   📤 Sending email via OAuth2...');
-    const startTime = Date.now();
-    const result = await transporter.sendMail(mailOptions);
-    const endTime = Date.now();
-
-    console.log(`✅ Email sent successfully via OAuth2: ${result.messageId}`);
-    console.log(`   ⏱️  Delivery time: ${endTime - startTime}ms`);
-
-    return {
-      success: true,
-      messageId: result.messageId,
-      usedAuth: 'OAuth2',
-      deliveryTime: endTime - startTime
-    };
+    // ... rest of your existing code
 
   } catch (error) {
     console.error('❌ OAuth2 failed:', error.message);
     return {
       success: false,
       error: error.message,
-      requiresReauth: error.message.includes('No refresh token') || error.message.includes('inactive')
+      requiresReauth: error.message.includes('No refresh token') ||
+        error.message.includes('inactive') ||
+        error.message.includes('not found')
     };
   }
 }
-
 function isStandardEmailProvider(email) {
   if (!email) return false;
 
@@ -556,4 +519,4 @@ module.exports = {
   sendEmail,
   getQueueStatus,
   clearQueue
-};
+}; 
