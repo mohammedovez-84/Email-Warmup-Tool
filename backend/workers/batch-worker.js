@@ -11,36 +11,129 @@ class BatchWarmupWorker {
         this.batchSize = parseInt(process.env.BATCH_PROCESSING_LIMIT) || 50;
         this.redis = new RedisScheduler();
         this.workerId = `batch-worker-${process.pid}-${Date.now()}`;
+        this.shouldRun = false; // NEW: Control flag for the loop
+        this.checkInterval = 30000; // NEW: Check every 30 seconds instead of constant checking
+        this.lastJobCheck = 0; // NEW: Track last check time
 
         console.log(`🏭 Batch Worker ${this.workerId} Initialized`);
         console.log(`   Batch Processing Limit: ${this.batchSize} jobs`);
+        console.log(`   Check Interval: ${this.checkInterval / 1000} seconds`);
     }
 
     async consumeBatchWarmupJobs() {
+        // CHECK IF BATCH PROCESSING IS ACTUALLY ENABLED
+        if (!await this.shouldProcessBatchJobs()) {
+            console.log('⏩ Batch worker not started (batch mode not enabled or no jobs)');
+            return;
+        }
+
         const channel = await getChannel();
 
         console.log(`🏭 Starting BATCH Warmup Worker: ${this.workerId}`);
         console.log('📋 Waiting for batch warmup jobs...');
 
-        while (true) {
+        this.shouldRun = true; // NEW: Set control flag
+
+        while (this.shouldRun) {
             try {
+                // ADD LONGER DELAY BETWEEN CHECKS
+                await this.delay(this.checkInterval);
+
                 if (this.processing) {
                     console.log('⏳ Batch worker busy, waiting...');
-                    await this.delay(5000);
                     continue;
                 }
 
                 this.processing = true;
+
+                // CHECK IF THERE ARE ACTUALLY ANY JOBS
+                const jobCount = await this.getBatchJobCount();
+                if (jobCount === 0) {
+                    console.log('📭 No batch jobs in queue, skipping processing');
+                    this.processing = false;
+                    continue; // Skip processing if no jobs
+                }
+
                 await this.processBatchJobs(channel);
                 this.processing = false;
-
-                await this.delay(10000); // Check every 10 seconds
 
             } catch (error) {
                 console.error('❌ Batch worker error:', error);
                 this.processing = false;
                 await this.delay(30000);
             }
+        }
+
+        console.log('🛑 Batch worker stopped gracefully');
+    }
+
+    // NEW: Check if batch processing should actually run
+    async shouldProcessBatchJobs() {
+        try {
+            // Check if batch mode is enabled
+            if (process.env.SCHEDULER_MODE !== 'batch' && process.env.SCHEDULER_MODE !== 'hybrid') {
+                console.log('⏩ Batch worker: SCHEDULER_MODE not set to batch or hybrid');
+                return false;
+            }
+
+            // Check if Redis is connected
+            if (!this.redis.client.isOpen) {
+                console.log('⏩ Batch worker: Redis not connected');
+                return false;
+            }
+
+            // Check if there are any batch jobs in queue
+            const jobCount = await this.getBatchJobCount();
+            if (jobCount === 0) {
+                console.log('⏩ Batch worker: No jobs in queue');
+                return false;
+            }
+
+            // Check if there are active accounts that need batch processing
+            const activeAccountCount = await this.getActiveAccountCount();
+            const scaleThreshold = parseInt(process.env.SCALE_THRESHOLD) || 200;
+
+            if (activeAccountCount <= scaleThreshold) {
+                console.log(`⏩ Batch worker: Account count ${activeAccountCount} below threshold ${scaleThreshold}`);
+                return false;
+            }
+
+            console.log(`📊 Batch processing required: ${jobCount} jobs, ${activeAccountCount} accounts`);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Error checking batch processing requirement:', error);
+            return false;
+        }
+    }
+
+    // NEW: Get batch job count
+    async getBatchJobCount() {
+        if (!this.redis.client.isOpen) {
+            return 0;
+        }
+
+        try {
+            return await this.redis.client.zCard('batch_warmup_queue');
+        } catch (error) {
+            console.error('❌ Error getting batch job count:', error);
+            return 0;
+        }
+    }
+
+    // NEW: Get active account count
+    async getActiveAccountCount() {
+        try {
+            const [google, smtp, microsoft] = await Promise.all([
+                GoogleUser.count({ where: { warmupStatus: 'active', is_connected: true } }),
+                SmtpAccount.count({ where: { warmupStatus: 'active', is_connected: true } }),
+                MicrosoftUser.count({ where: { warmupStatus: 'active', is_connected: true } })
+            ]);
+
+            return google + smtp + microsoft;
+        } catch (error) {
+            console.error('❌ Error counting active accounts:', error);
+            return 0;
         }
     }
 
@@ -59,6 +152,11 @@ class BatchWarmupWorker {
                 { LIMIT: { offset: 0, count: limit } }
             );
 
+            // NEW: Only log if we actually found jobs
+            if (jobKeys.length > 0) {
+                console.log(`📦 Retrieved ${jobKeys.length} batch jobs from queue`);
+            }
+
             const jobs = [];
             for (const jobKey of jobKeys) {
                 const jobData = await this.redis.client.get(`scheduled_jobs:${jobKey}`);
@@ -73,7 +171,6 @@ class BatchWarmupWorker {
                 }
             }
 
-            // console.log(`📦 Retrieved ${jobs.length} batch jobs from queue`);
             return jobs;
 
         } catch (error) {
@@ -89,7 +186,7 @@ class BatchWarmupWorker {
 
         if (batchJobs.length === 0) {
             console.log('📭 No batch jobs available');
-            return;
+            return; // EARLY RETURN - no infinite logging
         }
 
         console.log(`🏭 Processing ${batchJobs.length} batch jobs`);
@@ -159,7 +256,7 @@ class BatchWarmupWorker {
         }
     }
 
-    // NEW: Validate that the warmup account is still active
+    // Validate that the warmup account is still active
     async validateAccountActive(account) {
         try {
             let activeAccount = null;
@@ -200,7 +297,7 @@ class BatchWarmupWorker {
         }
     }
 
-    // NEW: Validate pool account exists and has capacity
+    // Validate pool account exists and has capacity
     async validatePoolAccount(poolEmail) {
         try {
             // This would check if the pool account exists and has sending capacity
@@ -212,7 +309,7 @@ class BatchWarmupWorker {
         }
     }
 
-    // NEW: Clean up job from Redis
+    // Clean up job from Redis
     async cleanupJob(key) {
         try {
             await this.redis.client.zRem('batch_warmup_queue', key);
@@ -270,7 +367,7 @@ class BatchWarmupWorker {
         await this.redis.client.zAdd('batch_warmup_queue', { score: newScore, value: key });
         await this.redis.storeScheduledJob(key, data);
 
-        console.log(`   🔄 Rescheduled batch job (retry ${retryCount + 1}) in ${backoffDelay / 1000}s`);
+        console.log(`   🔄 Rescheduled batch job (retry ${retryCount + 1}) in ${backackoffDelay / 1000}s`);
     }
 
     // ENHANCED: Proper account type detection using imported models
@@ -290,7 +387,7 @@ class BatchWarmupWorker {
         return 'unknown';
     }
 
-    // NEW: Get account details from database
+    // Get account details from database
     async getAccountDetails(email, accountType) {
         try {
             let account = null;
@@ -319,6 +416,23 @@ class BatchWarmupWorker {
         }
     }
 
+    // NEW: Stop the batch worker gracefully
+    async stop() {
+        console.log('🛑 Stopping batch worker...');
+        this.shouldRun = false;
+        this.processing = false;
+
+        // Wait for current processing to complete
+        await this.delay(2000);
+
+        await this.cleanup();
+    }
+
+    // NEW: Check if worker is running
+    isRunning() {
+        return this.shouldRun;
+    }
+
     delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
     }
@@ -342,13 +456,16 @@ class BatchWarmupWorker {
             batchSize: this.batchSize,
             redisConnected: redisConnected,
             queueSize: queueSize,
-            status: this.processing ? 'processing' : 'waiting'
+            status: this.processing ? 'processing' : 'waiting',
+            shouldRun: this.shouldRun,
+            checkInterval: this.checkInterval
         };
     }
 
     // Cleanup method
     async cleanup() {
         this.processing = false;
+        this.shouldRun = false;
         if (this.redis.client.isOpen) {
             await this.redis.disconnect();
         }
