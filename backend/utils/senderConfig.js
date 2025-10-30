@@ -7,7 +7,7 @@ function normalizeFieldNames(sender) {
     // Create a DEEP copy of the sender object
     const normalized = JSON.parse(JSON.stringify(sender));
 
-    console.log(`🔄 Normalizing fields for ${sender.email || 'unknown'}`);
+
 
     // Field mappings based on your actual database field names
     const fieldMappings = {
@@ -87,7 +87,7 @@ function normalizeFieldNames(sender) {
         // Copy from source to target if source exists
         if (sender[sourceField] !== undefined && sender[sourceField] !== null) {
             normalized[targetField] = sender[sourceField];
-            console.log(`   🔄 Normalized: ${sourceField} → ${targetField}`);
+
         }
     });
 
@@ -155,7 +155,7 @@ function buildSenderConfig(sender, senderType = null) {
         throw new Error('❌ Sender object is required');
     }
 
-    console.log(`📧 Processing sender: ${sender.email || 'unknown email'}`);
+
 
     // Handle field name variations before normalization
     const preNormalized = { ...sender };
@@ -184,17 +184,7 @@ function buildSenderConfig(sender, senderType = null) {
         senderType = getSenderType(normalizedSender);
     }
 
-    console.log(`🔧 Building config for: ${normalizedSender.email} (type: ${senderType})`);
 
-    // Enhanced logging for debugging
-    console.log('📋 Available fields in normalized sender:', Object.keys(normalizedSender).filter(k => k !== 'smtp_pass' && k !== 'app_password' && k !== 'access_token' && k !== 'refresh_token'));
-    console.log(`   🔐 Final OAuth2 fields:`);
-    console.log(`      - access_token: ${normalizedSender.access_token ? 'PRESENT' : 'MISSING'}`);
-    console.log(`      - refresh_token: ${normalizedSender.refresh_token ? 'PRESENT' : 'MISSING'}`);
-    console.log(`      - token_expiry: ${normalizedSender.token_expiry || 'NOT SET'}`);
-    console.log(`   🔑 App Password: ${normalizedSender.app_password ? 'PRESENT' : 'MISSING'}`);
-    console.log(`   🔑 SMTP Password: ${normalizedSender.smtp_pass ? 'PRESENT' : 'MISSING'}`);
-    console.log(`   🏊 Pool Provider Type: ${normalizedSender.providerType || 'Not set'}`);
 
     const baseConfig = {
         userId: normalizedSender.userId || normalizedSender.user_id,
@@ -249,7 +239,7 @@ function buildSenderConfig(sender, senderType = null) {
 
         // Use OAuth2 if available, otherwise fall back to app password
         if (hasOAuth2 && hasRefreshToken) {
-            console.log(`🔑 Using OAuth2 for Google: ${normalizedSender.email}`);
+
             config.useOAuth2 = true;
             config.accessToken = normalizedSender.access_token;
             config.refreshToken = normalizedSender.refresh_token;
@@ -257,7 +247,7 @@ function buildSenderConfig(sender, senderType = null) {
             config.smtpPass = config.accessToken; // Fallback for compatibility
             config.imapPass = config.accessToken;
         } else {
-            console.log(`🔑 Using App Password for Google: ${normalizedSender.email}`);
+
             config.useOAuth2 = false;
             config.smtpPass = googlePassword;
             config.imapPass = googlePassword;
@@ -350,12 +340,7 @@ function buildSenderConfig(sender, senderType = null) {
         const imapPort = normalizedSender.imap_port || 993;
         const imapSecure = normalizedSender.imap_secure !== undefined ? normalizedSender.imap_secure : true;
 
-        console.log(`🔍 SMTP Configuration Check:`);
-        console.log(`   - SMTP Host: ${smtpHost || 'MISSING'}`);
-        console.log(`   - SMTP User: ${smtpUser}`);
-        console.log(`   - SMTP Pass: ${smtpPass ? 'PRESENT' : 'MISSING'}`);
-        console.log(`   - IMAP Host: ${imapHost || 'MISSING'}`);
-        console.log(`   - IMAP Pass: ${imapPass ? 'PRESENT' : 'MISSING'}`);
+
 
         if (!smtpPass) {
             throw new Error(`SMTP account ${normalizedSender.email} is missing SMTP password. Checked fields: smtp_pass, app_password`);
@@ -394,17 +379,14 @@ function extractNameFromEmail(email) {
 }
 
 function buildPoolConfig(poolAccount) {
-    console.log(`🏊 Building pool config for: ${poolAccount?.email}`);
 
-    // Debug the incoming pool account
-    debugSenderObject(poolAccount, 'Pool Account Input');
 
     // FIX: Extract data from Sequelize instance
     let poolData;
     if (poolAccount && typeof poolAccount === 'object' && poolAccount.dataValues) {
         // It's a Sequelize instance - get the plain data
         poolData = { ...poolAccount.dataValues };
-        console.log(`🔍 Extracted Sequelize data for: ${poolData.email}`);
+
     } else {
         // It's already a plain object
         poolData = { ...poolAccount };
@@ -419,29 +401,7 @@ function buildPoolConfig(poolAccount) {
     return buildSenderConfig(poolWithProvider);
 }
 
-// Also update the debug function to handle Sequelize instances
-function debugSenderObject(sender, context = 'Unknown') {
-    console.log(`🐛 DEBUG ${context}:`);
-    console.log(`   Type: ${typeof sender}`);
 
-    // Handle Sequelize instances
-    let actualData = sender;
-    if (sender && sender.dataValues) {
-        console.log(`   ⚠️  SEQUELIZE INSTANCE DETECTED - extracting dataValues`);
-        actualData = sender.dataValues;
-    }
-
-    console.log(`   Keys: ${actualData ? Object.keys(actualData) : 'NULL'}`);
-    console.log(`   Email: ${actualData?.email}`);
-    if (actualData) {
-        console.log(`   Provider Type: ${actualData.providerType || 'Not set'}`);
-        console.log(`   Has SMTP Pass: ${!!actualData.smtp_pass}`);
-        console.log(`   Has App Password: ${!!actualData.app_password}`);
-        console.log(`   Has Access Token: ${!!actualData.access_token}`);
-        console.log(`   Has SMTP Host: ${!!actualData.smtp_host}`);
-        console.log(`   Is Active: ${actualData.isActive !== undefined ? actualData.isActive : 'Not set'}`);
-    }
-}
 
 // Simple validation function
 function validateAccountConfig(account, context = 'warmup') {

@@ -1,3 +1,6 @@
+
+const moment = require('moment');
+moment.suppressDeprecationWarnings = true;
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
@@ -59,7 +62,7 @@ app.use('/api/health', healthRoutes);
         console.log('✅ Database connection established');
         console.log('✅ Database connection verified');
 
-        await sequelize.sync({ alter: true });
+        await sequelize.sync();
 
 
 
