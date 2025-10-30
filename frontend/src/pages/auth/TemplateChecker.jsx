@@ -508,37 +508,41 @@ Best regards,
 
       {/* Main Container - Responsive */}
       <div className="max-w-9xl mx-auto">
-
-        {/* Enhanced Header - Responsive */}
-        <div className="text-center mb-8 px-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 md:w-24 md:h-24 bg-gradient-to-br from-teal-500 to-teal-600 rounded-2xl md:rounded-3xl shadow-2xl mb-4 md:mb-6">
-            <FiMail className="w-8 h-8 md:w-12 md:h-12 text-white" />
-          </div>
-          <h1 className="text-3xl md:text-5xl font-bold text-gray-900 mb-3 md:mb-4 bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent">
-            Email Template Analyzer
-          </h1>
-          <p className="text-lg md:text-xl text-gray-600 max-w-4xl mx-auto leading-relaxed mb-4 md:mb-6">
-            Optimize your email templates for maximum deliverability, engagement, and professional impact
-          </p>
-          <div className="flex justify-center items-center gap-3 md:gap-6 text-xs md:text-sm text-gray-500 flex-wrap">
-            <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
-              <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
-              <span className="font-medium">Real-time Analysis</span>
-            </div>
-            <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
-              <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
-              <span className="font-medium">Professional Templates</span>
-            </div>
-            <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
-              <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
-              <span className="font-medium">Best Practices</span>
-            </div>
-            <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
-              <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
-              <span className="font-medium">Spam Detection</span>
-            </div>
-          </div>
-        </div>
+     
+        <div className="text-center mb-8 px-4 mt-6">
+  <div className="inline-flex items-center justify-center w-14 h-14 md:w-20 md:h-20 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl md:rounded-2xl shadow-xl mb-3 md:mb-4">
+    <FiMail className="w-6 h-6 md:w-10 md:h-10 text-white" />
+  </div>
+  
+  <h1 className="text-2xl md:text-4xl font-bold text-gray-900 mb-2 md:mb-3">
+    <span className="bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent py-1 inline-block">
+      Email Template Analyzer
+    </span>
+  </h1>
+  
+  <p className="text-base md:text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed mb-4 md:mb-6">
+    Optimize your email templates for maximum deliverability, engagement, and professional impact
+  </p>
+  
+  <div className="flex justify-center items-center gap-3 md:gap-6 text-xs md:text-sm text-gray-500 flex-wrap">
+    <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
+      <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
+      <span className="font-medium">Real-time Analysis</span>
+    </div>
+    <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
+      <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
+      <span className="font-medium">Professional Templates</span>
+    </div>
+    <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
+      <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
+      <span className="font-medium">Best Practices</span>
+    </div>
+    <div className="flex items-center gap-1 md:gap-2 bg-white/50 px-3 py-1.5 md:px-4 md:py-2 rounded-full backdrop-blur-sm">
+      <FiCheckCircle className="w-3 h-3 md:w-4 md:h-4 text-teal-500" />
+      <span className="font-medium">Spam Detection</span>
+    </div>
+  </div>
+</div>
 
         {/* Premium Main Card - Enhanced & Responsive */}
         <div className="bg-white/90 backdrop-blur-2xl rounded-2xl md:rounded-3xl shadow-2xl border border-white/40 overflow-hidden mx-auto">
