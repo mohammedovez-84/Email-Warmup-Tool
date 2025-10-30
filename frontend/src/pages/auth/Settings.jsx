@@ -622,14 +622,16 @@ const SettingsPage = () => {
 
             <div className="min-h-screen bg-gray-50 xl:ml-2 w-full lg:w-[calc(100%)] xl:w-[calc(100%)] relative overflow-hidden font-sans">
                 {/* Header Section */}
-                <div className="mb-8">
+   <div className="mb-8 mt-10">
   <div className="text-center px-4">
     <div className="inline-flex items-center justify-center w-14 h-14 md:w-20 md:h-20 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl md:rounded-2xl shadow-xl mb-3 md:mb-4">
       <FiSettings className="w-6 h-6 md:w-10 md:h-10 text-white" />
     </div>
     
-    <h1 className="text-2xl md:text-4xl font-bold text-gray-900 mb-2 md:mb-3 bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent">
-      Settings
+    <h1 className="text-2xl md:text-4xl font-bold text-gray-900 mb-2 md:mb-3">
+      <span className="bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent py-1 inline-block">
+        Settings
+      </span>
     </h1>
     <p className="text-base md:text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed mb-4 md:mb-6">
       Manage your account settings and preferences
