@@ -120,6 +120,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 timeout: 10000
             });
 
+
             const { googleUsers = [], smtpAccounts = [], microsoftUsers = [] } = response.data;
 
             // Process all emails with actual warmup status from backend
