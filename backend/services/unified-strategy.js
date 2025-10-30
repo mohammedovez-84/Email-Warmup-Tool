@@ -4,6 +4,9 @@ class UnifiedWarmupStrategy {
     constructor() {
         this.MAX_EMAILS_SAFETY_CAP = 50;
         this.TESTING_MODE = process.env.WARMUP_TESTING_MODE === 'true';
+
+        // Organizational domains that require special handling
+        this.ORGANIZATIONAL_DOMAINS = ['elmstreetweb.com']; // Add more as needed
     }
 
     async generateWarmupPlan(account, availablePools) {
@@ -19,6 +22,13 @@ class UnifiedWarmupStrategy {
         }
 
         console.log(`🎯 Generating warmup plan for: ${account.email}`);
+
+        // CHECK FOR ORGANIZATIONAL ACCOUNTS
+        const isOrganizationalAccount = this.isOrganizationalAccount(account.email);
+        if (isOrganizationalAccount) {
+            console.log(`🏢 ORGANIZATIONAL ACCOUNT DETECTED: ${account.email}`);
+            return this.generateOrganizationalAccountPlan(account, availablePools);
+        }
 
         // GET ACTUAL VALUES FROM DATABASE
         const warmupDayCount = account.warmupDayCount || 0;
@@ -59,6 +69,77 @@ class UnifiedWarmupStrategy {
             console.error(`❌ Failed to build config for ${account.email}:`, error.message);
             return this.createEmptyPlan(account, error.message);
         }
+    }
+
+    // NEW: Generate plan specifically for organizational accounts
+    generateOrganizationalAccountPlan(account, availablePools) {
+        console.log(`🏢 Generating RECEIVE-ONLY plan for organizational account: ${account.email}`);
+
+        const warmupDayCount = account.warmupDayCount || 0;
+        const startEmailsPerDay = account.startEmailsPerDay || 3;
+        const increaseEmailsPerDay = account.increaseEmailsPerDay || 1;
+        const maxEmailsPerDay = Math.min(account.maxEmailsPerDay || 25, this.MAX_EMAILS_SAFETY_CAP);
+
+        // Calculate limit but use only for inbound (receiving)
+        const calculatedSendLimit = startEmailsPerDay + (increaseEmailsPerDay * warmupDayCount);
+        const receiveLimit = Math.min(Math.max(calculatedSendLimit, 1), maxEmailsPerDay);
+
+        console.log(`   Day: ${warmupDayCount}, Receive Limit: ${receiveLimit}`);
+        console.log(`   ⚠️  Organizational account - SENDING DISABLED (admin consent required)`);
+        console.log(`   📥 Proceeding with receiving-only warmup`);
+
+        // Organizational accounts can only receive emails
+        const accountCapabilities = {
+            supportedDirections: ['POOL_TO_WARMUP'], // Only receiving
+            organizational: true,
+            adminConsentRequired: true
+        };
+
+        const plan = {
+            account: account,
+            totalEmails: receiveLimit,
+            outbound: [],
+            inbound: [],
+            sequence: [],
+            warmupDay: warmupDayCount,
+            capabilities: accountCapabilities,
+            organizational: true,
+            dbValues: {
+                startEmailsPerDay: account.startEmailsPerDay,
+                increaseEmailsPerDay: account.increaseEmailsPerDay,
+                maxEmailsPerDay: account.maxEmailsPerDay,
+                calculatedLimit: receiveLimit
+            }
+        };
+
+        // Only create inbound emails (Pool → Warmup)
+        const inboundPools = this.getCompatiblePoolsForDirection(availablePools, 'POOL_TO_WARMUP');
+
+        console.log(`   📊 Compatible pools for receiving: ${inboundPools.length}`);
+
+        // Create inbound emails (Pool → Warmup)
+        for (let i = 0; i < receiveLimit && i < inboundPools.length; i++) {
+            const pool = inboundPools[i];
+            const emailJob = this.createEmailJob(pool, account, 'POOL_TO_WARMUP', i, receiveLimit, 'inbound');
+            plan.inbound.push(emailJob);
+            plan.sequence.push(emailJob);
+        }
+
+        console.log(`   📧 Final sequence: ${plan.sequence.length} RECEIVE-ONLY emails`);
+        console.log(`   💡 Admin consent required for sending: Use Azure Admin Consent URL`);
+
+        if (account.email === 'jonathon.shults@elmstreetweb.com') {
+            console.log(`   🔐 Application ID: 511cc857-4fb9-4738-b063-fdf68e2ef980`);
+            console.log(`   🌐 Admin Consent URL: https://login.microsoftonline.com/common/adminconsent?client_id=511cc857-4fb9-4738-b063-fdf68e2ef980&redirect_uri=YOUR_REDIRECT_URI`);
+        }
+
+        return plan;
+    }
+
+    // NEW: Check if account is organizational
+    isOrganizationalAccount(email) {
+        const domain = email.split('@')[1];
+        return this.ORGANIZATIONAL_DOMAINS.includes(domain);
     }
 
     getStrategyForDay(warmupDayCount, sendLimit) {
@@ -194,6 +275,12 @@ class UnifiedWarmupStrategy {
             replyRate = 0;
         }
 
+        // SPECIAL HANDLING: If receiver is organizational, ensure proper configuration
+        if (this.isOrganizationalAccount(receiver.email) && direction === 'WARMUP_TO_POOL') {
+            console.log(`   ⚠️  WARNING: Attempting to send TO organizational account ${receiver.email}`);
+            console.log(`   💡 This may fail if organizational account has sending restrictions`);
+        }
+
         return {
             sender: sender,
             senderEmail: sender.email,
@@ -205,7 +292,10 @@ class UnifiedWarmupStrategy {
             isInitialEmail: true,
             scheduleDelay: baseDelay,
             sequence: sequence,
-            replyRate: replyRate
+            replyRate: replyRate,
+            // Add organizational flags for better handling
+            isOrganizationalSender: this.isOrganizationalAccount(sender.email),
+            isOrganizationalReceiver: this.isOrganizationalAccount(receiver.email)
         };
     }
 

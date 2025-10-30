@@ -1,5 +1,3 @@
-
-
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
 
@@ -9,7 +7,7 @@ const SmtpAccount = sequelize.define('smtpimap_accounts', {
     primaryKey: true,
     autoIncrement: true
   },
-  user_id: {                // ✅ add this
+  user_id: {
     type: DataTypes.INTEGER,
     allowNull: false
   },
@@ -72,8 +70,16 @@ const SmtpAccount = sequelize.define('smtpimap_accounts', {
     allowNull: false,
     defaultValue: true,
   },
-  // In your GoogleUser, MicrosoftUser, and SmtpAccount models, add:
   warmupStartTime: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  // NEW FIELDS ADDED
+  current_day_sent: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  last_reset_date: {
     type: DataTypes.DATE,
     allowNull: true
   }
@@ -83,4 +89,3 @@ const SmtpAccount = sequelize.define('smtpimap_accounts', {
 });
 
 module.exports = SmtpAccount;
-

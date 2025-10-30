@@ -3,7 +3,7 @@ const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
 const EmailPool = require('../models/EmailPool');
-const { computeEmailsToSend, computeReplyRate } = require('./warmupWorkflow');
+const { computeReplyRate } = require('./warmupWorkflow');
 const RedisScheduler = require('./redis-scheduler');
 const UnifiedWarmupStrategy = require('./unified-strategy');
 const { Op } = require('sequelize');
@@ -33,10 +33,13 @@ class WarmupScheduler {
 
             console.log('🚀 Starting BIDIRECTIONAL warmup scheduling...');
 
-            // RECOVER ANY EXISTING SCHEDULES FIRST
+            // CRITICAL: Reset daily counts for ALL accounts (warmup + pool)
+            await this.resetAllDailyCounts();
+
+            // Recover existing schedules
             await this.recoverScheduledJobs(channel);
 
-            // THEN SCHEDULE NEW ONES WITH DATABASE VOLUME LIMITS
+            // Schedule new emails with proper volume limits
             await this.scheduleBidirectionalWarmup(channel);
 
             console.log('✅ Bidirectional warmup scheduling completed');
@@ -44,6 +47,88 @@ class WarmupScheduler {
         } catch (error) {
             console.error('❌ Bidirectional scheduling error:', error);
             this.isRunning = false;
+        }
+    }
+
+    // NEW: Reset counts for both warmup and pool accounts
+    async resetAllDailyCounts() {
+        try {
+            const today = new Date().toDateString();
+            console.log('🔄 Resetting daily counts for all accounts...');
+
+            // Reset pool accounts
+            const poolReset = await EmailPool.update(
+                {
+                    currentDaySent: 0,
+                    lastResetDate: new Date()
+                },
+                {
+                    where: {
+                        [Op.or]: [
+                            { lastResetDate: { [Op.ne]: today } },
+                            { lastResetDate: null }
+                        ]
+                    }
+                }
+            );
+            console.log(`   🏊 Reset ${poolReset[0]} pool accounts`);
+
+            // Reset Google warmup accounts
+            const googleReset = await GoogleUser.update(
+                {
+                    current_day_sent: 0,
+                    last_reset_date: new Date()
+                },
+                {
+                    where: {
+                        [Op.or]: [
+                            { last_reset_date: { [Op.ne]: today } },
+                            { last_reset_date: null }
+                        ],
+                        warmupStatus: 'active'
+                    }
+                }
+            );
+            console.log(`   🔵 Reset ${googleReset[0]} Google accounts`);
+
+            // Reset Microsoft warmup accounts
+            const microsoftReset = await MicrosoftUser.update(
+                {
+                    current_day_sent: 0,
+                    last_reset_date: new Date()
+                },
+                {
+                    where: {
+                        [Op.or]: [
+                            { last_reset_date: { [Op.ne]: today } },
+                            { last_reset_date: null }
+                        ],
+                        warmupStatus: 'active'
+                    }
+                }
+            );
+            console.log(`   🔴 Reset ${microsoftReset[0]} Microsoft accounts`);
+
+            // Reset SMTP warmup accounts
+            const smtpReset = await SmtpAccount.update(
+                {
+                    current_day_sent: 0,
+                    last_reset_date: new Date()
+                },
+                {
+                    where: {
+                        [Op.or]: [
+                            { last_reset_date: { [Op.ne]: today } },
+                            { last_reset_date: null }
+                        ],
+                        warmupStatus: 'active'
+                    }
+                }
+            );
+            console.log(`   ⚡ Reset ${smtpReset[0]} SMTP accounts`);
+
+        } catch (error) {
+            console.error('❌ Error resetting daily counts:', error);
         }
     }
 
@@ -69,7 +154,6 @@ class WarmupScheduler {
 
         this.clearScheduledJobs();
 
-        // Create individual plans for each warmup account with bidirectional strategy
         for (const warmupAccount of activeAccounts) {
             await this.createAndScheduleBidirectionalPlan(warmupAccount, activePools, channel);
         }
@@ -80,14 +164,13 @@ class WarmupScheduler {
     async createAndScheduleBidirectionalPlan(warmupAccount, poolAccounts, channel) {
         console.log(`\n🎯 Creating BIDIRECTIONAL plan for: ${warmupAccount.email}`);
 
-        // VALIDATE ACCOUNT BEFORE PROCEEDING
         if (!warmupAccount.email || typeof warmupAccount.email !== 'string') {
-            console.error(`❌ SKIPPING: Invalid account data - ${JSON.stringify(warmupAccount)}`);
+            console.error(`❌ SKIPPING: Invalid account data`);
             return;
         }
 
         try {
-            // CHECK WARMUP ACCOUNT VOLUME FROM DATABASE
+            // CHECK WARMUP ACCOUNT VOLUME WITH DAILY TRACKING
             const canWarmupSendMore = await this.canWarmupAccountSendMore(warmupAccount.email);
             const warmupVolume = await this.getWarmupAccountVolume(warmupAccount.email);
 
@@ -95,11 +178,11 @@ class WarmupScheduler {
             console.log(`     Daily Limit: ${warmupVolume}, Can Send: ${canWarmupSendMore}`);
 
             if (!canWarmupSendMore) {
-                console.log(`   ⚠️  Daily volume limit reached for ${warmupAccount.email}. Skipping new scheduling.`);
+                console.log(`   ⚠️  Daily volume limit reached for ${warmupAccount.email}. Skipping.`);
                 return;
             }
 
-            // FILTER POOLS WITH CAPACITY
+            // Filter pools with capacity
             const availablePools = [];
             for (const pool of poolAccounts) {
                 const canPoolSendMore = await this.canPoolAccountSendMore(pool.email);
@@ -116,8 +199,6 @@ class WarmupScheduler {
             console.log(`   🏊 Available pools with capacity: ${availablePools.length}/${poolAccounts.length}`);
 
             const strategy = new UnifiedWarmupStrategy();
-
-            // Calculate and use reply rate
             const replyRate = computeReplyRate(warmupAccount);
             console.log(`   📊 Reply Rate: ${(replyRate * 100).toFixed(1)}%`);
 
@@ -133,8 +214,9 @@ class WarmupScheduler {
                 return;
             }
 
-            // ENFORCE WARMUP VOLUME LIMITS
-            const emailsToSchedule = Math.min(plan.sequence.length, warmupVolume);
+            // ENFORCE WARMUP VOLUME LIMITS with daily tracking
+            const remainingWarmupCapacity = await this.getWarmupRemainingCapacity(warmupAccount.email);
+            const emailsToSchedule = Math.min(plan.sequence.length, remainingWarmupCapacity);
 
             if (emailsToSchedule < plan.sequence.length) {
                 console.log(`   ⚠️  Reducing schedule from ${plan.sequence.length} to ${emailsToSchedule} emails due to daily limit`);
@@ -143,24 +225,20 @@ class WarmupScheduler {
 
             console.log(`   📊 Plan: ${emailsToSchedule} emails (${plan.outbound.length} outbound, ${plan.inbound.length} inbound)`);
 
-            // ENHANCED: Log the sequence with timing
-            console.log(`   ⏰ Email Sequence:`);
-            plan.sequence.forEach((email, index) => {
-                const delayMinutes = Math.round(email.scheduleDelay / 60000);
-                console.log(`     ${index + 1}. ${email.direction}: ${email.senderEmail} → ${email.receiverEmail} (in ${delayMinutes}min)`);
-            });
-
-            // Schedule all emails
+            // Schedule all emails - FIXED: Call the correct method
             await this.scheduleBidirectionalEmails(plan, channel, warmupAccount.email);
 
-            console.log(`   ✅ ${warmupAccount.email}: ${emailsToSchedule} emails scheduled (Daily limit: ${warmupVolume})`);
+            console.log(`   ✅ ${warmupAccount.email}: ${emailsToSchedule} emails scheduled`);
 
         } catch (error) {
             console.error(`❌ Error creating plan for ${warmupAccount.email}:`, error.message);
         }
     }
 
+    // ADD THE MISSING METHOD:
     async scheduleBidirectionalEmails(plan, channel, warmupEmail) {
+        console.log(`   ⏰ Scheduling ${plan.sequence.length} emails for ${warmupEmail}`);
+
         for (const emailJob of plan.sequence) {
             await this.scheduleBidirectionalEmail(emailJob, channel, warmupEmail);
         }
@@ -188,14 +266,12 @@ class WarmupScheduler {
 
         const jobKey = `${scheduleTime.toISOString()}_${emailJob.senderEmail}_${emailJob.receiverEmail}_${emailJob.direction}`;
 
-        // Store in Redis for recovery
         await this.redis.storeScheduledJob(jobKey, job);
 
         const timeoutId = setTimeout(async () => {
             try {
                 console.log(`\n🎯 EXECUTING ${emailJob.direction}: ${scheduleTime.toLocaleTimeString()}`);
                 console.log(`   ${emailJob.senderEmail} → ${emailJob.receiverEmail}`);
-                console.log(`   Reply Rate: ${((emailJob.replyRate || 0.25) * 100).toFixed(1)}%`);
 
                 // FINAL DATABASE VOLUME CHECK BEFORE EXECUTION
                 if (emailJob.direction === 'WARMUP_TO_POOL') {
@@ -221,9 +297,11 @@ class WarmupScheduler {
 
                 console.log(`   ✅ Bidirectional email queued`);
 
-                // Update pool usage for POOL_TO_WARMUP emails
+                // UPDATE USAGE COUNTS
                 if (emailJob.direction === 'POOL_TO_WARMUP') {
-                    await this.incrementPoolSentCount(emailJob.senderEmail, 1);
+                    await this.incrementSentCount(emailJob.senderEmail, 1, 'pool');
+                } else {
+                    await this.incrementSentCount(warmupEmail, 1, 'warmup');
                 }
 
                 await this.redis.removeScheduledJob(jobKey);
@@ -289,7 +367,7 @@ class WarmupScheduler {
 
                             // Update pool usage for POOL_TO_WARMUP emails
                             if (jobData.direction === 'POOL_TO_WARMUP') {
-                                await this.incrementPoolSentCount(jobData.pairs[0].senderEmail, 1);
+                                await this.incrementSentCount(jobData.pairs[0].senderEmail, 1, 'pool');
                             }
 
                             // Remove from Redis after successful execution
@@ -314,8 +392,7 @@ class WarmupScheduler {
         console.log(`📊 Recovery Complete: ${recoveredCount} recovered, ${skippedCount} skipped (volume limits)`);
     }
 
-    // DATABASE-BASED VOLUME MANAGEMENT METHODS:
-
+    // UPDATED: Get warmup account volume with daily tracking
     async getWarmupAccountVolume(email) {
         try {
             const account = await GoogleUser.findOne({ where: { email } }) ||
@@ -339,8 +416,46 @@ class WarmupScheduler {
             return volume;
         } catch (error) {
             console.error(`❌ Error getting warmup volume for ${email}:`, error);
-            return 3; // Default fallback
+            return 3;
         }
+    }
+
+    // NEW: Get remaining capacity for warmup account
+    async getWarmupRemainingCapacity(email) {
+        try {
+            const volume = await this.getWarmupAccountVolume(email);
+            const sentToday = await this.getWarmupSentToday(email);
+            return Math.max(0, volume - sentToday);
+        } catch (error) {
+            console.error(`❌ Error getting warmup capacity for ${email}:`, error);
+            return 0;
+        }
+    }
+
+    // NEW: Get how many emails warmup account sent today
+    async getWarmupSentToday(email) {
+        try {
+            const account = await GoogleUser.findOne({ where: { email } }) ||
+                await MicrosoftUser.findOne({ where: { email } }) ||
+                await SmtpAccount.findOne({ where: { email } });
+
+            return account?.current_day_sent || 0;
+        } catch (error) {
+            console.error(`❌ Error getting warmup sent count for ${email}:`, error);
+            return 0;
+        }
+    }
+
+    // UPDATED: Check if warmup account can send more
+    async canWarmupAccountSendMore(email) {
+        const remainingCapacity = await this.getWarmupRemainingCapacity(email);
+        return remainingCapacity > 0;
+    }
+
+    // UPDATED: Check if pool account can send more
+    async canPoolAccountSendMore(email) {
+        const capacity = await this.getPoolAccountCapacity(email);
+        return capacity > 0;
     }
 
     async getPoolAccountCapacity(email) {
@@ -359,58 +474,58 @@ class WarmupScheduler {
         }
     }
 
-    async canWarmupAccountSendMore(email) {
-        const volume = await this.getWarmupAccountVolume(email);
-        // For warmup accounts, we don't track daily sent count in DB, so we assume they can send
-        return volume > 0;
-    }
-
-    async canPoolAccountSendMore(email) {
-        const capacity = await this.getPoolAccountCapacity(email);
-        return capacity > 0;
-    }
-
-    async incrementPoolSentCount(email, count = 1) {
+    // UPDATED: Increment sent count for both warmup and pool accounts
+    async incrementSentCount(email, count = 1, accountType = 'pool') {
         try {
-            const pool = await EmailPool.findOne({ where: { email } });
-            if (!pool) return;
+            if (accountType === 'pool') {
+                const pool = await EmailPool.findOne({ where: { email } });
+                if (!pool) return;
 
-            const newCount = (pool.currentDaySent || 0) + count;
-            await EmailPool.update(
-                { currentDaySent: newCount },
-                { where: { email } }
-            );
-        } catch (error) {
-            console.error(`❌ Error incrementing pool count for ${email}:`, error);
-        }
-    }
-
-    async resetDailyCounts() {
-        try {
-            const today = new Date().toDateString();
-
-            // Reset pool accounts that haven't been reset today
-            await EmailPool.update(
-                { currentDaySent: 0 },
-                {
-                    where: {
-                        [Op.or]: [
-                            { lastResetDate: { [Op.ne]: today } },
-                            { lastResetDate: null }
-                        ]
-                    }
+                const newCount = (pool.currentDaySent || 0) + count;
+                await EmailPool.update(
+                    { currentDaySent: newCount },
+                    { where: { email } }
+                );
+            } else {
+                // For warmup accounts
+                let account = await GoogleUser.findOne({ where: { email } });
+                if (account) {
+                    const newCount = (account.current_day_sent || 0) + count;
+                    await GoogleUser.update(
+                        { current_day_sent: newCount },
+                        { where: { email } }
+                    );
+                    return;
                 }
-            );
+
+                account = await MicrosoftUser.findOne({ where: { email } });
+                if (account) {
+                    const newCount = (account.current_day_sent || 0) + count;
+                    await MicrosoftUser.update(
+                        { current_day_sent: newCount },
+                        { where: { email } }
+                    );
+                    return;
+                }
+
+                account = await SmtpAccount.findOne({ where: { email } });
+                if (account) {
+                    const newCount = (account.current_day_sent || 0) + count;
+                    await SmtpAccount.update(
+                        { current_day_sent: newCount },
+                        { where: { email } }
+                    );
+                    return;
+                }
+            }
         } catch (error) {
-            console.error('❌ Error resetting daily counts:', error);
+            console.error(`❌ Error incrementing ${accountType} count for ${email}:`, error);
         }
     }
-
-    // ... keep all your other existing methods (getActiveWarmupAccounts, getActivePoolAccounts, etc.)
 
     async initialize() {
         console.log('🚀 Initializing Bidirectional Warmup Scheduler...');
-        await this.resetDailyCounts(); // Reset counts on startup
+        await this.resetAllDailyCounts(); // Reset counts on startup
     }
 
     stopScheduler() {
