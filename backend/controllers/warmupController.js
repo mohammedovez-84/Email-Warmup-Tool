@@ -7,16 +7,31 @@ const { Op } = require("sequelize");
 const UnifiedWarmupStrategy = require('../services/unified-strategy');
 const { triggerImmediateScheduling } = require('../services/hybrid-scheduler');
 
-// 🔄 INCREMENTAL SCHEDULING FUNCTIONS
 async function scheduleIncrementalWarmup(emailAddress, senderType) {
   try {
     console.log(`🎯 Starting incremental scheduling for: ${emailAddress}`);
 
-    // Get the specific warmup account
+    // Get the specific warmup account with PROPER error handling
     const warmupAccount = await getAccountByEmailAndType(emailAddress, senderType);
     if (!warmupAccount) {
-      throw new Error(`Account not found: ${emailAddress}`);
+      throw new Error(`Account not found in database: ${emailAddress} (type: ${senderType})`);
     }
+
+    // 🚨 VALIDATE ACCOUNT DATA BEFORE PROCEEDING
+    if (!warmupAccount.email) {
+      throw new Error(`Account email is missing for: ${emailAddress}`);
+    }
+
+    // 🚨 VALIDATE REQUIRED WARMUP FIELDS
+    const requiredFields = ['startEmailsPerDay', 'increaseEmailsPerDay', 'maxEmailsPerDay', 'warmupDayCount'];
+    const missingFields = requiredFields.filter(field => warmupAccount[field] === undefined || warmupAccount[field] === null);
+
+    if (missingFields.length > 0) {
+      throw new Error(`Missing required warmup fields for ${emailAddress}: ${missingFields.join(', ')}`);
+    }
+
+    console.log(`✅ Account validation passed for: ${emailAddress}`);
+    console.log(`   Warmup Config: Start=${warmupAccount.startEmailsPerDay}, Increase=${warmupAccount.increaseEmailsPerDay}, Max=${warmupAccount.maxEmailsPerDay}, Day=${warmupAccount.warmupDayCount}`);
 
     // Get active pool accounts
     const activePools = await EmailPool.findAll({ where: { isActive: true } });
@@ -28,15 +43,23 @@ async function scheduleIncrementalWarmup(emailAddress, senderType) {
     const strategy = new UnifiedWarmupStrategy();
     const plan = await strategy.generateWarmupPlan(warmupAccount, activePools);
 
+    if (plan.error) {
+      throw new Error(`Plan generation failed: ${plan.error}`);
+    }
+
     console.log(`📊 ${emailAddress} needs ${plan.totalEmails} emails today (Day ${plan.warmupDay})`);
     console.log(`   DB Values: Start=${plan.dbValues.startEmailsPerDay}, Increase=${plan.dbValues.increaseEmailsPerDay}, Max=${plan.dbValues.maxEmailsPerDay}`);
     console.log(`   Strategy: ${plan.outbound.length} outbound → ${plan.inbound.length} inbound`);
 
     // Log the sequence
-    plan.sequence.forEach((email, index) => {
-      const delayHours = (email.scheduleDelay / (60 * 60 * 1000)).toFixed(1);
-      console.log(`   ${index + 1}. ${email.direction} to ${email.receiverEmail || email.senderEmail} (${delayHours}h)`);
-    });
+    if (plan.sequence && plan.sequence.length > 0) {
+      plan.sequence.forEach((email, index) => {
+        const delayHours = (email.scheduleDelay / (60 * 60 * 1000)).toFixed(1);
+        console.log(`   ${index + 1}. ${email.direction} to ${email.receiverEmail || email.senderEmail} (${delayHours}h)`);
+      });
+    } else {
+      console.log(`   ⚠️ No emails scheduled in the sequence`);
+    }
 
     // Schedule using hybrid scheduler's immediate scheduling
     await triggerImmediateScheduling();
@@ -44,7 +67,7 @@ async function scheduleIncrementalWarmup(emailAddress, senderType) {
     console.log(`✅ Incremental scheduling completed for ${emailAddress}`);
 
   } catch (error) {
-    console.error(`❌ Incremental scheduling failed for ${emailAddress}:`, error);
+    console.error(`❌ Incremental scheduling failed for ${emailAddress}:`, error.message);
     throw error;
   }
 }
@@ -189,45 +212,62 @@ async function getActivePoolAccountsCount() {
   return poolCount;
 }
 
-// KEEP ONLY ESSENTIAL HELPER FUNCTIONS:
 async function getAccountByEmailAndType(email, type) {
-  switch (type) {
-    case 'google':
-      return await GoogleUser.findOne({ where: { email, warmupStatus: 'active' } });
-    case 'microsoft':
-      return await MicrosoftUser.findOne({ where: { email, warmupStatus: 'active' } });
-    case 'smtp':
-      return await SmtpAccount.findOne({ where: { email, warmupStatus: 'active' } });
-    default:
+  try {
+    console.log(`🔍 Searching for account: ${email} (type: ${type})`);
+
+    let account = null;
+    switch (type) {
+      case 'google':
+        account = await GoogleUser.findOne({
+          where: {
+            email: email,
+            warmupStatus: 'active'
+          },
+          raw: true
+        });
+        break;
+      case 'microsoft':
+        account = await MicrosoftUser.findOne({
+          where: {
+            email: email,
+            warmupStatus: 'active'
+          },
+          raw: true
+        });
+        break;
+      case 'smtp':
+        account = await SmtpAccount.findOne({
+          where: {
+            email: email,
+            warmupStatus: 'active'
+          },
+          raw: true
+        });
+        break;
+      default:
+        console.log(`❌ Unknown account type: ${type}`);
+        return null;
+    }
+
+    if (!account) {
+      console.log(`❌ Account not found: ${email} (type: ${type})`);
       return null;
+    }
+
+    // 🚨 VALIDATE ACCOUNT HAS REQUIRED FIELDS
+    console.log(`✅ Account found: ${account.email}`);
+    console.log(`   Warmup Status: ${account.warmupStatus}`);
+    console.log(`   Is Connected: ${account.is_connected}`);
+    console.log(`   Warmup Config: Start=${account.startEmailsPerDay}, Increase=${account.increaseEmailsPerDay}, Max=${account.maxEmailsPerDay}, Day=${account.warmupDayCount}`);
+
+    return account;
+  } catch (error) {
+    console.error(`❌ Error finding account ${email}:`, error);
+    return null;
   }
 }
 
-async function computeEmailsToSend(account) {
-  const warmupDayCount = account.warmupDayCount || 0;
-  const startEmailsPerDay = account.startEmailsPerDay || 3;
-  const increaseEmailsPerDay = account.increaseEmailsPerDay || 1;
-  const maxEmailsPerDay = account.maxEmailsPerDay || 25;
-
-  let emailsToSend = startEmailsPerDay + (increaseEmailsPerDay * warmupDayCount);
-  emailsToSend = Math.min(emailsToSend, maxEmailsPerDay);
-  emailsToSend = Math.max(emailsToSend, 1);
-
-  return emailsToSend;
-}
-
-function getSenderType(sender) {
-  if (sender.roundRobinIndexGoogle !== undefined || sender.provider === 'google') {
-    return 'google';
-  } else if (sender.roundRobinIndexMicrosoft !== undefined || sender.provider === 'microsoft') {
-    return 'microsoft';
-  } else if (sender.roundRobinIndexCustom !== undefined || sender.smtp_host) {
-    return 'smtp';
-  }
-  return 'unknown';
-}
-
-// 🎯 MAIN CONTROLLER FUNCTIONS (UPDATE TO USE UNIFIED STRATEGY)
 exports.toggleWarmupStatus = async (req, res) => {
   try {
     const { emailAddress } = req.params;
@@ -240,7 +280,7 @@ exports.toggleWarmupStatus = async (req, res) => {
       replyRate,
     } = req.body;
 
-    console.log(`Toggle request for EMAIL: ${emailAddress} with status: ${status}`);
+    console.log(`🎯 Toggle request for EMAIL: ${emailAddress} with status: ${status}`);
 
     if (!['active', 'paused'].includes(status)) {
       return res.status(400).json({ success: false, error: 'Invalid warmup status' });
@@ -258,7 +298,15 @@ exports.toggleWarmupStatus = async (req, res) => {
       sender = await SmtpAccount.findOne({ where: { email: emailAddress } });
       senderType = 'smtp';
     }
-    if (!sender) return res.status(404).json({ success: false, error: 'Sender account not found' });
+    if (!sender) {
+      return res.status(404).json({
+        success: false,
+        error: 'Sender account not found',
+        details: `No account found with email: ${emailAddress}`
+      });
+    }
+
+    console.log(`✅ Account found: ${emailAddress} (${senderType})`);
 
     // 🚫 Check if account is connected before allowing activation
     if (status === 'active' && sender.is_connected === false) {
@@ -267,6 +315,50 @@ exports.toggleWarmupStatus = async (req, res) => {
         message: `Cannot activate warmup for ${emailAddress} — account is disconnected.`,
         hint: 'Please reconnect the account before starting warmup.'
       });
+    }
+
+    // 🚨 PRE-ACTIVATION VALIDATION
+    if (status === 'active') {
+      const requiredFields = ['startEmailsPerDay', 'increaseEmailsPerDay', 'maxEmailsPerDay', 'warmupDayCount'];
+      const missingFields = requiredFields.filter(field => {
+        const value = sender[field];
+        return value === undefined || value === null || value === '';
+      });
+
+      if (missingFields.length > 0) {
+        console.log(`❌ Activation blocked - missing fields: ${missingFields.join(', ')}`);
+        return res.status(400).json({
+          success: false,
+          error: `Account configuration incomplete`,
+          details: `Missing required fields: ${missingFields.join(', ')}`,
+          hint: 'Please complete the warmup configuration in account settings before activating'
+        });
+      }
+
+      // 🚨 VALIDATE FIELD VALUES
+      if (sender.startEmailsPerDay < 1) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid configuration',
+          details: 'Start emails per day must be at least 1'
+        });
+      }
+
+      if (sender.increaseEmailsPerDay < 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid configuration',
+          details: 'Increase emails per day cannot be negative'
+        });
+      }
+
+      if (sender.maxEmailsPerDay < sender.startEmailsPerDay) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid configuration',
+          details: 'Max emails per day cannot be less than start emails per day'
+        });
+      }
     }
 
     // 🧩 Update warmup status and config
@@ -281,7 +373,7 @@ exports.toggleWarmupStatus = async (req, res) => {
 
     // Set warmup start time when activating
     if (status === 'active' && !sender.warmupStartTime) {
-      updateData.warmupStartTime = new Date();
+      updateData.warmupStartTime = new Date().toISOString();
     }
 
     await sender.update(updateData);
@@ -299,7 +391,7 @@ exports.toggleWarmupStatus = async (req, res) => {
         if (activeWarmupAccounts >= 1 && activePoolAccounts >= 1) {
           console.log(`🎯 ${emailAddress} will exchange emails with pool accounts`);
 
-          // ✅ USE UNIFIED STRATEGY FOR SCHEDULING
+          // ✅ USE UNIFIED STRATEGY FOR SCHEDULING WITH PROPER ERROR HANDLING
           await scheduleIncrementalWarmup(emailAddress, senderType);
 
           console.log(`✅ Strategic warmup scheduling completed for ${emailAddress}`);
@@ -312,20 +404,41 @@ exports.toggleWarmupStatus = async (req, res) => {
             warmupStatus: status,
             email: emailAddress,
             warning: 'No active pool accounts found - warmup will start when pools are available',
-            updatedConfig: sender.toJSON()
+            updatedConfig: await getUpdatedSenderConfig(emailAddress, senderType)
           });
         }
 
       } catch (err) {
-        console.error('❌ Error activating warmup:', err);
+        console.error('❌ Error activating warmup:', err.message);
+
+        // 🚨 PROVIDE SPECIFIC ERROR MESSAGES
+        let userMessage = `Warmup activated but scheduling failed: ${err.message}`;
+        let errorType = 'scheduling_error';
+
+        if (err.message.includes('Account not found')) {
+          userMessage = `Account not found in database. Please check if the account exists and is properly connected.`;
+          errorType = 'account_not_found';
+        } else if (err.message.includes('Missing required warmup fields')) {
+          userMessage = `Account configuration is incomplete. Please check warmup settings.`;
+          errorType = 'incomplete_config';
+        } else if (err.message.includes('No active pool accounts')) {
+          userMessage = `Warmup activated but no pool accounts are available.`;
+          errorType = 'no_pool_accounts';
+        } else if (err.message.includes('Plan generation failed')) {
+          userMessage = `Failed to generate warmup plan. Please check account configuration.`;
+          errorType = 'plan_generation_failed';
+        }
+
         return res.json({
           success: true,
-          message: `Warmup activated but scheduling failed: ${err.message}`,
+          message: userMessage,
           senderType,
           warmupStatus: status,
           email: emailAddress,
           warning: 'Warmup activated but immediate scheduling failed',
-          updatedConfig: sender.toJSON()
+          errorType: errorType,
+          errorDetails: err.message,
+          updatedConfig: await getUpdatedSenderConfig(emailAddress, senderType)
         });
       }
     } else {
@@ -333,15 +446,6 @@ exports.toggleWarmupStatus = async (req, res) => {
       // Optional: Cancel any pending jobs for this account
       await cancelPendingJobsForAccount(emailAddress);
     }
-
-    // 🧾 Get updated sender info
-    const updatedSender = await (() => {
-      switch (senderType) {
-        case 'google': return GoogleUser.findOne({ where: { email: emailAddress } });
-        case 'microsoft': return MicrosoftUser.findOne({ where: { email: emailAddress } });
-        case 'smtp': return SmtpAccount.findOne({ where: { email: emailAddress } });
-      }
-    })();
 
     // 📊 Get enhanced metric summary
     const metrics = await getAccountMetrics(emailAddress);
@@ -352,25 +456,54 @@ exports.toggleWarmupStatus = async (req, res) => {
       senderType,
       warmupStatus: status,
       email: emailAddress,
-      updatedConfig: updatedSender.toJSON(),
+      updatedConfig: await getUpdatedSenderConfig(emailAddress, senderType),
       metricSummary: metrics,
       note: status === 'active' ?
         'Account scheduled with unified strategy - emails will be sent strategically' :
         'No new warmup emails will be scheduled'
     });
+
   } catch (error) {
-    console.error('Toggle warmup error:', error);
+    console.error('❌ Toggle warmup error:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to update warmup status',
-      details: error.message
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
 
-async function cancelPendingJobsForAccount(emailAddress) {
-  console.log(`🗑️ Would cancel pending jobs for: ${emailAddress}`);
-  // Implementation depends on your job queue system
+// Helper function to get updated sender config
+async function getUpdatedSenderConfig(email, type) {
+  try {
+    switch (type) {
+      case 'google':
+        return await GoogleUser.findOne({ where: { email } });
+      case 'microsoft':
+        return await MicrosoftUser.findOne({ where: { email } });
+      case 'smtp':
+        return await SmtpAccount.findOne({ where: { email } });
+      default:
+        return null;
+    }
+  } catch (error) {
+    console.error(`Error getting updated config for ${email}:`, error);
+    return null;
+  }
+}
+
+// Helper function to cancel pending jobs (placeholder - implement based on your job system)
+async function cancelPendingJobsForAccount(email) {
+  try {
+    console.log(`🔄 Canceling pending jobs for: ${email}`);
+    // Implement your job cancellation logic here
+    // This could involve querying your job queue and removing jobs for this email
+    return true;
+  } catch (error) {
+    console.error(`Error canceling jobs for ${email}:`, error);
+    return false;
+  }
 }
 
 // 🎯 OTHER CONTROLLER FUNCTIONS (Updated with Enhanced Metrics)

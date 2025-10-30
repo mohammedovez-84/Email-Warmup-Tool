@@ -9,68 +9,43 @@ class UnifiedWarmupStrategy {
         this.ORGANIZATIONAL_DOMAINS = ['elmstreetweb.com']; // Add more as needed
     }
 
-    async generateWarmupPlan(account, availablePools) {
-        // VALIDATE ACCOUNT FIRST
-        if (!account || !account.email) {
-            console.error('❌ INVALID ACCOUNT: No account or email provided');
-            return this.createEmptyPlan(account, 'Invalid account provided');
-        }
-
-        if (typeof account.email !== 'string' || !account.email.includes('@')) {
-            console.error('❌ INVALID ACCOUNT: Invalid email format', account.email);
-            return this.createEmptyPlan(account, 'Invalid email format');
-        }
-
-        console.log(`🎯 Generating warmup plan for: ${account.email}`);
-
-        // CHECK FOR ORGANIZATIONAL ACCOUNTS
-        const isOrganizationalAccount = this.isOrganizationalAccount(account.email);
-        if (isOrganizationalAccount) {
-            console.log(`🏢 ORGANIZATIONAL ACCOUNT DETECTED: ${account.email}`);
-            return this.generateOrganizationalAccountPlan(account, availablePools);
-        }
-
-        // GET ACTUAL VALUES FROM DATABASE
-        const warmupDayCount = account.warmupDayCount || 0;
-        const startEmailsPerDay = account.startEmailsPerDay || 3;
-        const increaseEmailsPerDay = account.increaseEmailsPerDay || 1;
-        const maxEmailsPerDay = Math.min(account.maxEmailsPerDay || 25, this.MAX_EMAILS_SAFETY_CAP);
-
-        // CALCULATE ACTUAL SEND LIMIT FROM DB FIELDS
-        const calculatedSendLimit = startEmailsPerDay + (increaseEmailsPerDay * warmupDayCount);
-        const sendLimit = Math.min(Math.max(calculatedSendLimit, 1), maxEmailsPerDay);
-
-        console.log(`   Day: ${warmupDayCount}, Send Limit: ${sendLimit}`);
-        console.log(`   Start: ${startEmailsPerDay}, Increase: ${increaseEmailsPerDay}, Max: ${maxEmailsPerDay}`);
-
+    // In your unified-strategy.js - ensure it generates both directions
+    async generateWarmupPlan(warmupAccount, poolAccounts, replyRate) {
         try {
-            // Build account config
-            const accountConfig = buildSenderConfig(account);
+            const sequence = [];
 
-            // Use a simple capabilities object
-            const accountCapabilities = {
-                supportedDirections: ['WARMUP_TO_POOL', 'POOL_TO_WARMUP']
+            // Create BOTH directions
+            for (const poolAccount of poolAccounts) {
+                // OUTBOUND: Warmup → Pool
+                sequence.push({
+                    senderEmail: warmupAccount.email,
+                    receiverEmail: poolAccount.email,
+                    direction: 'WARMUP_TO_POOL',
+                    scheduleDelay: this.calculateScheduleDelay(sequence.length),
+                    type: 'initial'
+                });
+
+                // INBOUND: Pool → Warmup (reply simulation)
+                sequence.push({
+                    senderEmail: poolAccount.email,
+                    receiverEmail: warmupAccount.email,
+                    direction: 'POOL_TO_WARMUP',
+                    scheduleDelay: this.calculateScheduleDelay(sequence.length + 1), // Stagger the timing
+                    type: 'reply'
+                });
+            }
+
+            return {
+                sequence: this.shuffleArray(sequence), // Mix up the order
+                totalEmails: sequence.length,
+                outboundCount: sequence.filter(s => s.direction === 'WARMUP_TO_POOL').length,
+                inboundCount: sequence.filter(s => s.direction === 'POOL_TO_WARMUP').length
             };
 
-            console.log(`   Account Capabilities: ${accountCapabilities.supportedDirections.join(', ')}`);
-
-            // Determine strategy based on warmup day
-            const strategy = this.getStrategyForDay(warmupDayCount, sendLimit);
-
-            const outboundCount = Math.max(1, Math.floor(sendLimit * strategy.outboundRatio));
-            const inboundCount = sendLimit - outboundCount;
-
-            console.log(`   Strategy: ${strategy.phase}`);
-            console.log(`   Outbound: ${outboundCount}, Inbound: ${inboundCount}`);
-
-            return await this.createEmailSequence(account, availablePools, outboundCount, inboundCount, warmupDayCount, accountCapabilities);
-
         } catch (error) {
-            console.error(`❌ Failed to build config for ${account.email}:`, error.message);
-            return this.createEmptyPlan(account, error.message);
+            return { error: error.message };
         }
     }
-
     // NEW: Generate plan specifically for organizational accounts
     generateOrganizationalAccountPlan(account, availablePools) {
         console.log(`🏢 Generating RECEIVE-ONLY plan for organizational account: ${account.email}`);
@@ -142,27 +117,32 @@ class UnifiedWarmupStrategy {
         return this.ORGANIZATIONAL_DOMAINS.includes(domain);
     }
 
-    getStrategyForDay(warmupDayCount, sendLimit) {
-        let baseStrategy = { phase: 'INITIAL', outboundRatio: 0.66 };
+    getStrategyForDay(warmupDayCount, totalEmails) {
+        let baseStrategy = { phase: 'INITIAL', outboundRatio: 0.33 }; // 1:2 ratio = 33% outbound
 
         // Base strategy based on warmup day
         if (warmupDayCount === 0) {
-            baseStrategy = { phase: 'INITIAL', outboundRatio: 0.66 };
-        } else if (warmupDayCount < 3) {
-            baseStrategy = { phase: 'BUILDING', outboundRatio: 0.5 };
+            baseStrategy = { phase: 'DAY_0', outboundRatio: 0.33 }; // 1 outbound : 2 inbound
+        } else if (warmupDayCount === 1) {
+            baseStrategy = { phase: 'DAY_1', outboundRatio: 0.4 }; // 2 outbound : 3 inbound
+        } else if (warmupDayCount === 2) {
+            baseStrategy = { phase: 'DAY_2', outboundRatio: 0.43 }; // 3 outbound : 4 inbound  
         } else if (warmupDayCount < 7) {
-            baseStrategy = { phase: 'ESTABLISHING', outboundRatio: 0.45 };
+            baseStrategy = { phase: 'WEEK_1', outboundRatio: 0.45 }; // Nearly 1:1
         } else if (warmupDayCount < 14) {
-            baseStrategy = { phase: 'MATURE', outboundRatio: 0.5 };
+            baseStrategy = { phase: 'WEEK_2', outboundRatio: 0.5 }; // 1:1 ratio
         } else {
-            baseStrategy = { phase: 'PRODUCTION', outboundRatio: 0.6 };
+            baseStrategy = { phase: 'MATURE', outboundRatio: 0.6 }; // More outbound
         }
 
-        console.log(`   Final strategy ratio: ${baseStrategy.outboundRatio} (${baseStrategy.phase})`);
+        console.log(`   Final strategy: ${baseStrategy.phase} (${(baseStrategy.outboundRatio * 100).toFixed(0)}% outbound)`);
         return baseStrategy;
     }
 
+    // Add this debug method to UnifiedWarmupStrategy
     async createEmailSequence(account, availablePools, outboundCount, inboundCount, warmupDay, capabilities) {
+
+
         const plan = {
             account: account,
             totalEmails: outboundCount + inboundCount,
@@ -187,6 +167,7 @@ class UnifiedWarmupStrategy {
 
         // Create outbound emails (Warmup → Pool) - only if capability allows
         if (capabilities.supportedDirections.includes('WARMUP_TO_POOL') && outboundCount > 0) {
+            console.log(`   📤 Creating ${outboundCount} outbound emails`);
             for (let i = 0; i < outboundCount && i < outboundPools.length; i++) {
                 const pool = outboundPools[i];
                 plan.outbound.push(this.createEmailJob(account, pool, 'WARMUP_TO_POOL', i, outboundCount, 'outbound'));
@@ -195,6 +176,7 @@ class UnifiedWarmupStrategy {
 
         // Create inbound emails (Pool → Warmup) - only if capability allows
         if (capabilities.supportedDirections.includes('POOL_TO_WARMUP') && inboundCount > 0) {
+            console.log(`   📥 Creating ${inboundCount} inbound emails`);
             for (let i = 0; i < inboundCount && i < inboundPools.length; i++) {
                 const pool = inboundPools[(i + outboundCount) % inboundPools.length];
                 plan.inbound.push(this.createEmailJob(pool, account, 'POOL_TO_WARMUP', i, inboundCount, 'inbound'));
@@ -209,7 +191,7 @@ class UnifiedWarmupStrategy {
         return plan;
     }
 
-    // FIXED: Get pools compatible with specific direction
+    // In UnifiedWarmupStrategy.js - fix getCompatiblePoolsForDirection
     getCompatiblePoolsForDirection(pools, direction) {
         const compatiblePools = [];
 
@@ -229,9 +211,11 @@ class UnifiedWarmupStrategy {
 
                 if (poolCapabilities.supportedDirections.includes(direction)) {
                     compatiblePools.push(pool);
-                    console.log(`   ✅ Compatible pool: ${pool.email} for ${direction}`);
+
                 } else {
                     console.log(`   ❌ Incompatible pool: ${pool.email} cannot handle ${direction}`);
+                    console.log(`      Available directions: ${poolCapabilities.supportedDirections.join(', ')}`);
+                    console.log(`      Required direction: ${direction}`);
                 }
             } catch (error) {
                 console.log(`   ⚠️  Error checking pool ${pool.email} compatibility: ${error.message}`);
@@ -239,21 +223,33 @@ class UnifiedWarmupStrategy {
             }
         }
 
+        console.log(`   📋 Total compatible pools for ${direction}: ${compatiblePools.length}`);
         return compatiblePools;
     }
 
-    // NEW: Simple capability detection for pool accounts
+    // In UnifiedWarmupStrategy.js - make pool capability detection more robust
     getPoolCapabilities(poolConfig, direction) {
         const capabilities = {
             supportedDirections: []
         };
 
-        // Pool accounts can always receive emails
+        // All pool accounts can receive emails (WARMUP_TO_POOL)
         capabilities.supportedDirections.push('WARMUP_TO_POOL');
 
-        // Pool accounts can send if they have proper credentials
-        if (poolConfig.smtpPass || poolConfig.accessToken) {
+        // Pool accounts can send (POOL_TO_WARMUP) if they have basic credentials
+        // Check for any authentication method
+        const hasCredentials =
+            poolConfig.appPassword ||
+            poolConfig.accessToken ||
+            poolConfig.smtpPass ||
+            poolConfig.smtpPassword ||
+            (poolConfig.providerType && poolConfig.providerType === 'GMAIL');
+
+        if (hasCredentials) {
             capabilities.supportedDirections.push('POOL_TO_WARMUP');
+
+        } else {
+            console.log(`      ⚠️  Pool ${poolConfig.email} cannot SEND - missing credentials`);
         }
 
         return capabilities;
