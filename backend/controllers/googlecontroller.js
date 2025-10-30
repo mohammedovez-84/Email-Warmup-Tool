@@ -98,9 +98,9 @@ exports.addGoogleUser = async (req, res) => {
         if (existingPoolAccount) {
             return res.status(409).json({
                 success: false,
-                message: 'This email already exists as a pool account',
-                details: `Email ${email} is already registered as a pool account and cannot be added as a warmup account.`,
-                conflict_type: 'pool_account_exists'
+                message: 'Error!!, please try again later',
+                // details: `Email ${email} is already registered as a pool account and cannot be added as a warmup account.`,
+                // conflict_type: 'pool_account_exists'
             });
         }
 
@@ -109,8 +109,8 @@ exports.addGoogleUser = async (req, res) => {
         if (existingMicrosoftAccount) {
             return res.status(409).json({
                 success: false,
-                message: 'Email already exists as Microsoft account',
-                conflict_type: 'microsoft_account_exists'
+                message: 'Error!!, please try again later',
+                // conflict_type: 'microsoft_account_exists'
             });
         }
 
@@ -118,8 +118,8 @@ exports.addGoogleUser = async (req, res) => {
         if (existingSmtpAccount) {
             return res.status(409).json({
                 success: false,
-                message: 'Email already exists as SMTP account',
-                conflict_type: 'smtp_account_exists'
+                message: 'Error!!, please try again later',
+                // conflict_type: 'smtp_account_exists'
             });
         }
 
@@ -136,8 +136,8 @@ exports.addGoogleUser = async (req, res) => {
         if (!created) {
             return res.status(409).json({
                 success: false,
-                message: 'Email already exists as Google account',
-                conflict_type: 'google_account_exists'
+                message: 'Error!!, please try again later',
+                // conflict_type: 'google_account_exists'
             });
         }
 

@@ -22,9 +22,8 @@ import SMTPConnect from './SMTPConnect';
 import WarmupReport from './WarmupReport';
 const API_BASE_URL = 'http://localhost:5000';
 
-const Dashboard = ({ isSidebarCollapsed }) => {
+const Dashboard = () => {
     const navigate = useNavigate();
-    const settingsButtonRefs = useRef({});
 
     // State management
     const [warmupEmails, setWarmupEmails] = useState([]);
@@ -320,7 +319,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 }
             );
 
-            toast.success('✅ Email account deleted successfully', {
+            toast.success('Email account deleted successfully', {
                 position: "top-right",
                 autoClose: 3000,
             });
@@ -337,7 +336,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             if (error.response?.status === 401) {
                 handleUnauthorized();
             } else {
-                toast.error('❌ Failed to delete email account', {
+                toast.error('Failed to delete email account', {
                     position: "top-right",
                     autoClose: 3000,
                 });
@@ -427,7 +426,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             }
 
             if (disconnectSuccessful) {
-                toast.success('✅ Email disconnected successfully. You can reconnect it anytime.', {
+                toast.success('Email disconnected successfully. You can reconnect it anytime.', {
                     position: "top-right",
                     autoClose: 3000,
                 });
@@ -447,7 +446,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             if (error.response?.status === 401) {
                 handleUnauthorized();
             } else {
-                toast.error('❌ Failed to disconnect email. Please try again.', {
+                toast.error('Failed to disconnect email. Please try again.', {
                     position: "top-right",
                     autoClose: 3000,
                 });
@@ -489,7 +488,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             if (error.response?.status === 401) {
                 handleUnauthorized();
             } else {
-                toast.error('❌ Failed to load warmup report', {
+                toast.error(' Failed to load warmup report', {
                     position: "top-right",
                     autoClose: 3000,
                 });
@@ -549,7 +548,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
 
             console.log(`Status updated for ${emailAddress}: ${currentWarmupStatus} -> ${newStatus}`, response.data);
 
-            toast.success(`🔄 Warmup ${newStatus === 'active' ? 'started' : 'paused'} successfully`, {
+            toast.success(`Warmup ${newStatus === 'active' ? 'started' : 'paused'} successfully`, {
                 position: "top-right",
                 autoClose: 3000,
             });
@@ -573,7 +572,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 handleUnauthorized();
             } else {
                 toast.error(
-                    `❌ Failed to ${newStatus === 'active' ? 'start' : 'pause'} warmup`,
+                    ` Failed to ${newStatus === 'active' ? 'start' : 'pause'} warmup`,
                     {
                         position: "top-right",
                         autoClose: 3000,
@@ -614,7 +613,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
                 }
             );
 
-            toast.success('✅ Warmup settings saved successfully', {
+            toast.success('Warmup settings saved successfully', {
                 position: "top-right",
                 autoClose: 3000,
             });
@@ -630,7 +629,7 @@ const Dashboard = ({ isSidebarCollapsed }) => {
             if (error.response?.status === 401) {
                 handleUnauthorized();
             } else {
-                toast.error('❌ Failed to save warmup settings', {
+                toast.error('Failed to save warmup settings', {
                     position: "top-right",
                     autoClose: 3000,
                 });
