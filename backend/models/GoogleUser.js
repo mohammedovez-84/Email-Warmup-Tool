@@ -1,4 +1,3 @@
-
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
 
@@ -60,10 +59,18 @@ const GoogleUser = sequelize.define('google_users', {
   is_connected: {
     type: DataTypes.BOOLEAN,
     allowNull: false,
-    defaultValue: true, // default connected when added
+    defaultValue: true,
   },
-  // In your GoogleUser, MicrosoftUser, and SmtpAccount models, add:
   warmupStartTime: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  // NEW FIELDS ADDED
+  current_day_sent: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  last_reset_date: {
     type: DataTypes.DATE,
     allowNull: true
   }

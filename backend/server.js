@@ -18,15 +18,11 @@ const warmupRoutes = require('./routes/warmupRoutes');
 const userRoutes = require('./routes/users');
 const metricsRoutes = require('./routes/metricsRoutes');
 const healthRoutes = require('./routes/healthRoutes');
-const msoauthRoutesAdmin = require("./routes/ms-oauth-admin");
+const msoauthRoutesAdmin = require("./routes/ms-oauth-admin")
+const warmupScheduler = require('./services/Scheduler');
 
-// Replace with Hybrid Scheduler
-const {
-    startHybridScheduling,
-    stopHybridScheduling,
-    getSchedulerStatus,
-    hybridSchedulerInstance
-} = require('./services/hybrid-scheduler');
+
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -45,6 +41,7 @@ app.use(passport.session());
 // Routes
 app.use('/auth/microsoft2', microsoftAuthRoutes);
 app.use('/api/auth', authRoutes);
+// app.use("/api/ms-oauth_admin",)
 app.use('/api', googleRoutes);
 app.use('/auth', microsoftRoutes);
 app.use('/api', smtpImapRoutes);
@@ -54,22 +51,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/health', healthRoutes);
 
-// Scheduler Status Route (Read-only)
-app.get('/api/scheduler/status', async (req, res) => {
-    try {
-        const status = await getSchedulerStatus();
-        res.json({
-            success: true,
-            ...status
-        });
-    } catch (error) {
-        console.error('❌ Scheduler status error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to get scheduler status'
-        });
-    }
-});
+
 
 (async () => {
     try {
@@ -77,53 +59,28 @@ app.get('/api/scheduler/status', async (req, res) => {
         console.log('✅ Database connection established');
         console.log('✅ Database connection verified');
 
-        await sequelize.sync();
+        await sequelize.sync({ alter: true });
 
 
-        // Start the HYBRID scheduler with enhanced logging
+
+        // Start the scheduler
         setTimeout(async () => {
             try {
-                console.log('\n🎯 =================================');
-                console.log('🚀 Starting HYBRID Warmup Scheduler');
-                console.log('🎯 =================================\n');
+                console.log('🚀 Starting Warmup Scheduler...');
+                await warmupScheduler.scheduleWarmup();
 
-                await startHybridScheduling();
-
-                // Dynamic rescheduling based on mode
-                const rescheduleInterval = process.env.SCHEDULER_RESCHEDULE_INTERVAL || (4 * 60 * 60 * 1000); // 4 hours default
-
+                // Reschedule every 6 hours
                 setInterval(async () => {
-                    try {
-                        console.log('\n🔄 =================================');
-                        console.log('🔄 Auto-Rescheduling Warmup Jobs');
-                        console.log('🔄 =================================\n');
+                    console.log('🔄 Rescheduling warmup jobs...');
+                    await warmupScheduler.scheduleWarmup();
+                }, 6 * 60 * 60 * 1000);
 
-                        const status = await getSchedulerStatus();
-                        console.log(`📊 Current Status: ${status.mode} mode, ${status.accountCount} accounts`);
-
-                        // Stop current scheduling
-                        stopHybridScheduling();
-
-                        // Wait a bit for clean shutdown
-                        await new Promise(resolve => setTimeout(resolve, 2000));
-
-                        // Restart with fresh account detection
-                        await startHybridScheduling();
-
-                        console.log('✅ Auto-rescheduling completed');
-
-                    } catch (error) {
-                        console.error('❌ Auto-rescheduling error:', error);
-                    }
-                }, rescheduleInterval);
-
-                console.log('✅ Hybrid warmup scheduler started successfully');
-                console.log(`⏰ Auto-reschedule interval: ${rescheduleInterval / (60 * 60 * 1000)} hours`);
-
+                console.log('✅ Warmup scheduler started successfully');
             } catch (error) {
-                console.error('❌ Failed to start hybrid scheduler:', error);
+                console.error('❌ Failed to start scheduler:', error);
             }
         }, 5000);
+
 
         app.listen(PORT, () => {
             console.log(`🚀 Server started on http://localhost:${PORT}`);
