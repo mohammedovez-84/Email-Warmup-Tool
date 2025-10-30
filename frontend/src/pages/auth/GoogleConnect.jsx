@@ -40,28 +40,6 @@ const Toast = ({ message, type = 'success', onClose }) => {
     );
 };
 
-// Toast Manager Hook
-const useToast = () => {
-    const [toasts, setToasts] = useState([]);
-
-    const showToast = (message, type = 'success', duration = 4000) => {
-        const id = Date.now().toString();
-        const toast = { id, message, type };
-
-        setToasts(prev => [...prev, toast]);
-
-        setTimeout(() => {
-            removeToast(id);
-        }, duration);
-    };
-
-    const removeToast = (id) => {
-        setToasts(prev => prev.filter(toast => toast.id !== id));
-    };
-
-    return { toasts, showToast, removeToast };
-};
-
 const GoogleConnect = ({ onSuccess, onClose }) => {
     const [formData, setFormData] = useState({
         senderName: '',
@@ -70,12 +48,26 @@ const GoogleConnect = ({ onSuccess, onClose }) => {
         appPassword: ''
     });
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
     const [activeField, setActiveField] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [toasts, setToasts] = useState([]);
 
-    // Initialize toast manager
-    const { toasts, showToast, removeToast } = useToast();
+    // Simple toast functions
+    const showToast = (message, type = 'success', duration = 4000) => {
+        const id = Date.now().toString();
+        const toast = { id, message, type };
+
+        setToasts(prev => [...prev, toast]);
+
+        // Auto remove after duration
+        setTimeout(() => {
+            removeToast(id);
+        }, duration);
+    };
+
+    const removeToast = (id) => {
+        setToasts(prev => prev.filter(toast => toast.id !== id));
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -88,7 +80,6 @@ const GoogleConnect = ({ onSuccess, onClose }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        setError('');
 
         try {
             await axios.post(`${API_BASE_URL}/api/accounts/connect-google`, {
@@ -108,7 +99,6 @@ const GoogleConnect = ({ onSuccess, onClose }) => {
             }, 1500);
         } catch (err) {
             const errorMessage = err.response?.data?.message || 'Failed to connect Google account';
-            setError(errorMessage);
             showToast(errorMessage, 'error');
         } finally {
             setLoading(false);
@@ -116,34 +106,30 @@ const GoogleConnect = ({ onSuccess, onClose }) => {
     };
 
     const handleTestSMTP = async () => {
-        setError('');
         try {
             await axios.post(`${API_BASE_URL}/api/accounts/test-smtp`, {
                 serviceName: 'google',
                 email: formData.email,
                 appPassword: formData.appPassword,
             });
-            showToast('✅ SMTP Test successful! Connection verified.', 'success');
+            showToast('SMTP Test successful! Connection verified.', 'success');
         } catch (err) {
             const errorMessage = err.response?.data?.error || 'SMTP Test failed';
-            setError(errorMessage);
-            showToast(`❌ SMTP Test failed: ${errorMessage}`, 'error');
+            showToast(`SMTP Test failed: ${errorMessage}`, 'error');
         }
     };
 
     const handleTestIMAP = async () => {
-        setError('');
         try {
             await axios.post(`${API_BASE_URL}/api/accounts/test-imap`, {
                 serviceName: 'google',
                 email: formData.email,
                 appPassword: formData.appPassword,
             });
-            showToast('✅ IMAP Test successful! Connection verified.', 'success');
+            showToast('IMAP Test successful! Connection verified.', 'success');
         } catch (err) {
             const errorMessage = err.response?.data?.error || 'IMAP Test failed';
-            setError(errorMessage);
-            showToast(`❌ IMAP Test failed: ${errorMessage}`, 'error');
+            showToast(`IMAP Test failed: ${errorMessage}`, 'error');
         }
     };
 
@@ -199,25 +185,6 @@ const GoogleConnect = ({ onSuccess, onClose }) => {
                     {/* Content Area */}
                     <div className="flex-1 overflow-y-auto">
                         <div className="p-6">
-                            {/* Error Message */}
-                            <AnimatePresence>
-                                {error && (
-                                    <motion.div
-                                        className="bg-red-50 text-red-700 p-4 rounded-lg mb-6 text-sm border border-red-200 font-['Poppins'] flex items-start"
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -10 }}
-                                    >
-                                        <div className="bg-red-100 p-1 rounded mr-3 mt-0.5">
-                                            <FiX className="text-red-600 text-sm" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <strong className="font-semibold">Error:</strong> {error}
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-
                             <form onSubmit={handleSubmit}>
                                 {/* Form Fields */}
                                 <div className="space-y-4 mb-6">

@@ -55,28 +55,6 @@ const Toast = ({ message, type = 'success', onClose }) => {
     );
 };
 
-// Toast Manager Hook
-const useToast = () => {
-    const [toasts, setToasts] = useState([]);
-
-    const showToast = (message, type = 'success', duration = 4000) => {
-        const id = Date.now().toString();
-        const toast = { id, message, type };
-
-        setToasts(prev => [...prev, toast]);
-
-        setTimeout(() => {
-            removeToast(id);
-        }, duration);
-    };
-
-    const removeToast = (id) => {
-        setToasts(prev => prev.filter(toast => toast.id !== id));
-    };
-
-    return { toasts, showToast, removeToast };
-};
-
 const SMTPConnect = ({ onSuccess, onClose }) => {
     const token = localStorage.getItem('token');
 
@@ -99,12 +77,26 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
 
     const [activeTab, setActiveTab] = useState('smtp');
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [showImapPassword, setShowImapPassword] = useState(false);
+    const [toasts, setToasts] = useState([]);
 
-    // Initialize toast manager
-    const { toasts, showToast, removeToast } = useToast();
+    // Simple toast functions
+    const showToast = (message, type = 'success', duration = 4000) => {
+        const id = Date.now().toString();
+        const toast = { id, message, type };
+
+        setToasts(prev => [...prev, toast]);
+
+        // Auto remove after duration
+        setTimeout(() => {
+            removeToast(id);
+        }, duration);
+    };
+
+    const removeToast = (id) => {
+        setToasts(prev => prev.filter(toast => toast.id !== id));
+    };
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -112,11 +104,6 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
             ...prev,
             [name]: type === 'checkbox' ? checked : value
         }));
-
-        // Clear error when user starts typing
-        if (error) {
-            setError('');
-        }
     };
 
     const toggleUsername = () => {
@@ -144,7 +131,6 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        setError('');
 
         try {
             const payload = {
@@ -194,7 +180,6 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
 
         } catch (err) {
             const errorMessage = err.response?.data?.message || 'Failed to connect SMTP account. Please check your credentials and try again.';
-            setError(errorMessage);
             showToast(errorMessage, 'error');
         } finally {
             setLoading(false);
@@ -202,8 +187,6 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
     };
 
     const handleTestSmtp = async () => {
-        setError('');
-
         if (!formData.smtpHost || !formData.email || !formData.password) {
             showToast('Please fill in all required SMTP fields (Host, Email, and Password) to test the connection.', 'warning');
             return;
@@ -227,17 +210,14 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
                 }
             });
 
-            showToast('✅ SMTP connection test successful! Your outgoing email settings are correctly configured.', 'success');
+            showToast('SMTP connection test successful! Your outgoing email settings are correctly configured.', 'success');
         } catch (err) {
             const errorMessage = err.response?.data?.error || 'SMTP connection test failed. Please check your credentials and server settings.';
-            setError(errorMessage);
-            showToast(`❌ ${errorMessage}`, 'error');
+            showToast(`${errorMessage}`, 'error');
         }
     };
 
     const handleTestImap = async () => {
-        setError('');
-
         if (!formData.imapHost || !formData.email) {
             showToast('Please fill in all required IMAP fields (Host and Email) to test the connection.', 'warning');
             return;
@@ -262,11 +242,10 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
                 }
             });
 
-            showToast('✅ IMAP connection test successful! Your incoming email settings are correctly configured.', 'success');
+            showToast('IMAP connection test successful! Your incoming email settings are correctly configured.', 'success');
         } catch (err) {
             const errorMessage = err.response?.data?.error || 'IMAP connection test failed. Please check your credentials and server settings.';
-            setError(errorMessage);
-            showToast(`❌ ${errorMessage}`, 'error');
+            showToast(`${errorMessage}`, 'error');
         }
     };
 
@@ -342,25 +321,6 @@ const SMTPConnect = ({ onSuccess, onClose }) => {
                     {/* Content Area */}
                     <div className="flex-1 overflow-y-auto">
                         <div className="p-6">
-                            {/* Error Message */}
-                            <AnimatePresence>
-                                {error && (
-                                    <motion.div
-                                        className="bg-red-50 text-red-700 p-4 rounded-lg mb-6 text-sm border border-red-200 font-['Poppins'] flex items-start"
-                                        initial={{ opacity: 0, y: -10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        exit={{ opacity: 0, y: -10 }}
-                                    >
-                                        <div className="bg-red-100 p-1 rounded mr-3 mt-0.5">
-                                            <FiX className="text-red-600 text-sm" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <strong className="font-semibold">Error:</strong> {error}
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-
                             {activeTab === 'smtp' ? (
                                 <form onSubmit={handleSubmit} className="space-y-5">
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
