@@ -1,19 +1,18 @@
-// workers/warmupWorker.js - COMPLETE FIXED VERSION
-
+// workers/warmupWorker.js - COMPLETE FIXED VERSION WITH VOLUME ENFORCEMENT
+const EmailExchange = require("../models/MailExchange")
 require('dotenv').config({ path: '../.env' });
-
+const { Op } = require('sequelize');
 const getChannel = require('../queues/rabbitConnection');
 const {
     warmupSingleEmail,
     canPoolSendMore,
-    updatePoolSentCount,
-    getFreshAccountData
 } = require('../services/warmupWorkflow');
 const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
 const EmailPool = require('../models/EmailPool');
 const { buildSenderConfig, buildWarmupConfig, buildPoolConfig } = require('../utils/senderConfig');
+const VolumeEnforcement = require('../services/volume-enforcement');
 
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -131,37 +130,62 @@ class WarmupWorker {
         return delayMs;
     }
 
+
     async processSingleJob(channel, msg, job) {
-        const now = Date.now();
-        const timeSinceLastJob = now - this.lastProcessedTime;
+        const jobKey = this.getJobKey(job);
 
-        // Enforce minimum time between jobs
-        if (timeSinceLastJob < this.MIN_JOB_INTERVAL) {
-            const delayMs = this.MIN_JOB_INTERVAL - timeSinceLastJob;
-            console.log(`⏳ Rate limiting: ${Math.round(delayMs / 1000)}s until next job`);
-            await this.delay(delayMs);
-        }
+        try {
+            console.log(`\n🔨 PROCESSING: ${job.direction}`);
+            console.log(`   ${job.pairs[0].senderEmail} → ${job.pairs[0].receiverEmail}`);
 
-        if (job.coordinated && job.timeSlot && job.pairs) {
-            console.log('🔨 Processing COORDINATED warmup job:', {
-                timeSlot: job.timeSlot,
-                pairs: job.pairs.length,
-                direction: job.direction,
-                warmupAccount: job.warmupAccount
-            });
+            // 🚨 HARD EXECUTION BLOCK
+            const warmupAccount = job.warmupAccount;
+            const canExecute = await VolumeEnforcement.canAccountSendEmail(warmupAccount, 'warmup');
 
+            if (!canExecute) {
+                console.log(`💥 EXECUTION BLOCKED: ${warmupAccount} at volume limit - REJECTING JOB`);
+                channel.ack(msg); // 🚨 ACTUALLY REMOVE FROM QUEUE
+                return;
+            }
+
+            // Only process if not blocked
             if (job.individualSchedule) {
                 await this.processIndividualEmail(job);
             } else {
                 await this.processCoordinatedTimeSlot(job);
             }
-        } else {
-            console.log('🔨 Processing SINGLE warmup job');
-            await this.processSingleEmail(job);
-        }
 
-        channel.ack(msg);
-        this.lastProcessedTime = Date.now();
+            channel.ack(msg);
+            console.log(`✅ EXECUTION COMPLETED`);
+
+        } catch (error) {
+            console.error(`❌ EXECUTION FAILED:`, error);
+            channel.ack(msg); // 🚨 REMOVE FAILED JOB
+        }
+    }
+
+    // 🚨 ULTRA-STRICT JOB PROCESSING CHECK
+    async canProcessJobNow(job) {
+        try {
+            const warmupAccount = job.warmupAccount;
+            if (!warmupAccount) {
+                console.log('❌ Job rejected: No warmup account specified');
+                return false;
+            }
+
+            // 🚨 FINAL EXECUTION CHECK - No pending counting, just actual usage
+            const canExecute = await VolumeEnforcement.canAccountSendEmail(warmupAccount, 'warmup', false);
+
+            if (!canExecute) {
+                console.log(`💥 EXECUTION STOPPED: ${warmupAccount} at volume limit during execution`);
+            }
+
+            return canExecute;
+
+        } catch (error) {
+            console.error('❌ Error in execution pre-check:', error);
+            return false;
+        }
     }
 
     async handleJobFailure(channel, msg, job, error) {
@@ -220,6 +244,13 @@ class WarmupWorker {
             return;
         }
 
+        // 🚨 DOUBLE-CHECK: Verify we can still process this
+        const canStillProcess = await this.canProcessJobNow(job);
+        if (!canStillProcess) {
+            console.log(`🚨 EXECUTION STOPPED: Volume limit reached during processing`);
+            return;
+        }
+
         // ENHANCED: Different handling for sending vs receiving
         if (direction === 'WARMUP_TO_POOL') {
             // SENDING from warmup account → pool account
@@ -229,45 +260,34 @@ class WarmupWorker {
             await this.handlePoolToWarmup(pair, warmupAccount);
         }
     }
+
     async handleWarmupToPool(pair, warmupAccount) {
         console.log(`   🔄 HANDLING SENDING: ${pair.senderEmail} → ${pair.receiverEmail}`);
 
         try {
+            // 🚨 CENTRALIZED VOLUME CHECK BEFORE SENDING
+            const canSend = await VolumeEnforcement.canAccountSendEmail(warmupAccount, 'warmup');
+            if (!canSend) {
+                console.log(`   🛑 DAILY LIMIT REACHED: ${warmupAccount} cannot send more emails today`);
+                return;
+            }
+
             let sender = await this.getWarmupAccount(pair.senderType, pair.senderEmail);
             let receiver = await this.getPoolAccount(pair.receiverEmail);
 
-            if (!sender) {
-                throw new Error(`Sender account not found: ${pair.senderEmail}`);
-            }
-            if (!receiver) {
-                throw new Error(`Receiver account not found: ${pair.receiverEmail}`);
+            if (!sender || !receiver) {
+                throw new Error('Sender or receiver account not found');
             }
 
             console.log(`   📧 Processing: ${pair.senderEmail} → ${pair.receiverEmail} [WARMUP_TO_POOL]`);
 
-            // ENHANCED: Diagnose Microsoft account issues instead of skipping
-            if (sender.provider === 'microsoft' || sender.microsoft_id) {
-                const microsoftStatus = await this.diagnoseMicrosoftAccount(sender);
-
-                if (!microsoftStatus.canSend) {
-                    console.log(`   ⚠️  Microsoft account issue: ${microsoftStatus.reason}`);
-
-                    if (microsoftStatus.fixable) {
-                        console.log(`   🔧 Attempting to fix: ${microsoftStatus.suggestion}`);
-                        const fixed = await this.attemptMicrosoftFix(sender);
-                        if (!fixed) {
-                            console.log(`   ⏩ SKIPPING: Unable to resolve Microsoft account issue`);
-                            return;
-                        }
-                    } else {
-                        console.log(`   ⏩ SKIPPING: ${microsoftStatus.reason}`);
-                        return;
-                    }
-                }
-            }
-
-            // Pre-execution validation
-            await this.validateJobExecution(sender, receiver, 'WARMUP_TO_POOL');
+            // RECORD THE EXCHANGE BEFORE SENDING
+            const exchangeRecord = await EmailExchange.create({
+                warmupAccount: warmupAccount,
+                poolAccount: pair.receiverEmail,
+                direction: 'WARMUP_TO_POOL',
+                status: 'scheduled'
+            });
 
             let senderConfig = buildWarmupConfig(sender);
             const safeReplyRate = pair.replyRate || 0.25;
@@ -276,11 +296,20 @@ class WarmupWorker {
                 senderConfig,
                 receiver,
                 safeReplyRate,
-                true, // isCoordinatedJob
-                true, // isInitialEmail (outbound)
-                false, // isReply
+                true,
+                true,
+                false,
                 'WARMUP_TO_POOL'
             );
+
+            // UPDATE EXCHANGE RECORD WITH RESULTS
+            await exchangeRecord.update({
+                messageId: sendResult?.messageId,
+                status: sendResult?.success ? 'sent' : 'failed'
+            });
+
+            // 🚨 UPDATE DAILY COUNT
+            await this.incrementDailySentCount(warmupAccount, 'warmup');
 
             console.log(`   ✅ WARMUP_TO_POOL email completed: ${pair.senderEmail} → ${pair.receiverEmail}`);
 
@@ -289,334 +318,34 @@ class WarmupWorker {
             throw error;
         }
     }
-    // NEW: Comprehensive Microsoft account diagnosis
-    async diagnoseMicrosoftAccount(account) {
-        try {
-            console.log(`   🔍 Diagnosing Microsoft account: ${account.email}`);
-
-            // Check 1: Token validity
-            if (!account.access_token) {
-                return {
-                    canSend: false,
-                    reason: 'No access token',
-                    fixable: true,
-                    suggestion: 'Account needs re-authentication'
-                };
-            }
-
-            // Check 2: Token expiration
-            if (this.isTokenExpired(account)) {
-                return {
-                    canSend: false,
-                    reason: 'Token expired',
-                    fixable: true,
-                    suggestion: 'Refresh token required'
-                };
-            }
-
-            // Check 3: Test Graph API permissions
-            const permissionStatus = await this.testMicrosoftPermissions(account);
-            if (!permissionStatus.hasSendPermission) {
-                return {
-                    canSend: false,
-                    reason: `Missing send permission: ${permissionStatus.details}`,
-                    fixable: permissionStatus.fixable,
-                    suggestion: permissionStatus.suggestion
-                };
-            }
-
-            // Check 4: Test actual send capability
-            const sendTest = await this.testMicrosoftSendCapability(account);
-            if (!sendTest.canSend) {
-                return {
-                    canSend: false,
-                    reason: `Send test failed: ${sendTest.error}`,
-                    fixable: sendTest.fixable,
-                    suggestion: sendTest.suggestion
-                };
-            }
-
-            return {
-                canSend: true,
-                reason: 'Account is ready for sending',
-                fixable: true,
-                suggestion: 'Proceed with warmup'
-            };
-
-        } catch (error) {
-            return {
-                canSend: false,
-                reason: `Diagnosis failed: ${error.message}`,
-                fixable: false,
-                suggestion: 'Check account configuration'
-            };
-        }
-    }
-
-    // NEW: Test Microsoft Graph API permissions
-    async testMicrosoftPermissions(account) {
-        try {
-            console.log(`   📋 Testing Microsoft Graph permissions for: ${account.email}`);
-
-            // Test 1: Basic profile access (should work)
-            const profileResponse = await fetch('https://graph.microsoft.com/v1.0/me', {
-                headers: {
-                    'Authorization': `Bearer ${account.access_token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (profileResponse.status === 401) {
-                return {
-                    hasSendPermission: false,
-                    details: 'Token invalid or expired',
-                    fixable: true,
-                    suggestion: 'Refresh access token'
-                };
-            }
-
-            if (!profileResponse.ok) {
-                return {
-                    hasSendPermission: false,
-                    details: `Basic API access failed: ${profileResponse.status}`,
-                    fixable: false,
-                    suggestion: 'Check account authentication'
-                };
-            }
-
-            // Test 2: Mail send permission
-            const sendResponse = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${account.access_token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    message: {
-                        subject: "Permission Test",
-                        body: {
-                            contentType: "Text",
-                            content: "Testing send permissions"
-                        },
-                        toRecipients: [
-                            {
-                                emailAddress: {
-                                    address: account.email // Send to self for test
-                                }
-                            }
-                        ]
-                    },
-                    saveToSentItems: "false"
-                })
-            });
-
-            if (sendResponse.status === 403) {
-                const errorData = await sendResponse.json().catch(() => ({}));
-                console.log(`   🔐 Permission denied details:`, errorData);
-
-                return {
-                    hasSendPermission: false,
-                    details: 'Mail.Send permission missing or not consented',
-                    fixable: true,
-                    suggestion: 'Admin consent required for Mail.Send permission'
-                };
-            }
-
-            if (sendResponse.status === 400) {
-                // This might actually be good - it means we have permission but the request has issues
-                console.log(`   ✅ Has send permission (400 indicates permission but bad request)`);
-                return {
-                    hasSendPermission: true,
-                    details: 'Has send permission',
-                    fixable: true,
-                    suggestion: 'Ready to send'
-                };
-            }
-
-            if (sendResponse.ok) {
-                console.log(`   ✅ Has send permission`);
-                return {
-                    hasSendPermission: true,
-                    details: 'Has send permission',
-                    fixable: true,
-                    suggestion: 'Ready to send'
-                };
-            }
-
-            // If we get here, there's an unknown issue
-            return {
-                hasSendPermission: false,
-                details: `Unknown permission issue: ${sendResponse.status}`,
-                fixable: false,
-                suggestion: 'Check Microsoft Graph API status'
-            };
-
-        } catch (error) {
-            return {
-                hasSendPermission: false,
-                details: `Permission test error: ${error.message}`,
-                fixable: false,
-                suggestion: 'Check network connectivity'
-            };
-        }
-    }
-
-    // NEW: Test actual send capability with a safe test
-    async testMicrosoftSendCapability(account) {
-        try {
-            console.log(`   🧪 Testing send capability for: ${account.email}`);
-
-            // Use a simple test that won't actually send
-            const testResponse = await fetch('https://graph.microsoft.com/v1.0/me/mailFolders/sentItems', {
-                headers: {
-                    'Authorization': `Bearer ${account.access_token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (testResponse.status === 403) {
-                return {
-                    canSend: false,
-                    error: 'Cannot access sent items - permissions issue',
-                    fixable: true,
-                    suggestion: 'Need Mail.ReadWrite permission'
-                };
-            }
-
-            if (!testResponse.ok && testResponse.status !== 404) {
-                return {
-                    canSend: false,
-                    error: `Sent items access failed: ${testResponse.status}`,
-                    fixable: false,
-                    suggestion: 'Check mailbox permissions'
-                };
-            }
-
-            // If we can access sent items (or get 404 which is fine), we likely have good permissions
-            return {
-                canSend: true,
-                error: null,
-                fixable: true,
-                suggestion: 'Send capability confirmed'
-            };
-
-        } catch (error) {
-            return {
-                canSend: false,
-                error: `Send test failed: ${error.message}`,
-                fixable: false,
-                suggestion: 'Check account configuration'
-            };
-        }
-    }
-
-    // NEW: Attempt to fix Microsoft account issues
-    async attemptMicrosoftFix(account) {
-        try {
-            console.log(`   🔧 Attempting to fix Microsoft account: ${account.email}`);
-
-            // Strategy 1: Refresh token if expired
-            if (this.isTokenExpired(account)) {
-                console.log(`   🔄 Token expired, attempting refresh...`);
-                const newTokens = await this.refreshMicrosoftToken(account);
-                if (newTokens) {
-                    // Update the account with new tokens
-                    await MicrosoftUser.update(
-                        {
-                            access_token: newTokens.access_token,
-                            refresh_token: newTokens.refresh_token,
-                            token_expires_at: newTokens.token_expires_at
-                        },
-                        { where: { email: account.email } }
-                    );
-                    console.log(`   ✅ Token refreshed successfully`);
-                    return true;
-                }
-            }
-
-            // Strategy 2: Check if it's a consent issue that can be resolved
-            const permissionStatus = await this.testMicrosoftPermissions(account);
-            if (permissionStatus.details.includes('consent')) {
-                console.log(`   🔐 Consent issue detected: ${permissionStatus.details}`);
-                console.log(`   💡 Solution: Admin consent required in Azure Portal`);
-
-                // Mark account for manual intervention
-                await this.markAccountAsNeedsReauth(account.email);
-                return false;
-            }
-
-            // Strategy 3: Check if it's a license issue
-            const licenseStatus = await this.checkMicrosoftLicense(account);
-            if (!licenseStatus.hasLicense) {
-                console.log(`   📄 License issue: ${licenseStatus.details}`);
-                return false;
-            }
-
-            console.log(`   ❌ Unable to automatically fix account issues`);
-            return false;
-
-        } catch (error) {
-            console.error(`   ❌ Fix attempt failed: ${error.message}`);
-            return false;
-        }
-    }
-
-    // NEW: Check if Microsoft account has proper license
-    async checkMicrosoftLicense(account) {
-        try {
-            const response = await fetch('https://graph.microsoft.com/v1.0/me', {
-                headers: {
-                    'Authorization': `Bearer ${account.access_token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.status === 403) {
-                return {
-                    hasLicense: false,
-                    details: 'Account may not have Exchange Online license'
-                };
-            }
-
-            const userData = await response.json();
-            if (userData.mail && userData.userPrincipalName) {
-                return {
-                    hasLicense: true,
-                    details: 'Account has valid license and mailbox'
-                };
-            }
-
-            return {
-                hasLicense: false,
-                details: 'Account missing mailbox properties'
-            };
-
-        } catch (error) {
-            return {
-                hasLicense: false,
-                details: `License check failed: ${error.message}`
-            };
-        }
-    }
 
     async handlePoolToWarmup(pair, warmupAccount) {
         console.log(`   🔄 HANDLING RECEIVING: ${pair.senderEmail} → ${pair.receiverEmail}`);
 
         try {
+            // 🚨 CENTRALIZED POOL CAPACITY CHECK
+            const canPoolSend = await VolumeEnforcement.canAccountSendEmail(pair.senderEmail, 'pool');
+            if (!canPoolSend) {
+                console.log(`   🛑 POOL LIMIT REACHED: ${pair.senderEmail} cannot send more emails today`);
+                return;
+            }
+
             let sender = await this.getPoolAccount(pair.senderEmail);
             let receiver = await this.getWarmupAccount(pair.receiverType, pair.receiverEmail);
 
-            if (!sender) {
-                throw new Error(`Sender account not found: ${pair.senderEmail}`);
-            }
-            if (!receiver) {
-                throw new Error(`Receiver account not found: ${pair.receiverEmail}`);
+            if (!sender || !receiver) {
+                throw new Error('Sender or receiver account not found');
             }
 
             console.log(`   📧 Processing: ${pair.senderEmail} → ${pair.receiverEmail} [POOL_TO_WARMUP]`);
 
-            // Pre-execution validation
-            await this.validateJobExecution(sender, receiver, 'POOL_TO_WARMUP');
+            // RECORD THE EXCHANGE BEFORE SENDING
+            const exchangeRecord = await EmailExchange.create({
+                warmupAccount: warmupAccount,
+                poolAccount: pair.senderEmail,
+                direction: 'POOL_TO_WARMUP',
+                status: 'scheduled'
+            });
 
             let senderConfig = buildPoolConfig(sender);
             const safeReplyRate = pair.replyRate || 0.25;
@@ -626,27 +355,27 @@ class WarmupWorker {
                 throw new Error(`Pool account ${pair.senderEmail} has reached daily limit`);
             }
 
-            // SEND THE EMAIL AND GET THE ACTUAL MESSAGE ID
             const sendResult = await this.sendEmailWithFallback(
                 senderConfig,
                 receiver,
                 safeReplyRate,
-                true, // isCoordinatedJob
-                false, // isInitialEmail (inbound)
-                true, // isReply
+                true,
+                false,
+                true,
                 'POOL_TO_WARMUP'
             );
 
-            console.log(`   ✅ POOL_TO_WARMUP email completed: ${pair.senderEmail} → ${pair.receiverEmail}`);
+            // UPDATE EXCHANGE RECORD WITH RESULTS
+            await exchangeRecord.update({
+                messageId: sendResult?.messageId,
+                status: sendResult?.success ? 'sent' : 'failed'
+            });
 
-            // ENHANCED: Actually check if email was delivered to Microsoft account
-            // Use the actual messageId from the send result, not from pair
-            if (sendResult && sendResult.messageId) {
-                console.log(`   📧 Verifying email delivery to: ${warmupAccount}`);
-                await this.verifyEmailDelivery(sendResult.messageId, warmupAccount);
-            } else {
-                console.log(`   ⚠️  No messageId available for delivery verification`);
-            }
+            // 🚨 UPDATE DAILY COUNTS
+            await this.incrementDailySentCount(pair.senderEmail, 'pool');
+            await this.incrementDailyReceivedCount(warmupAccount);
+
+            console.log(`   ✅ POOL_TO_WARMUP email completed: ${pair.senderEmail} → ${pair.receiverEmail}`);
 
         } catch (error) {
             console.error(`   ❌ Failed POOL_TO_WARMUP email: ${error.message}`);
@@ -654,7 +383,46 @@ class WarmupWorker {
         }
     }
 
+    // 🚨 UPDATE REAL-TIME VOLUME CHECK
+    async canAccountSendToday(email, accountType = 'warmup') {
+        return await VolumeEnforcement.canAccountSendEmail(email, accountType);
+    }
 
+    // 🚨 UPDATE DAILY COUNTS
+    async incrementDailySentCount(email, accountType) {
+        try {
+            if (accountType === 'warmup') {
+                let account = await GoogleUser.findOne({ where: { email } });
+                if (account) {
+                    await GoogleUser.increment('current_day_sent', { where: { email } });
+                    return;
+                }
+                account = await MicrosoftUser.findOne({ where: { email } });
+                if (account) {
+                    await MicrosoftUser.increment('current_day_sent', { where: { email } });
+                    return;
+                }
+                account = await SmtpAccount.findOne({ where: { email } });
+                if (account) {
+                    await SmtpAccount.increment('current_day_sent', { where: { email } });
+                    return;
+                }
+            } else {
+                await EmailPool.increment('currentDaySent', { where: { email } });
+            }
+        } catch (error) {
+            console.error(`❌ Error incrementing daily count for ${email}:`, error);
+        }
+    }
+
+    async incrementDailyReceivedCount(email) {
+        try {
+            // You might want to track received emails separately
+            console.log(`   📥 Account ${email} received an email`);
+        } catch (error) {
+            console.error(`❌ Error incrementing received count for ${email}:`, error);
+        }
+    }
 
     async verifyEmailDelivery(messageId, warmupAccount) {
         // FIX: Check if messageId is valid
@@ -723,9 +491,6 @@ class WarmupWorker {
             return true; // If we can't parse, assume expired
         }
     }
-
-
-    // Add this method to your WarmupWorker class:
 
     async checkMicrosoftEmailDelivery(messageId, account) {
         try {
@@ -890,48 +655,8 @@ class WarmupWorker {
             return null;
         }
     }
+
     // Pre-execution validation
-    async validateJobExecution(sender, receiver, direction) {
-        console.log(`   🔍 Pre-execution validation for ${direction}`);
-
-        // Check if accounts are still active and valid
-        if (direction === 'WARMUP_TO_POOL') {
-            const warmupValid = await this.validateWarmupAccount(sender.email);
-            if (!warmupValid) {
-                throw new Error(`Warmup account ${sender.email} is no longer valid`);
-            }
-        } else {
-            const poolValid = await this.validatePoolAccount(sender.email);
-            if (!poolValid) {
-                throw new Error(`Pool account ${sender.email} is no longer valid`);
-            }
-        }
-    }
-
-    async validateWarmupAccount(email) {
-        try {
-            const account = await GoogleUser.findOne({ where: { email } }) ||
-                await MicrosoftUser.findOne({ where: { email } }) ||
-                await SmtpAccount.findOne({ where: { email } });
-
-            return account && account.warmupStatus === 'active' && account.is_connected;
-        } catch (error) {
-            console.error(`❌ Error validating warmup account ${email}:`, error);
-            return false;
-        }
-    }
-
-    async validatePoolAccount(email) {
-        try {
-            const pool = await EmailPool.findOne({ where: { email, isActive: true } });
-            return pool !== null;
-        } catch (error) {
-            console.error(`❌ Error validating pool account ${email}:`, error);
-            return false;
-        }
-    }
-    // Update the validateJobExecution method:
-
     async validateJobExecution(sender, receiver, direction) {
         console.log(`   🔍 Pre-execution validation for ${direction}`);
 
@@ -977,6 +702,30 @@ class WarmupWorker {
             return false;
         }
     }
+
+    async validateWarmupAccount(email) {
+        try {
+            const account = await GoogleUser.findOne({ where: { email } }) ||
+                await MicrosoftUser.findOne({ where: { email } }) ||
+                await SmtpAccount.findOne({ where: { email } });
+
+            return account && account.warmupStatus === 'active' && account.is_connected;
+        } catch (error) {
+            console.error(`❌ Error validating warmup account ${email}:`, error);
+            return false;
+        }
+    }
+
+    async validatePoolAccount(email) {
+        try {
+            const pool = await EmailPool.findOne({ where: { email, isActive: true } });
+            return pool !== null;
+        } catch (error) {
+            console.error(`❌ Error validating pool account ${email}:`, error);
+            return false;
+        }
+    }
+
     async processCoordinatedTimeSlot(job) {
         const { timeSlot, pairs, round } = job;
 
@@ -1009,9 +758,17 @@ class WarmupWorker {
                     throw new Error(`Receiver account not found: ${pair.receiverEmail}`);
                 }
 
-                // Check pool capacity before processing
-                if (pair.senderType === 'pool') {
-                    if (!await canPoolSendMore(sender)) {
+                // 🚨 CENTRALIZED VOLUME CHECK before processing
+                if (pair.direction === 'WARMUP_TO_POOL') {
+                    const canSend = await VolumeEnforcement.canAccountSendEmail(pair.senderEmail, 'warmup');
+                    if (!canSend) {
+                        console.log(`     ⏩ Skipping: ${pair.senderEmail} reached daily limit`);
+                        sendResults.push({ pair, success: false, error: 'Warmup daily limit reached' });
+                        continue;
+                    }
+                } else {
+                    const canSend = await VolumeEnforcement.canAccountSendEmail(pair.senderEmail, 'pool');
+                    if (!canSend) {
                         console.log(`     ⏩ Skipping: ${pair.senderEmail} reached daily limit`);
                         sendResults.push({ pair, success: false, error: 'Pool daily limit reached' });
                         continue;
@@ -1179,6 +936,7 @@ class WarmupWorker {
 
         return { success: false, messageId: null };
     }
+
     extractMessageIdFromResponse(sendResult) {
         if (!sendResult) return null;
 
@@ -1194,6 +952,7 @@ class WarmupWorker {
 
         return null;
     }
+
     // NEW: Check if Microsoft token can be refreshed
     async canRefreshMicrosoftToken(senderConfig) {
         try {
@@ -1435,6 +1194,13 @@ class WarmupWorker {
         }
         if (!receiver) {
             console.error(`❌ Pool account not found: ${receiverEmail}`);
+            return;
+        }
+
+        // 🚨 CENTRALIZED VOLUME CHECK
+        const canSend = await VolumeEnforcement.canAccountSendEmail(senderEmail, 'warmup');
+        if (!canSend) {
+            console.log(`   🛑 DAILY LIMIT REACHED: ${senderEmail} cannot send more emails today`);
             return;
         }
 
