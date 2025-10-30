@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { FiDownload, FiMail, FiInbox, FiAlertTriangle, FiCheck,} from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import 'react-circular-progressbar/dist/styles.css';
+import { FiBarChart2 } from 'react-icons/fi';
 
 // API PLACEHOLDER - Add your API calls here later
 const API = {
@@ -103,11 +104,15 @@ const UltraStablePieChart = () => {
       <text 
         x={x} 
         y={y} 
-        fill="white" 
+        fill="rgba(255, 255, 255, 0.85)" // Lighter faded white
         textAnchor={x > cx ? 'start' : 'end'} 
         dominantBaseline="central"
-        className="text-xs font-semibold"
-        fontSize={12}
+        className="text-xs font-medium"
+        fontSize={11}
+        style={{
+          textShadow: '0px 1px 2px rgba(0, 0, 0, 0.3)', // Add text shadow for better visibility
+          fontWeight: 500
+        }}
       >
         {`${(percent * 100).toFixed(0)}%`}
       </text>
@@ -118,7 +123,7 @@ const UltraStablePieChart = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       setAnimationCompleted(true);
-    }, 1000); // Match this with animationDuration
+    }, 1000);
 
     return () => clearTimeout(timer);
   }, []);
@@ -139,9 +144,9 @@ const UltraStablePieChart = () => {
                 innerRadius="40%"
                 fill="#8884d8"
                 dataKey="value"
-                isAnimationActive={true} // Keep animation active for initial load
+                isAnimationActive={true}
                 animationBegin={100}
-                animationDuration={800} // Smooth closing line animation
+                animationDuration={800}
                 animationEasing="ease-out"
                 paddingAngle={1}
               >
@@ -171,7 +176,29 @@ const UltraStablePieChart = () => {
 
       <div className="w-full lg:flex-1 space-y-3 lg:space-y-4">
         {pieData.map((item, index) => (
-          <HealthDistributionItem key={item.name} item={item} index={index} />
+          <div key={item.name} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:shadow-sm transition-all duration-200">
+            <div className="flex items-center gap-3">
+              <div 
+                className="w-3 h-3 rounded-full flex-shrink-0"
+                style={{ backgroundColor: item.color }}
+              ></div>
+              <span className="text-sm font-medium text-gray-700">{item.name}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-base font-semibold text-gray-600 tracking-tight">
+  {item.value}%
+</span>
+              <div className="w-12 bg-gray-200 rounded-full h-2">
+                <div 
+                  className="h-2 rounded-full transition-all duration-500"
+                  style={{ 
+                    width: `${item.value}%`,
+                    backgroundColor: item.color
+                  }}
+                ></div>
+              </div>
+            </div>
+          </div>
         ))}
       </div>
     </div>
@@ -227,7 +254,7 @@ const AnalyticsStatisticsCards = ({ emailStats, deliveryRate, inboxRate, spamRat
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: index * 0.1 }}
-          className="relative bg-white border border-gray-200 rounded-xl p-4 sm:p-6 flex items-center gap-3 sm:gap-4 transition-all duration-300 hover:shadow-md group"
+          className="relative bg-white border border-gray-200 rounded-xl p-4 transition-all duration-300 hover:shadow-md group"
         >
           {/* Green gradient line at the bottom */}
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-500 to-teal-600 rounded-b-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -235,18 +262,29 @@ const AnalyticsStatisticsCards = ({ emailStats, deliveryRate, inboxRate, spamRat
           {/* Very subtle green tint overlay (5% opacity) */}
           <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-teal-500 to-teal-600 opacity-0 group-hover:opacity-5 transition-opacity duration-300"></div>
           
-          {/* Icon with scaling effect */}
-          <div className={`w-12 h-12 sm:w-14 sm:h-14 ${card.bgColor} rounded-xl flex items-center justify-center text-xl sm:text-2xl group-hover:scale-110 transition-transform duration-300 relative z-10`}>
-            <card.icon className={card.color} />
-          </div>
-          
-          {/* Content */}
           <div className="relative z-10">
-            <h4 className="text-sm text-gray-600 font-medium mb-1">{card.label}</h4>
-            <p className="text-teal-600 text-lg sm:text-xl font-bold">{card.value}</p>
-            <p className="text-sm font-medium text-teal-600">
-              {card.percentage}%
-            </p>
+            {/* Top row: Icon and Label */}
+            <div className="flex items-center justify-between mb-3">
+              <div className={`w-10 h-10 ${card.bgColor} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
+                <card.icon className={`text-lg ${card.color}`} />
+              </div>
+              <span className="text-sm font-medium text-gray-500">{card.label}</span>
+            </div>
+
+            {/* Middle row: Main value and Percentage */}
+            <div className="flex items-end justify-between mb-2">
+              <p className={`text-xl font-bold ${card.color} antialiased subpixel-antialiased`}>{card.value}</p>
+              <p className="text-lg font-semibold text-teal-600 antialiased">
+                {card.percentage}%
+              </p>
+            </div>
+
+            {/* Bottom row: Trend text */}
+            <div className="flex items-center">
+              <span className="text-sm text-gray-500 truncate antialiased">
+                {card.trend}
+              </span>
+            </div>
           </div>
         </motion.div>
       ))}
@@ -462,7 +500,7 @@ const generateTimeRangeData = (range) => {
       <div className="w-full">
         {/* Content */}
         {activeTab === 'overview' && (
-          <div className="space-y-6 sm:space-y-8">
+          <div className="space-y-6 sm:space-y-8 pt-5">
             {/* Email Warmup Stats Cards - Now at the top */}
             <AnalyticsStatisticsCards 
               emailStats={emailStats}
@@ -473,19 +511,21 @@ const generateTimeRangeData = (range) => {
 
             
             {/* Changed: Added w-full */}
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
-              <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-700 flex items-center gap-2 sm:gap-3">
-                  <i className="fas fa-chart-pie text-teal-600 text-lg sm:text-xl"></i>
-                  Email Health Overview
-                </h2>
-              </div>
-              <div className="p-4 sm:p-6 lg:p-8">
-                <UltraStablePieChart />
-              </div>
-            </div>
-
-            
+ <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 border-t-8 border-t-teal-500 overflow-hidden w-full mt-10">
+  <div className="bg-white px-4 sm:px-5 py-3 sm:py-4">
+    <h2 className="text-xl md:text-2xl font-bold text-center flex items-center justify-center gap-2 sm:gap-3 pt-5">
+      <div className="inline-flex items-center justify-center w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-teal-500 to-teal-600 rounded-lg md:rounded-xl shadow-sm">
+        <FiBarChart2 className="text-white w-4 h-4 md:w-5 md:h-5" />
+      </div>
+      <span className="bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent inline-block">
+        Email Health Overview
+      </span>
+    </h2>
+  </div>
+  <div className="p-3 sm:p-4 lg:p-5">
+    <UltraStablePieChart />
+  </div>
+</div>
             {/* Changed: Added w-full */}
             <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
               <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">

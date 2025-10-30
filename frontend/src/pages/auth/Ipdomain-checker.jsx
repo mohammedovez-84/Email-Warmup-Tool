@@ -845,19 +845,22 @@ const IpDomainChecker = () => {
     return (
        <div className="min-h-screen text-gray-900 p-4 sm:p-6 font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
             {/* Header Section */}
-            <div className="mb-8">
-                <div className="text-center px-4">
-                    <div className="inline-flex items-center justify-center w-14 h-14 md:w-20 md:h-20 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl md:rounded-2xl shadow-xl mb-3 md:mb-4">
-                        <FiShield className="w-6 h-6 md:w-10 md:h-10 text-white" />
-                    </div>
-                    
-                    <h1 className="text-2xl md:text-4xl font-bold text-gray-900 mb-2 md:mb-3 bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent">
-                        IP Domain Checker
-                    </h1>
-                    <p className="text-base md:text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed mb-4 md:mb-6">
-                        Get detailed insights for any IP address or domain name
-                    </p>
-                </div>
+            <div className="mb-8 mt-4">
+  <div className="text-center px-4">
+    <div className="inline-flex items-center justify-center w-14 h-14 md:w-20 md:h-20 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl md:rounded-2xl shadow-xl mb-3 md:mb-4">
+      <FiShield className="w-6 h-6 md:w-10 md:h-10 text-white" />
+    </div>
+    
+    <h1 className="text-2xl md:text-4xl font-bold text-gray-900 mb-2 md:mb-3">
+      <span className="bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent py-1 inline-block">
+        IP Domain Checker
+      </span>
+    </h1>
+    <p className="text-base md:text-lg text-gray-600 max-w-3xl mx-auto leading-relaxed mb-4 md:mb-6">
+      Get detailed insights for any IP address or domain name
+    </p>
+  </div>
+
 
                 {/* Stats Grid */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 p-4 md:p-5 bg-white/80 backdrop-blur-sm border border-white/40 rounded-xl md:rounded-2xl shadow-md">

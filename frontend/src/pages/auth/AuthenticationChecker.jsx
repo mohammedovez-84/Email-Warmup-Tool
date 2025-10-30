@@ -1688,7 +1688,7 @@ const AuthenticationChecker = () => {
     <div className="min-h-screen text-gray-900 flex justify-center items-start p-4 sm:p-6 font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
       <div className="w-full">
         {/* Header Section */}
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 mb-6 sm:mb-8 w-full">
+        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-6 mb-6 sm:mb-8 w-full mt-6">
           <div className="flex flex-col lg:flex-row items-center justify-between gap-4 sm:gap-6">
             {/* Left Side - Icon, Title & Description */}
             <div className="flex-1 text-center lg:text-left">
