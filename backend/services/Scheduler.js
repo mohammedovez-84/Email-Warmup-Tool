@@ -198,7 +198,7 @@ class WarmupScheduler {
 
             console.log(`   🏊 AVAILABLE POOLS: ${availablePools.length}`);
 
-            // 🚨 STEP 4: Generate BIDIRECTIONAL plan
+            // 🚨 STEP 4: Generate BIDIRECTIONAL plan with proper ratio
             const strategy = new UnifiedWarmupStrategy();
             const replyRate = computeReplyRate(warmupAccount);
             const plan = await strategy.generateWarmupPlan(warmupAccount, availablePools, replyRate);
@@ -210,7 +210,7 @@ class WarmupScheduler {
 
             console.log(`   📧 PLAN GENERATED: ${plan.sequence.length} emails total`);
 
-            // 🚨 STEP 5: Count bidirectional emails
+            // 🚨 STEP 5: Separate and count bidirectional emails
             const outboundEmails = plan.sequence.filter(job => job.direction === 'WARMUP_TO_POOL');
             const inboundEmails = plan.sequence.filter(job => job.direction === 'POOL_TO_WARMUP');
 
@@ -218,7 +218,21 @@ class WarmupScheduler {
             console.log(`      ├── Outbound (WARMUP→POOL): ${outboundEmails.length}`);
             console.log(`      └── Inbound (POOL→WARMUP): ${inboundEmails.length}`);
 
-            // 🚨 STEP 6: Get capacity limits for BOTH directions
+            const actualReplyRate = await this.getActualReplyRate(warmupAccount.email);
+
+            // 🚨 STEP 6: ENFORCE PROPER RATIOS (NEW)
+            const { finalOutbound, finalInbound } = this.enforceBidirectionalRatios(
+                outboundEmails,
+                inboundEmails,
+                warmupAccount,
+                actualReplyRate
+            );
+
+            console.log(`   ⚖️  RATIO ENFORCED:`);
+            console.log(`      ├── Outbound: ${finalOutbound.length}`);
+            console.log(`      └── Inbound: ${finalInbound.length}`);
+
+            // 🚨 STEP 7: Get capacity limits for BOTH directions
             const warmupMaxToSchedule = await VolumeEnforcement.getMaxEmailsToSchedule(warmupAccount.email, 'warmup');
 
             // For inbound emails, we need to check each pool's capacity
@@ -235,22 +249,24 @@ class WarmupScheduler {
             console.log(`      ├── Warmup can send: ${warmupMaxToSchedule} emails`);
             console.log(`      └── Pools can send: ${totalInboundCapacity} emails total`);
 
-            // 🚨 STEP 7: Schedule BOTH directions with proper limits
+            // 🚨 STEP 8: Schedule OUTBOUND FIRST, then INBOUND with proper delays
             let scheduledOutbound = 0;
             let scheduledInbound = 0;
 
-            // Schedule OUTBOUND emails (WARMUP → POOL)
-            for (let i = 0; i < Math.min(outboundEmails.length, warmupMaxToSchedule); i++) {
-                const emailJob = outboundEmails[i];
+            // Schedule OUTBOUND emails FIRST (WARMUP → POOL)
+            console.log(`   🚀 SCHEDULING OUTBOUND EMAILS FIRST...`);
+            for (let i = 0; i < Math.min(finalOutbound.length, warmupMaxToSchedule); i++) {
+                const emailJob = finalOutbound[i];
                 const scheduled = await this.scheduleSingleEmailWithEnforcement(emailJob, channel, warmupAccount.email);
                 if (scheduled) scheduledOutbound++;
             }
 
-            // Schedule INBOUND emails (POOL → WARMUP) with pool capacity limits
-            const poolUsage = new Map(); // Track how many emails each pool sends
+            // Schedule INBOUND emails AFTER outbound (POOL → WARMUP)
+            console.log(`   📥 SCHEDULING INBOUND EMAILS AFTER OUTBOUND...`);
+            const poolUsage = new Map();
 
-            for (let i = 0; i < inboundEmails.length; i++) {
-                const emailJob = inboundEmails[i];
+            for (let i = 0; i < finalInbound.length; i++) {
+                const emailJob = finalInbound[i];
                 const poolEmail = emailJob.senderEmail;
 
                 // Check if this pool still has capacity
@@ -258,6 +274,9 @@ class WarmupScheduler {
                 const poolCapacity = poolCapacities.get(poolEmail) || 0;
 
                 if (currentPoolUsage < poolCapacity) {
+                    // Add delay to inbound emails to ensure outbound goes first
+                    emailJob.scheduleDelay += 5 * 60 * 1000; // Add 5-minute delay for inbound
+
                     const scheduled = await this.scheduleSingleEmailWithEnforcement(emailJob, channel, warmupAccount.email);
                     if (scheduled) {
                         scheduledInbound++;
@@ -275,10 +294,147 @@ class WarmupScheduler {
             console.log(`      ├── Outbound: ${scheduledOutbound} emails`);
             console.log(`      └── Inbound: ${scheduledInbound} emails`);
             console.log(`      └── Total: ${scheduledOutbound + scheduledInbound} bidirectional exchanges`);
+            console.log(`      └── Ratio: ${scheduledOutbound}:${scheduledInbound}`);
 
         } catch (error) {
             console.error(`❌ BIDIRECTIONAL SCHEDULING FAILED for ${warmupAccount.email}:`, error.message);
         }
+    }
+
+    // 🚨 UPDATE THIS METHOD in WarmupScheduler.js
+    enforceBidirectionalRatios(outboundEmails, inboundEmails, warmupAccount, actualReplyRate = null) {
+        const warmupDay = warmupAccount.warmupDayCount || 0;
+        const totalAvailable = outboundEmails.length + inboundEmails.length;
+
+        console.log(`   📊 CURRENT COUNTS: Outbound: ${outboundEmails.length}, Inbound: ${inboundEmails.length}, Total: ${totalAvailable}`);
+
+        // 🆕 GET ACTUAL REPLY RATE FROM DATABASE OR USE CONFIGURED RATE
+        const configuredReplyRate = warmupAccount.replyRate || 0.15;
+        const effectiveReplyRate = actualReplyRate !== null ? actualReplyRate : configuredReplyRate;
+
+        console.log(`   📨 REPLY RATE: Configured: ${(configuredReplyRate * 100).toFixed(1)}%, Effective: ${(effectiveReplyRate * 100).toFixed(1)}%`);
+
+        // Define dynamic ratios based on warmup progression AND reply rate
+        let targetOutboundRatio, targetInboundRatio;
+
+        if (warmupDay === 0) {
+            // Day 0: More outbound, adjust based on expected replies
+            targetOutboundRatio = 0.7;
+            targetInboundRatio = 0.3;
+            console.log(`   🎯 Day 0 Strategy: Heavy outbound to initiate conversations`);
+        } else if (warmupDay === 1) {
+            // Day 1: Balance outbound with EXPECTED replies
+            // If reply rate is high, we can schedule less inbound (expecting organic replies)
+            const replyAdjustment = effectiveReplyRate * 0.3; // Adjust up to 30% based on reply rate
+            targetOutboundRatio = 0.5 + replyAdjustment;
+            targetInboundRatio = 0.5 - replyAdjustment;
+            console.log(`   🎯 Day 1 Strategy: Balanced with reply rate adjustment`);
+        } else if (warmupDay >= 2 && warmupDay <= 7) {
+            // Days 2-7: Gradual shift, heavily influenced by actual reply performance
+            const progression = Math.min((warmupDay - 1) / 6, 1);
+
+            // Base ratios
+            let baseOutbound = 0.5 - (progression * 0.2);
+            let baseInbound = 0.5 + (progression * 0.2);
+
+            // Adjust based on reply rate performance
+            const replyPerformance = Math.min(effectiveReplyRate / 0.25, 1.5); // Scale based on 25% target
+            if (replyPerformance > 1) {
+                // Good reply rate - schedule less inbound (expecting organic replies)
+                baseOutbound += (replyPerformance - 1) * 0.1;
+                baseInbound -= (replyPerformance - 1) * 0.1;
+            } else {
+                // Poor reply rate - schedule more inbound to maintain engagement
+                baseOutbound -= (1 - replyPerformance) * 0.05;
+                baseInbound += (1 - replyPerformance) * 0.05;
+            }
+
+            targetOutboundRatio = Math.max(0.2, Math.min(0.8, baseOutbound));
+            targetInboundRatio = Math.max(0.2, Math.min(0.8, baseInbound));
+
+            console.log(`   🎯 Day ${warmupDay} Strategy: Reply-performance adjusted`);
+        } else {
+            // Day 8+: Established account, heavily reply-dependent
+            const replyBasedOutbound = 0.3 * (1 - effectiveReplyRate); // Less outbound if good replies
+            targetOutboundRatio = Math.max(0.2, Math.min(0.4, replyBasedOutbound));
+            targetInboundRatio = 1 - targetOutboundRatio;
+            console.log(`   🎯 Day ${warmupDay}+ Strategy: Reply-optimized`);
+        }
+
+        // Calculate target counts
+        let targetOutboundCount = Math.floor(totalAvailable * targetOutboundRatio);
+        let targetInboundCount = Math.floor(totalAvailable * targetInboundRatio);
+
+        // Ensure at least 1 email in each direction
+        targetOutboundCount = Math.max(1, Math.min(targetOutboundCount, outboundEmails.length));
+        targetInboundCount = Math.max(1, Math.min(targetInboundCount, inboundEmails.length));
+
+        console.log(`   ⚖️  FINAL RATIOS: Day ${warmupDay}`);
+        console.log(`      ├── Outbound: ${targetOutboundCount} emails (${Math.round((targetOutboundCount / totalAvailable) * 100)}%)`);
+        console.log(`      └── Inbound: ${targetInboundCount} emails (${Math.round((targetInboundCount / totalAvailable) * 100)}%)`);
+        console.log(`      📨 Reply Rate Impact: ${(effectiveReplyRate * 100).toFixed(1)}%`);
+
+        const finalOutbound = outboundEmails.slice(0, targetOutboundCount);
+        const finalInbound = inboundEmails.slice(0, targetInboundCount);
+
+        return { finalOutbound, finalInbound, replyRateUsed: effectiveReplyRate };
+    }
+
+    // 🆕 ADD THIS METHOD to WarmupScheduler.js
+    async getActualReplyRate(warmupEmail, daysToCheck = 3) {
+        try {
+            const EmailMetric = require('../models/EmailMetric');
+            const { Op } = require('sequelize');
+
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - daysToCheck);
+
+            // Get metrics from recent days
+            const metrics = await EmailMetric.findAll({
+                where: {
+                    senderEmail: warmupEmail,
+                    direction: 'WARMUP_TO_POOL',
+                    sentAt: {
+                        [Op.gte]: startDate
+                    }
+                },
+                attributes: ['id', 'replied', 'sentAt']
+            });
+
+            if (metrics.length === 0) {
+                console.log(`   📊 No recent email data for reply rate calculation`);
+                return null; // No data yet
+            }
+
+            const totalSent = metrics.length;
+            const totalReplied = metrics.filter(m => m.replied === true).length;
+            const actualReplyRate = totalReplied / totalSent;
+
+            console.log(`   📊 ACTUAL REPLY RATE: ${totalReplied}/${totalSent} = ${(actualReplyRate * 100).toFixed(1)}% (last ${daysToCheck} days)`);
+
+            return actualReplyRate;
+
+        } catch (error) {
+            console.error(`❌ Error calculating actual reply rate:`, error);
+            return null;
+        }
+    }
+
+    // 🆕 ADD THIS HELPER METHOD
+    getWarmupStrategyDescription(warmupDay) {
+        const strategies = {
+            0: "Initiation Phase - Heavy outbound to start conversations",
+            1: "Balance Phase - Equal outbound/inbound for reputation building",
+            2: "Growth Phase - Gradual shift toward more inbound",
+            3: "Growth Phase - Continuing reputation development",
+            4: "Growth Phase - Building organic engagement",
+            5: "Growth Phase - Establishing consistent flow",
+            6: "Growth Phase - Nearing established status",
+            7: "Transition Phase - Moving to inbound-heavy",
+            8: "Established Phase - Primarily inbound/replies"
+        };
+
+        return strategies[warmupDay] || strategies[Math.min(warmupDay, 8)];
     }
     // 🚨 NEW: Individual email scheduling with enforcement
     async scheduleSingleEmailWithEnforcement(emailJob, channel, warmupEmail) {
