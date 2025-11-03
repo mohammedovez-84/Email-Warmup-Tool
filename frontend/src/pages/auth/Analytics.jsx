@@ -1,93 +1,46 @@
-import React, { useState, useEffect,} from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell,} from 'recharts';
-import { FiDownload, FiMail, FiInbox, FiAlertTriangle, FiCheck,} from 'react-icons/fi';
+import React, { useState, useEffect } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { FiDownload, FiMail, FiInbox, FiAlertTriangle, FiCheck } from 'react-icons/fi';
 import { motion } from 'framer-motion';
-import 'react-circular-progressbar/dist/styles.css';
 import { FiBarChart2 } from 'react-icons/fi';
 
-// API PLACEHOLDER - Add your API calls here later
-const API = {
-  // TODO: Replace with actual API calls
-  fetchEmailStats: async () => {
-    // return await fetch('/api/email-stats').then(res => res.json());
-    return {
-      sent: 1876,
-      delivered: 1782,
-      inbox: 1675,
-      spam: 107,
-      deliverability: 94
-    };
-  },
-
-  fetchAccountHealth: async () => {
-    // return await fetch('/api/account-health').then(res => res.json());
-    return {
-      score: 82,
-      status: 'Good',
-      issues: ['High bounce rate', 'Low engagement']
-    };
-  },
-  
-  fetchWarmupPerformance: async () => {
-    // return await fetch('/api/warmup-performance').then(res => res.json());
-    return [
-      { name: 'Monday', sent: 400, inbox: 380, spam: 20, deliverability: 95 },
-      { name: 'Tuesday', sent: 450, inbox: 405, spam: 45, deliverability: 90 },
-      { name: 'Wednesday', sent: 500, inbox: 450, spam: 50, deliverability: 90 },
-      { name: 'Thursday', sent: 550, inbox: 495, spam: 55, deliverability: 90 },
-      { name: 'Friday', sent: 600, inbox: 540, spam: 60, deliverability: 90 },
-      { name: 'Saturday', sent: 350, inbox: 315, spam: 35, deliverability: 90 },
-      { name: 'Sunday', sent: 300, inbox: 270, spam: 30, deliverability: 90 }
-    ];
-  },
-
-  exportReport: async (data) => {
-    // TODO: Replace with actual export API call
-    // return await fetch('/api/export-report', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(data)
-    // });
-    return new Promise(resolve => setTimeout(resolve, 2000));
+// API Service
+const analyticsApi = {
+  getDashboardData: async (accountId, timeRange = '7d') => {
+    // TODO: Replace with actual API call
+    // const response = await fetch(`/api/analytics/dashboard?account_id=${accountId}&time_range=${timeRange}`);
+    // return response.json();
+    
+    // Mock data - remove when API is ready
+    return new Promise(resolve => setTimeout(() => resolve({
+      stats: {
+        sent: 1876,
+        delivered: 1782,
+        inbox: 1675,
+        spam: 107,
+        deliverability: 94
+      },
+      health_distribution: [
+        { name: 'Excellent', value: 40, color: '#059669' },
+        { name: 'Good', value: 30, color: '#2563EB' },
+        { name: 'Fair', value: 20, color: '#D97706' },
+        { name: 'Needs Improvement', value: 10, color: '#DC2626' }
+      ],
+      performance_timeline: [
+        { name: 'Monday', sent: 400, inbox: 380, spam: 20, deliverability: 95 },
+        { name: 'Tuesday', sent: 450, inbox: 405, spam: 45, deliverability: 90 },
+        { name: 'Wednesday', sent: 500, inbox: 450, spam: 50, deliverability: 90 },
+        { name: 'Thursday', sent: 550, inbox: 495, spam: 55, deliverability: 90 },
+        { name: 'Friday', sent: 600, inbox: 540, spam: 60, deliverability: 90 },
+        { name: 'Saturday', sent: 350, inbox: 315, spam: 35, deliverability: 90 },
+        { name: 'Sunday', sent: 300, inbox: 270, spam: 30, deliverability: 90 }
+      ]
+    }), 500));
   }
 };
 
-// Health Distribution Item Component
-const HealthDistributionItem = ({ item, index }) => (
-  <div key={item.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-white transition-colors duration-200">
-    <div className="flex items-center space-x-3">
-      <div 
-        className="w-4 h-4 rounded-full" 
-        style={{ backgroundColor: item.color }}
-      />
-      <span className="font-medium text-gray-700 text-sm">{item.name}</span>
-    </div>
-    <div className="flex items-center space-x-2">
-      <span className="text-sm font-semibold text-gray-900">{item.value}%</span>
-      <div className="w-16 bg-gray-200 rounded-full h-2">
-        <div 
-          className="h-2 rounded-full transition-all duration-500"
-          style={{ 
-            width: `${item.value}%`,
-            backgroundColor: item.color
-          }}
-        />
-      </div>
-    </div>
-  </div>
-);
-
-// Ultra Stable Pie Chart with Smooth Initial Animation
-const UltraStablePieChart = () => {
-  const [animationCompleted, setAnimationCompleted] = useState(false);
-  
-  const pieData = [
-    { name: 'Excellent', value: 40, color: '#059669' },
-    { name: 'Good', value: 30, color: '#2563EB' },
-    { name: 'Fair', value: 20, color: '#D97706' },
-    { name: 'Needs Improvement', value: 10, color: '#DC2626' }
-  ];
-
+// Ultra Stable Pie Chart Component
+const UltraStablePieChart = ({ data }) => {
   const COLORS = ['#059669', '#2563EB', '#D97706', '#DC2626'];
 
   const renderCustomizedLabel = ({
@@ -104,13 +57,13 @@ const UltraStablePieChart = () => {
       <text 
         x={x} 
         y={y} 
-        fill="rgba(255, 255, 255, 0.85)" // Lighter faded white
+        fill="rgba(255, 255, 255, 0.85)"
         textAnchor={x > cx ? 'start' : 'end'} 
         dominantBaseline="central"
         className="text-xs font-medium"
         fontSize={11}
         style={{
-          textShadow: '0px 1px 2px rgba(0, 0, 0, 0.3)', // Add text shadow for better visibility
+          textShadow: '0px 1px 2px rgba(0, 0, 0, 0.3)',
           fontWeight: 500
         }}
       >
@@ -119,15 +72,6 @@ const UltraStablePieChart = () => {
     );
   };
 
-  // Set animation as completed after the initial animation finishes
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setAnimationCompleted(true);
-    }, 1000);
-
-    return () => clearTimeout(timer);
-  }, []);
-
   return (
     <div className="flex flex-col lg:flex-row items-center justify-between gap-6 lg:gap-8">
       <div className="w-full lg:flex-1">
@@ -135,7 +79,7 @@ const UltraStablePieChart = () => {
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={pieData}
+                data={data}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
@@ -150,7 +94,7 @@ const UltraStablePieChart = () => {
                 animationEasing="ease-out"
                 paddingAngle={1}
               >
-                {pieData.map((entry, index) => (
+                {data.map((entry, index) => (
                   <Cell 
                     key={`cell-${index}`} 
                     fill={COLORS[index % COLORS.length]} 
@@ -175,7 +119,7 @@ const UltraStablePieChart = () => {
       </div>
 
       <div className="w-full lg:flex-1 space-y-3 lg:space-y-4">
-        {pieData.map((item, index) => (
+        {data.map((item, index) => (
           <div key={item.name} className="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-200 hover:shadow-sm transition-all duration-200">
             <div className="flex items-center gap-3">
               <div 
@@ -186,8 +130,8 @@ const UltraStablePieChart = () => {
             </div>
             <div className="flex items-center gap-2">
               <span className="text-base font-semibold text-gray-600 tracking-tight">
-  {item.value}%
-</span>
+                {item.value}%
+              </span>
               <div className="w-12 bg-gray-200 rounded-full h-2">
                 <div 
                   className="h-2 rounded-full transition-all duration-500"
@@ -205,7 +149,7 @@ const UltraStablePieChart = () => {
   );
 };
 
-// Analytics Statistics Cards - Made Responsive
+// Analytics Statistics Cards Component
 const AnalyticsStatisticsCards = ({ emailStats, deliveryRate, inboxRate, spamRate }) => {
   const statCards = [
     {
@@ -256,14 +200,11 @@ const AnalyticsStatisticsCards = ({ emailStats, deliveryRate, inboxRate, spamRat
           transition={{ delay: index * 0.1 }}
           className="relative bg-white border border-gray-200 rounded-xl p-4 transition-all duration-300 hover:shadow-md group"
         >
-          {/* Green gradient line at the bottom */}
           <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-500 to-teal-600 rounded-b-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
           
-          {/* Very subtle green tint overlay (5% opacity) */}
           <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-teal-500 to-teal-600 opacity-0 group-hover:opacity-5 transition-opacity duration-300"></div>
           
           <div className="relative z-10">
-            {/* Top row: Icon and Label */}
             <div className="flex items-center justify-between mb-3">
               <div className={`w-10 h-10 ${card.bgColor} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
                 <card.icon className={`text-lg ${card.color}`} />
@@ -271,7 +212,6 @@ const AnalyticsStatisticsCards = ({ emailStats, deliveryRate, inboxRate, spamRat
               <span className="text-sm font-medium text-gray-500">{card.label}</span>
             </div>
 
-            {/* Middle row: Main value and Percentage */}
             <div className="flex items-end justify-between mb-2">
               <p className={`text-xl font-bold ${card.color} antialiased subpixel-antialiased`}>{card.value}</p>
               <p className="text-lg font-semibold text-teal-600 antialiased">
@@ -279,7 +219,6 @@ const AnalyticsStatisticsCards = ({ emailStats, deliveryRate, inboxRate, spamRat
               </p>
             </div>
 
-            {/* Bottom row: Trend text */}
             <div className="flex items-center">
               <span className="text-sm text-gray-500 truncate antialiased">
                 {card.trend}
@@ -294,408 +233,604 @@ const AnalyticsStatisticsCards = ({ emailStats, deliveryRate, inboxRate, spamRat
 
 // Main Analytics Dashboard Component
 const AnalyticsDashboard = () => {
-  const [emailStats, setEmailStats] = useState({
-    sent: 1876,
-    delivered: 1782,
-    inbox: 1675,
-    spam: 107,
-    deliverability: 94
+  const [dashboardData, setDashboardData] = useState({
+    stats: {
+      sent: 0,
+      delivered: 0,
+      inbox: 0,
+      spam: 0,
+      deliverability: 0
+    },
+    health_distribution: [],
+    performance_timeline: []
   });
-
-  const [accountHealth, setAccountHealth] = useState({
-    score: 82,
-    status: 'Good',
-    issues: ['High bounce rate', 'Low engagement']
-  });
-
-  const [warmupPerformance, setWarmupPerformance] = useState([
-    { name: 'Monday', sent: 400, inbox: 380, spam: 20, deliverability: 95 },
-    { name: 'Tuesday', sent: 450, inbox: 405, spam: 45, deliverability: 90 },
-    { name: 'Wednesday', sent: 500, inbox: 450, spam: 50, deliverability: 90 },
-    { name: 'Thursday', sent: 550, inbox: 495, spam: 55, deliverability: 90 },
-    { name: 'Friday', sent: 600, inbox: 540, spam: 60, deliverability: 90 },
-      { name: 'Saturday', sent: 350, inbox: 315, spam: 35, deliverability: 90 },
-  { name: 'Sunday', sent: 300, inbox: 270, spam: 30, deliverability: 90 }
-  ]);
-
-  const [currentTime, setCurrentTime] = useState('');
-  const [activeTab, setActiveTab] = useState('overview');
+  
   const [isExporting, setIsExporting] = useState(false);
-  const [selectedTimeRange, setSelectedTimeRange] = useState('7');
+  const [selectedTimeRange, setSelectedTimeRange] = useState('7d');
 
-  const [selectedAccount, setSelectedAccount] = useState({
-    id: 1,
-    name: 'Marketing Account',
-    domain: 'example.com',
-    authentication: ['SPF', 'DKIM'],
-    lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    issues: ['High bounce rate', 'Low engagement']
-  });
-
-  const [accountScores, setAccountScores] = useState({
-    1: { score: 82, reputation: 'good' }
-  });
-
-  const BAR_COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
-
+  // Load dashboard data
   useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    };
-
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
-
-  // API PLACEHOLDER - Load data from API
-  useEffect(() => {
-    // TODO: Uncomment and implement API calls when backend is ready
-    /*
-    const loadData = async () => {
+    const loadDashboardData = async () => {
       try {
-        const [stats, health, performance] = await Promise.all([
-          API.fetchEmailStats(),
-          API.fetchAccountHealth(),
-          API.fetchWarmupPerformance()
-        ]);
-       
-        setEmailStats(stats);
-        setAccountHealth(health);
-        setWarmupPerformance(performance);
+        const data = await analyticsApi.getDashboardData(1, selectedTimeRange);
+        setDashboardData(data);
       } catch (error) {
-        console.error('Failed to load data:', error);
+        console.error('Failed to load dashboard data:', error);
       }
     };
-   
-    loadData();
-    */
-  }, []);
 
-  const getDeliverabilityData = (accountId) => {
-    return [
-      { name: 'Mon', inbox: 120, spam: 5 },
-      { name: 'Tue', inbox: 152, spam: 7 },
-      { name: 'Wed', inbox: 182, spam: 8 },
-      { name: 'Thu', inbox: 210, spam: 10 },
-      { name: 'Fri', inbox: 190, spam: 6 },
-      { name: 'Sat', inbox: 90, spam: 3 },
-      { name: 'Sun', inbox: 70, spam: 2 }
-    ];
-  };
+    loadDashboardData();
+  }, [selectedTimeRange]);
 
-const generateTimeRangeData = (range) => {
-  if (range === '7') {
-    return [
-      { name: 'Mon', sent: 400, inbox: 380, spam: 20, deliverability: 95 },
-      { name: 'Tue', sent: 450, inbox: 405, spam: 45, deliverability: 90 },
-      { name: 'Wed', sent: 500, inbox: 450, spam: 50, deliverability: 90 },
-      { name: 'Thu', sent: 550, inbox: 495, spam: 55, deliverability: 90 },
-      { name: 'Fri', sent: 600, inbox: 540, spam: 60, deliverability: 90 },
-      { name: 'Sat', sent: 350, inbox: 315, spam: 35, deliverability: 90 },
-      { name: 'Sun', sent: 300, inbox: 270, spam: 30, deliverability: 90 }
-    ];
-  } else if (range === '30') {
-    return [
-      { name: 'Week 1', sent: 2800, inbox: 2520, spam: 280, deliverability: 90 },
-      { name: 'Week 2', sent: 3150, inbox: 2835, spam: 315, deliverability: 90 },
-      { name: 'Week 3', sent: 3500, inbox: 3150, spam: 350, deliverability: 90 },
-      { name: 'Week 4', sent: 3850, inbox: 3465, spam: 385, deliverability: 90 }
-    ];
-  } else if (range === '90') {
-    return [
-      { name: 'Month 1', sent: 11200, inbox: 10080, spam: 1120, deliverability: 90 },
-      { name: 'Month 2', sent: 12600, inbox: 11340, spam: 1260, deliverability: 90 },
-      { name: 'Month 3', sent: 14000, inbox: 12600, spam: 1400, deliverability: 90 }
-    ];
-  } else {
-    return [
-      { name: 'Mon', sent: 400, inbox: 380, spam: 20, deliverability: 95 },
-      { name: 'Tue', sent: 450, inbox: 405, spam: 45, deliverability: 90 },
-      { name: 'Wed', sent: 500, inbox: 450, spam: 50, deliverability: 90 },
-      { name: 'Thu', sent: 550, inbox: 495, spam: 55, deliverability: 90 },
-      { name: 'Fri', sent: 600, inbox: 540, spam: 60, deliverability: 90 },
-      { name: 'Sat', sent: 350, inbox: 315, spam: 35, deliverability: 90 },
-      { name: 'Sun', sent: 300, inbox: 270, spam: 30, deliverability: 90 }
-    ];
-  }
-    const newEmailStats = {
-      sent: Math.floor(1000 + Math.random() * 500),
-      delivered: Math.floor(900 + Math.random() * 400),
-      inbox: Math.floor(800 + Math.random() * 300),
-      spam: Math.floor(10 + Math.random() * 50),
-      deliverability: Math.floor(85 + Math.random() * 15)
-    };
-
-    setEmailStats(newEmailStats);
+const handleExportReport = async () => {
+  setIsExporting(true);
+  try {
+    // Safe data extraction
+    const safeStats = stats || {};
+    const safeHealthDistribution = health_distribution || [];
+    const safePerformanceTimeline = performance_timeline || [];
     
-    setAccountScores({
-      1: { 
-        score: Math.floor(70 + Math.random() * 30), 
-        reputation: Math.random() > 0.3 ? 'good' : 'excellent' 
-      }
-    });
+    // Safe calculations
+    const safeDeliveryRate = safeStats.sent > 0 ? 
+      ((safeStats.delivered / safeStats.sent) * 100).toFixed(1) : 0;
+    const safeInboxRate = safeStats.delivered > 0 ? 
+      ((safeStats.inbox / safeStats.delivered) * 100).toFixed(1) : 0;
+    const safeSpamRate = safeStats.delivered > 0 ? 
+      ((safeStats.spam / safeStats.delivered) * 100).toFixed(1) : 0;
 
-    setSelectedAccount(prev => ({
-      ...prev,
-      lastActive: new Date().toISOString()
-    }));
-  };
+    // Create a simple professional HTML report
+    const reportHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Email Analytics Report - ${new Date().toLocaleDateString()}</title>
+          <style>
+              * {
+                  margin: 0;
+                  padding: 0;
+                  box-sizing: border-box;
+              }
+              
+              body {
+                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                  background: #f8fafc;
+                  color: #334155;
+                  line-height: 1.5;
+                  padding: 20px;
+              }
+              
+              .report-container {
+                  max-width: 900px;
+                  margin: 0 auto;
+                  background: white;
+                  border-radius: 8px;
+                  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                  overflow: hidden;
+              }
+              
+              .report-header {
+                  background: #0d9488;
+                  color: white;
+                  padding: 20px;
+                  text-align: center;
+              }
+              
+              .report-title {
+                  font-size: 1.5em;
+                  font-weight: 600;
+                  margin-bottom: 6px;
+              }
+              
+              .report-subtitle {
+                  font-size: 1em;
+                  opacity: 0.9;
+              }
+              
+              .report-meta {
+                  background: #f0fdfa;
+                  padding: 20px 30px;
+                  border-bottom: 1px solid #e2e8f0;
+                  font-size: 0.9em;
+                  display: flex;
+                  justify-content: space-between;
+              }
+              
+              .stats-grid {
+                  display: grid;
+                  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                  gap: 16px;
+                  padding: 30px;
+              }
+              
+              .stat-card {
+                  background: white;
+                  padding: 20px;
+                  border-radius: 6px;
+                  text-align: center;
+                  border: 1px solid #e2e8f0;
+              }
+              
+              .stat-value {
+                  font-size: 1.8em;
+                  font-weight: 700;
+                  color: #0d9488;
+                  margin-bottom: 4px;
+              }
+              
+              .stat-label {
+                  font-size: 0.85em;
+                  color: #64748b;
+                  font-weight: 500;
+              }
+              
+              .stat-percentage {
+                  font-size: 0.8em;
+                  color: #0d9488;
+                  font-weight: 500;
+                  margin-top: 6px;
+              }
+              
+              .section {
+                  padding: 30px;
+                  border-bottom: 1px solid #e2e8f0;
+              }
+              
+              .section:last-child {
+                  border-bottom: none;
+              }
+              
+              .section-title {
+                  font-size: 1.2em;
+                  font-weight: 600;
+                  color: #0f766e;
+                  margin-bottom: 20px;
+                  padding-bottom: 8px;
+                  border-bottom: 2px solid #0d9488;
+              }
+              
+              .health-distribution {
+                  display: grid;
+                  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                  gap: 12px;
+              }
+              
+              .health-item {
+                  display: flex;
+                  align-items: center;
+                  justify-content: space-between;
+                  padding: 12px 16px;
+                  background: white;
+                  border-radius: 6px;
+                  border: 1px solid #e2e8f0;
+              }
+              
+              .health-info {
+                  display: flex;
+                  align-items: center;
+                  gap: 10px;
+              }
+              
+              .health-color {
+                  width: 12px;
+                  height: 12px;
+                  border-radius: 50%;
+              }
+              
+              .health-name {
+                  font-weight: 500;
+                  color: #374151;
+              }
+              
+              .health-value {
+                  font-weight: 600;
+                  color: #0d9488;
+              }
+              
+              .performance-table {
+                  width: 100%;
+                  border-collapse: collapse;
+                  background: white;
+                  border-radius: 6px;
+                  overflow: hidden;
+                  border: 1px solid #e2e8f0;
+              }
+              
+              .performance-table th {
+                  background: #f0fdfa;
+                  color: #0f766e;
+                  padding: 12px 16px;
+                  text-align: left;
+                  font-weight: 600;
+                  font-size: 0.85em;
+                  border-bottom: 1px solid #e2e8f0;
+              }
+              
+              .performance-table td {
+                  padding: 12px 16px;
+                  border-bottom: 1px solid #f1f5f9;
+                  font-size: 0.9em;
+              }
+              
+              .performance-table tr:last-child td {
+                  border-bottom: none;
+              }
+              
+              .positive {
+                  color: #0d9488;
+                  font-weight: 500;
+              }
+              
+              .summary-box {
+                  background: #f0fdfa;
+                  padding: 20px;
+                  border-radius: 6px;
+                  border-left: 4px solid #0d9488;
+              }
+              
+              .summary-title {
+                  font-weight: 600;
+                  color: #0f766e;
+                  margin-bottom: 8px;
+              }
+              
+              .report-footer {
+                  background: #134e4a;
+                  color: white;
+                  padding: 20px 30px;
+                  text-align: center;
+              }
+              
+              .footer-text {
+                  opacity: 0.8;
+                  font-size: 0.85em;
+              }
+              
+              @media (max-width: 768px) {
+                  body {
+                      padding: 10px;
+                  }
+                  
+                  .report-meta {
+                      flex-direction: column;
+                      gap: 8px;
+                  }
+                  
+                  .stats-grid {
+                      grid-template-columns: 1fr;
+                      padding: 20px;
+                  }
+                  
+                  .section {
+                      padding: 20px;
+                  }
+              }
+          </style>
+      </head>
+      <body>
+          <div class="report-container">
+              <!-- Header -->
+              <div class="report-header">
+                  <h1 class="report-title">Email Analytics Report</h1>
+                  <p class="report-subtitle">Performance Summary</p>
+              </div>
+              
+              <!-- Meta Information -->
+              <div class="report-meta">
+                  <div>Generated: ${new Date().toLocaleDateString()}</div>
+                  <div>Period: ${selectedTimeRange === '7d' ? 'Last 7 Days' : selectedTimeRange === '30d' ? 'Last 30 Days' : 'Last 90 Days'}</div>
+                  <div>ID: ${Math.random().toString(36).substr(2, 9).toUpperCase()}</div>
+              </div>
+              
+              <!-- Statistics Grid -->
+              <div class="stats-grid">
+                  <div class="stat-card">
+                      <div class="stat-value">${(safeStats.sent || 0).toLocaleString()}</div>
+                      <div class="stat-label">Emails Sent</div>
+                  </div>
+                  <div class="stat-card">
+                      <div class="stat-value">${(safeStats.delivered || 0).toLocaleString()}</div>
+                      <div class="stat-label">Delivered</div>
+                      <div class="stat-percentage">${safeDeliveryRate}% success rate</div>
+                  </div>
+                  <div class="stat-card">
+                      <div class="stat-value">${(safeStats.inbox || 0).toLocaleString()}</div>
+                      <div class="stat-label">Inbox Placement</div>
+                      <div class="stat-percentage">${safeInboxRate}% of delivered</div>
+                  </div>
+                  <div class="stat-card">
+                      <div class="stat-value">${(safeStats.spam || 0).toLocaleString()}</div>
+                      <div class="stat-label">Spam Placement</div>
+                      <div class="stat-percentage">${safeSpamRate}% of delivered</div>
+                  </div>
+              </div>
+              
+              <!-- Email Health Overview -->
+              <div class="section">
+                  <h2 class="section-title">Email Health Distribution</h2>
+                  <div class="health-distribution">
+                      ${safeHealthDistribution.map(item => `
+                          <div class="health-item">
+                              <div class="health-info">
+                                  <div class="health-color" style="background-color: ${item?.color || '#cccccc'}"></div>
+                                  <span class="health-name">${item?.name || 'Unknown'}</span>
+                              </div>
+                              <div class="health-value">${item?.value || 0}%</div>
+                          </div>
+                      `).join('')}
+                  </div>
+              </div>
+              
+              <!-- Performance Timeline -->
+              <div class="section">
+                  <h2 class="section-title">Performance Timeline</h2>
+                  <table class="performance-table">
+                      <thead>
+                          <tr>
+                              <th>Date</th>
+                              <th>Sent</th>
+                              <th>Inbox</th>
+                              <th>Spam</th>
+                              <th>Rate</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          ${safePerformanceTimeline.map(day => `
+                              <tr>
+                                  <td>${day?.name || 'Unknown'}</td>
+                                  <td>${(day?.sent || 0).toLocaleString()}</td>
+                                  <td>${(day?.inbox || 0).toLocaleString()}</td>
+                                  <td>${(day?.spam || 0).toLocaleString()}</td>
+                                  <td class="positive">${day?.deliverability || 0}%</td>
+                              </tr>
+                          `).join('')}
+                      </tbody>
+                  </table>
+              </div>
+              
+              <!-- Summary -->
+              <div class="section">
+                  <h2 class="section-title">Summary</h2>
+                  <div class="summary-box">
+                      <div class="summary-title">Overall Performance</div>
+                      <p>Your email warmup is showing good results with a ${safeDeliveryRate}% delivery rate and ${safeInboxRate}% inbox placement rate. Continue following the current warmup strategy for optimal performance.</p>
+                  </div>
+              </div>
+              
+              <!-- Footer -->
+              <div class="report-footer">
+                  <p class="footer-text">
+                      Generated by Email Analytics System • ${new Date().getFullYear()}
+                  </p>
+              </div>
+          </div>
+      </body>
+      </html>
+    `;
 
-  const handleExportReport = async () => {
-    setIsExporting(true);
+    // Create and download the HTML file
+    const blob = new Blob([reportHtml], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `email-report-${new Date().toISOString().split('T')[0]}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    console.log('📄 Report exported successfully!');
+    
+  } catch (error) {
+    console.error('Export failed:', error);
+    alert('Failed to export report. Please try again.');
+  } finally {
+    setIsExporting(false);
+  }
+};
 
-    // API PLACEHOLDER - Export via API
-    try {
-      /*
-      await API.exportReport({
-        emailStats,
-        warmupPerformance,
-        accountData: selectedAccount,
-        accountScore: accountScores[1],
-        timestamp: new Date().toISOString()
-      });
-      */
+  const { stats, health_distribution, performance_timeline } = dashboardData;
 
-      // Temporary mock export (remove when API is ready)
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const exportData = {
-        emailStats,
-        warmupPerformance,
-        accountData: selectedAccount,
-        accountScore: accountScores[1],
-        timestamp: new Date().toISOString()
-      };
-
-      const dataStr = JSON.stringify(exportData, null, 2);
-      const dataBlob = new Blob([dataStr], { type: 'application/json' });
-
-      const url = URL.createObjectURL(dataBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `email-analytics-report-${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      alert('Report exported successfully!');
-    } catch (error) {
-      console.error('Export failed:', error);
-      alert('Failed to export report. Please try again.');
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const deliveryRate = ((emailStats.delivered / emailStats.sent) * 100).toFixed(1);
-  const inboxRate = ((emailStats.inbox / emailStats.delivered) * 100).toFixed(1);
-  const spamRate = ((emailStats.spam / emailStats.delivered) * 100).toFixed(1);
+  const deliveryRate = stats.sent > 0 ? ((stats.delivered / stats.sent) * 100).toFixed(1) : 0;
+  const inboxRate = stats.delivered > 0 ? ((stats.inbox / stats.delivered) * 100).toFixed(1) : 0;
+  const spamRate = stats.delivered > 0 ? ((stats.spam / stats.delivered) * 100).toFixed(1) : 0;
 
   return (
     <div className="min-h-screen text-gray-900 flex justify-center items-start p-4 sm:p-6 font-['Inter',_'Roboto',_-apple-system,_BlinkMacSystemFont,_'Segoe_UI',_sans-serif]">
-      {/* Changed: Removed max-w-7xl mx-auto */}
       <div className="w-full">
-        {/* Content */}
-        {activeTab === 'overview' && (
-          <div className="space-y-6 sm:space-y-8 pt-5">
-            {/* Email Warmup Stats Cards - Now at the top */}
-            <AnalyticsStatisticsCards 
-              emailStats={emailStats}
-              deliveryRate={deliveryRate}
-              inboxRate={inboxRate}
-              spamRate={spamRate}
-            />
+        <div className="space-y-6 sm:space-y-8 pt-5">
+          {/* Stats Cards */}
+          <AnalyticsStatisticsCards 
+            emailStats={stats}
+            deliveryRate={deliveryRate}
+            inboxRate={inboxRate}
+            spamRate={spamRate}
+          />
 
-            
-            {/* Changed: Added w-full */}
- <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 border-t-8 border-t-teal-500 overflow-hidden w-full mt-10">
-  <div className="bg-white px-4 sm:px-5 py-3 sm:py-4">
-    <h2 className="text-xl md:text-2xl font-bold text-center flex items-center justify-center gap-2 sm:gap-3 pt-5">
-      <div className="inline-flex items-center justify-center w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-teal-500 to-teal-600 rounded-lg md:rounded-xl shadow-sm">
-        <FiBarChart2 className="text-white w-4 h-4 md:w-5 md:h-5" />
-      </div>
-      <span className="bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent inline-block">
-        Email Health Overview
-      </span>
-    </h2>
-  </div>
-  <div className="p-3 sm:p-4 lg:p-5">
-    <UltraStablePieChart />
-  </div>
-</div>
-            {/* Changed: Added w-full */}
-            <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
-              <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <h2 className="text-xl sm:text-2xl font-bold text-gray-700 flex items-center gap-2 sm:gap-3">
-  <i className="fas fa-trending-up text-teal-600 text-lg sm:text-xl"></i>
-  {selectedTimeRange === '7' && 'Daily Warmup Performance'}
-  {selectedTimeRange === '30' && 'Weekly Warmup Performance'}
-  {selectedTimeRange === '90' && 'Monthly Warmup Performance'}
-</h2>
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <select 
-  value={selectedTimeRange}
-  onChange={(e) => setSelectedTimeRange(e.target.value)}
-  className="px-3 sm:px-4 py-2 border border-gray-300 rounded-lg sm:rounded-xl bg-white text-gray-700 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all text-xs sm:text-sm"
->
-  <option value="7">Last 7 days</option>
-  <option value="30">Last 30 days</option>
-  <option value="90">Last 90 days</option>
-</select>
-                    <button 
-                      className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 border-none rounded-lg sm:rounded-xl font-semibold transition-all duration-300 bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md hover:from-teal-700 hover:to-teal-800 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer text-xs sm:text-sm ${
-                        isExporting ? 'opacity-70 cursor-not-allowed' : ''
-                      }`}
-                      onClick={handleExportReport}
-                      disabled={isExporting}
-                    >
-                      <FiDownload className={isExporting ? 'animate-spin' : ''} />
-                      {isExporting ? 'Exporting...' : 'Export Report'}
-                    </button>
-                  </div>
+          {/* Email Health Overview */}
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 border-t-8 border-t-teal-500 overflow-hidden w-full">
+            <div className="bg-white px-4 sm:px-5 py-3 sm:py-4">
+              <h2 className="text-xl md:text-2xl font-bold text-center flex items-center justify-center gap-2 sm:gap-3 pt-5">
+                <div className="inline-flex items-center justify-center w-8 h-8 md:w-10 md:h-10 bg-gradient-to-br from-teal-500 to-teal-600 rounded-lg md:rounded-xl shadow-sm">
+                  <FiBarChart2 className="text-white w-4 h-4 md:w-5 md:h-5" />
                 </div>
-              </div>
-              
-              <div className="p-4 sm:p-6 lg:p-8">
-                <div className="h-64 sm:h-72 lg:h-80">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-  data={generateTimeRangeData(selectedTimeRange)}
-  margin={{ 
-
-                        top: 20, 
-                        right: 10, 
-                        left: 10, 
-                        bottom: 25 
-                      }}
-                    >
-                      <CartesianGrid 
-                        strokeDasharray="3 3" 
-                        vertical={false} 
-                        stroke="#f0f0f0"
-                        strokeWidth={0.5}
-                      />
-                      
-                      <XAxis 
-                        dataKey="name" 
-                        tick={{ 
-                          fontSize: 12,
-                          fill: '#6B7280',
-                          fontWeight: 500,
-                        }}
-                        axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
-                        tickLine={{ stroke: '#E5E7EB' }}
-                        tickMargin={10}
-                      />
-                      
-                      <YAxis 
-                        tick={{ 
-                          fontSize: 12,
-                          fill: '#6B7280',
-                          fontWeight: 500,
-                        }}
-                        axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
-                        tickLine={{ stroke: '#E5E7EB' }}
-                        tickMargin={10}
-                        tickFormatter={(value) => value.toLocaleString()}
-                      />
-                      
-                      <Tooltip 
-                        contentStyle={{
-                          borderRadius: '12px',
-                          border: '1px solid #E5E7EB',
-                          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
-                          background: 'white',
-                          fontFamily: 'inherit',
-                          fontSize: '14px',
-                          fontWeight: '500'
-                        }}
-                        cursor={{ fill: 'rgba(243, 244, 246, 0.5)' }}
-                        formatter={(value, name) => [
-                          <span key="value" className="font-semibold text-gray-900">{value.toLocaleString()}</span>, 
-                          name
-                        ]}
-                        labelFormatter={(label) => (
-                          <span className="font-semibold text-gray-900">{label}</span>
-                        )}
-                      />
-                      
-                      <Legend 
-                        verticalAlign="top"
-                        height={36}
-                        iconSize={12}
-                        iconType="circle"
-                        wrapperStyle={{
-                          paddingBottom: '20px',
-                          fontSize: '13px',
-                          fontWeight: '600'
-                        }}
-                        formatter={(value) => (
-                          <span className="text-gray-700 text-sm font-medium">{value}</span>
-                        )}
-                      />
-  <Bar 
-  dataKey="inbox" 
-  name="Landed in Inbox"
-  radius={[4, 4, 0, 0]}  
-  fill="url(#inboxGradient)"
-  animationBegin={0}
-  animationDuration={400} 
-  animationEasing="ease-out"
-  barSize={28}
-  minPointSize={2}
->
-  {generateTimeRangeData(selectedTimeRange).map((entry, index) => (  
-    <Cell 
-      key={`inbox-${selectedTimeRange}-${index}`} 
-      fill="url(#inboxGradient)"
-      opacity={0.9}
-    />
-  ))}
-</Bar>
-
-<Bar 
-  dataKey="spam" 
-  name="Landed in Spam"
-  radius={[4, 4, 0, 0]}  
-  fill="url(#spamGradient)"
-  animationBegin={150} 
-  animationDuration={400} 
-  animationEasing="ease-out"
-  barSize={28}
-  minPointSize={2} 
-> {/* ADD THIS CLOSING ANGLE BRACKET */}
-  {generateTimeRangeData(selectedTimeRange).map((entry, index) => (  
-    <Cell 
-      key={`spam-${selectedTimeRange}-${index}`} 
-      fill="url(#spamGradient)"
-      opacity={0.9}
-    />
-  ))}
-</Bar>
-                      
-
-                      <defs>
-                        <linearGradient id="inboxGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10B981" stopOpacity={0.9} />
-                          <stop offset="100%" stopColor="#059669" stopOpacity={0.9} />
-                        </linearGradient>
-                        <linearGradient id="spamGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#EF4444" stopOpacity={0.9} />
-                          <stop offset="100%" stopColor="#DC2626" stopOpacity={0.9} />
-                        </linearGradient>
-                      </defs>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>              
-             </div>
+                <span className="bg-gradient-to-r from-teal-600 to-teal-700 bg-clip-text text-transparent inline-block">
+                  Email Health Overview
+                </span>
+              </h2>
+            </div>
+            <div className="p-3 sm:p-4 lg:p-5">
+              <UltraStablePieChart data={health_distribution} />
             </div>
           </div>
-        )}
+
+          {/* Warmup Performance Chart */}
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-gray-200 overflow-hidden w-full">
+            <div className="border-b border-gray-200 bg-gradient-to-r from-teal-50 to-teal-100 px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-700 flex items-center gap-2 sm:gap-3">
+                  <i className="fas fa-trending-up text-teal-600 text-lg sm:text-xl"></i>
+                  {selectedTimeRange === '7d' && 'Daily Warmup Performance'}
+                  {selectedTimeRange === '30d' && 'Weekly Warmup Performance'}
+                  {selectedTimeRange === '90d' && 'Monthly Warmup Performance'}
+                </h2>
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                  <select 
+                    value={selectedTimeRange}
+                    onChange={(e) => setSelectedTimeRange(e.target.value)}
+                    className="px-3 sm:px-4 py-2 border border-gray-300 rounded-lg sm:rounded-xl bg-white text-gray-700 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 transition-all text-xs sm:text-sm"
+                  >
+                    <option value="7d">Last 7 days</option>
+                    <option value="30d">Last 30 days</option>
+                    <option value="90d">Last 90 days</option>
+                  </select>
+                  <button 
+                    className={`flex items-center justify-center gap-2 px-3 sm:px-4 py-2 border-none rounded-lg sm:rounded-xl font-semibold transition-all duration-300 bg-gradient-to-r from-teal-600 to-teal-700 text-white shadow-md hover:from-teal-700 hover:to-teal-800 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer text-xs sm:text-sm ${
+                      isExporting ? 'opacity-70 cursor-not-allowed' : ''
+                    }`}
+                    onClick={handleExportReport}
+                    disabled={isExporting}
+                  >
+                    <FiDownload className={isExporting ? 'animate-spin' : ''} />
+                    {isExporting ? 'Exporting...' : 'Export Report'}
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-4 sm:p-6 lg:p-8">
+              <div className="h-64 sm:h-72 lg:h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={performance_timeline}
+                    margin={{ 
+                      top: 20, 
+                      right: 10, 
+                      left: 10, 
+                      bottom: 25 
+                    }}
+                  >
+                    <CartesianGrid 
+                      strokeDasharray="3 3" 
+                      vertical={false} 
+                      stroke="#f0f0f0"
+                      strokeWidth={0.5}
+                    />
+                    
+                    <XAxis 
+                      dataKey="name" 
+                      tick={{ 
+                        fontSize: 12,
+                        fill: '#6B7280',
+                        fontWeight: 500,
+                      }}
+                      axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
+                      tickLine={{ stroke: '#E5E7EB' }}
+                      tickMargin={10}
+                    />
+                    
+                    <YAxis 
+                      tick={{ 
+                        fontSize: 12,
+                        fill: '#6B7280',
+                        fontWeight: 500,
+                      }}
+                      axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
+                      tickLine={{ stroke: '#E5E7EB' }}
+                      tickMargin={10}
+                      tickFormatter={(value) => value.toLocaleString()}
+                    />
+                    
+                    <Tooltip 
+                      contentStyle={{
+                        borderRadius: '12px',
+                        border: '1px solid #E5E7EB',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)',
+                        background: 'white',
+                        fontFamily: 'inherit',
+                        fontSize: '14px',
+                        fontWeight: '500'
+                      }}
+                      cursor={{ fill: 'rgba(243, 244, 246, 0.5)' }}
+                      formatter={(value, name) => [
+                        <span key="value" className="font-semibold text-gray-900">{value.toLocaleString()}</span>, 
+                        name
+                      ]}
+                      labelFormatter={(label) => (
+                        <span className="font-semibold text-gray-900">{label}</span>
+                      )}
+                    />
+                    
+                    <Legend 
+                      verticalAlign="top"
+                      height={36}
+                      iconSize={12}
+                      iconType="circle"
+                      wrapperStyle={{
+                        paddingBottom: '20px',
+                        fontSize: '13px',
+                        fontWeight: '600'
+                      }}
+                      formatter={(value) => (
+                        <span className="text-gray-700 text-sm font-medium">{value}</span>
+                      )}
+                    />
+                    
+                    <Bar 
+                      dataKey="inbox" 
+                      name="Landed in Inbox"
+                      radius={[4, 4, 0, 0]}  
+                      fill="url(#inboxGradient)"
+                      animationBegin={0}
+                      animationDuration={400} 
+                      animationEasing="ease-out"
+                      barSize={28}
+                    >
+                      {performance_timeline.map((entry, index) => (  
+                        <Cell 
+                          key={`inbox-${index}`} 
+                          fill="url(#inboxGradient)"
+                          opacity={0.9}
+                        />
+                      ))}
+                    </Bar>
+
+                    <Bar 
+                      dataKey="spam" 
+                      name="Landed in Spam"
+                      radius={[4, 4, 0, 0]}  
+                      fill="url(#spamGradient)"
+                      animationBegin={150} 
+                      animationDuration={400} 
+                      animationEasing="ease-out"
+                      barSize={28}
+                    >
+                      {performance_timeline.map((entry, index) => (  
+                        <Cell 
+                          key={`spam-${index}`} 
+                          fill="url(#spamGradient)"
+                          opacity={0.9}
+                        />
+                      ))}
+                    </Bar>
+
+                    <defs>
+                      <linearGradient id="inboxGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10B981" stopOpacity={0.9} />
+                        <stop offset="100%" stopColor="#059669" stopOpacity={0.9} />
+                      </linearGradient>
+                      <linearGradient id="spamGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#EF4444" stopOpacity={0.9} />
+                        <stop offset="100%" stopColor="#DC2626" stopOpacity={0.9} />
+                      </linearGradient>
+                    </defs>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>              
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
