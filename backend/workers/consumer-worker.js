@@ -1,7 +1,7 @@
 // worker-runner.js
 require('dotenv').config();
 const { sequelize } = require('../config/db');
-const { WarmupWorker } = require('./warmup');
+const WarmupWorker = require('./warmup');
 const { BatchWarmupWorker } = require('./batch-worker');
 
 (async () => {

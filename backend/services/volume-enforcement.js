@@ -60,6 +60,42 @@ class VolumeEnforcement {
         }
     }
 
+    // 🚨 NEW: Account for reply emails in volume limits
+    async trackReplyEmail(warmupEmail, poolEmail) {
+        try {
+            console.log(`📨 TRACKING REPLY: ${poolEmail} → ${warmupEmail}`);
+
+            // Increment pool account sent count (reply counts against pool limits)
+            await this.incrementSentCount(poolEmail, 1, 'pool');
+
+            // Note: Warmup account receiving reply doesn't count against their outbound limit
+            // but we might want to track this for analytics
+
+        } catch (error) {
+            console.error(`❌ Error tracking reply email:`, error);
+        }
+    }
+
+    // 🚨 NEW: Check if this is a reply to existing conversation
+    async isReplyToExistingConversation(warmupEmail, poolEmail) {
+        try {
+            const existingExchange = await EmailExchange.findOne({
+                where: {
+                    warmupAccount: warmupEmail,
+                    poolAccount: poolEmail,
+                    direction: 'WARMUP_TO_POOL',
+                    status: 'sent'
+                },
+                order: [['sentAt', 'DESC']]
+            });
+
+            return !!existingExchange;
+        } catch (error) {
+            console.error(`❌ Error checking existing conversation:`, error);
+            return false;
+        }
+    }
+
     // 🚨 IMPROVED: Get account volume limit with proper warmup progression
     async getAccountVolumeLimit(email, accountType = 'warmup') {
         try {
