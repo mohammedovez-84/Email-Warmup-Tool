@@ -1,52 +1,182 @@
-const { buildSenderConfig, buildPoolConfig } = require("../utils/senderConfig");
+const { buildPoolConfig } = require("../utils/senderConfig");
 
 class UnifiedWarmupStrategy {
     constructor() {
         this.MAX_EMAILS_SAFETY_CAP = 50;
         this.TESTING_MODE = process.env.WARMUP_TESTING_MODE === 'true';
 
-        // Organizational domains that require special handling
-        this.ORGANIZATIONAL_DOMAINS = ['elmstreetweb.com']; // Add more as needed
+        console.log(`🔧 TESTING MODE: ${this.TESTING_MODE ? 'ENABLED (2-3 min delays)' : 'DISABLED'}`);
     }
 
-    // In your unified-strategy.js - ensure it generates both directions
     async generateWarmupPlan(warmupAccount, poolAccounts, replyRate) {
         try {
+            console.log(`📊 GENERATING PLAN for ${warmupAccount.email}:`);
+            console.log(`   ├── Warmup Day: ${warmupAccount.warmupDayCount || 0}`);
+            console.log(`   ├── Start: ${warmupAccount.startEmailsPerDay || 3}`);
+            console.log(`   ├── Increase: ${warmupAccount.increaseEmailsPerDay || 3}`);
+            console.log(`   └── Max: ${warmupAccount.maxEmailsPerDay || 25}`);
+            console.log(`   ⏱️ Testing Mode: ${this.TESTING_MODE ? 'YES (fast delays)' : 'NO'}`);
+
+            // 🚨 DYNAMIC organizational detection
+            const isOrganizational = this.isOrganizationalAccount(warmupAccount.email, warmupAccount);
+            if (isOrganizational) {
+                console.log(`   🏢 Organizational account detected - receive-only mode`);
+                return this.generateOrganizationalAccountPlan(warmupAccount, poolAccounts);
+            }
+
+            // 🚨 CALCULATE ACTUAL DAILY LIMIT FROM DATABASE FIELDS
+            const startEmailsPerDay = warmupAccount.startEmailsPerDay || 3;
+            const increaseEmailsPerDay = warmupAccount.increaseEmailsPerDay || 3;
+            const maxEmailsPerDay = warmupAccount.maxEmailsPerDay || 25;
+            const warmupDayCount = warmupAccount.warmupDayCount || 0;
+
+            // Calculate volume based on warmup progression
+            let dailyLimit = startEmailsPerDay + (increaseEmailsPerDay * warmupDayCount);
+            dailyLimit = Math.min(dailyLimit, maxEmailsPerDay);
+            dailyLimit = Math.max(1, dailyLimit); // At least 1 email per day
+
+            console.log(`   📈 CALCULATED DAILY LIMIT: ${dailyLimit} emails`);
+
+            // 🚨 USE DAILY LIMIT TO DETERMINE HOW MANY EMAILS TO CREATE
             const sequence = [];
 
-            // Create BOTH directions
-            for (const poolAccount of poolAccounts) {
+            // Calculate how many pools we can use (limited by daily limit)
+            const maxPoolsToUse = Math.min(poolAccounts.length, Math.ceil(dailyLimit / 2));
+
+            console.log(`   🏊 USING ${maxPoolsToUse} of ${poolAccounts.length} pools`);
+
+            // 🚨 CREATE BIDIRECTIONAL PAIRS (but limited by daily limit)
+            for (let i = 0; i < maxPoolsToUse; i++) {
+                const poolAccount = poolAccounts[i];
+
+                // Stop if we've reached the daily limit
+                if (sequence.length >= dailyLimit) break;
+
                 // OUTBOUND: Warmup → Pool
                 sequence.push({
                     senderEmail: warmupAccount.email,
                     receiverEmail: poolAccount.email,
                     direction: 'WARMUP_TO_POOL',
-                    scheduleDelay: this.calculateScheduleDelay(sequence.length),
+                    scheduleDelay: this.calculateOutboundDelay(sequence.length, dailyLimit),
                     type: 'initial'
                 });
+
+                // Stop if we've reached the daily limit
+                if (sequence.length >= dailyLimit) break;
 
                 // INBOUND: Pool → Warmup (reply simulation)
                 sequence.push({
                     senderEmail: poolAccount.email,
                     receiverEmail: warmupAccount.email,
                     direction: 'POOL_TO_WARMUP',
-                    scheduleDelay: this.calculateScheduleDelay(sequence.length + 1), // Stagger the timing
+                    scheduleDelay: this.calculateInboundDelay(sequence.length, dailyLimit),
                     type: 'reply'
                 });
             }
 
+            // 🚨 IF WE STILL HAVE CAPACITY, ADD MORE OUTBOUND EMAILS
+            let additionalOutbound = dailyLimit - sequence.length;
+            if (additionalOutbound > 0) {
+                console.log(`   📤 ADDING ${additionalOutbound} EXTRA OUTBOUND EMAILS`);
+
+                for (let i = 0; i < additionalOutbound && i < poolAccounts.length; i++) {
+                    const poolAccount = poolAccounts[i % poolAccounts.length];
+
+                    sequence.push({
+                        senderEmail: warmupAccount.email,
+                        receiverEmail: poolAccount.email,
+                        direction: 'WARMUP_TO_POOL',
+                        scheduleDelay: this.calculateOutboundDelay(sequence.length, dailyLimit),
+                        type: 'initial'
+                    });
+
+                    if (sequence.length >= dailyLimit) break;
+                }
+            }
+
+            console.log(`   📧 FINAL PLAN: ${sequence.length} emails (${dailyLimit} limit)`);
+            console.log(`   🔄 BREAKDOWN: ${sequence.filter(s => s.direction === 'WARMUP_TO_POOL').length} outbound, ${sequence.filter(s => s.direction === 'POOL_TO_WARMUP').length} inbound`);
+
             return {
-                sequence: this.shuffleArray(sequence), // Mix up the order
+                sequence: this.shuffleArray(sequence),
                 totalEmails: sequence.length,
                 outboundCount: sequence.filter(s => s.direction === 'WARMUP_TO_POOL').length,
-                inboundCount: sequence.filter(s => s.direction === 'POOL_TO_WARMUP').length
+                inboundCount: sequence.filter(s => s.direction === 'POOL_TO_WARMUP').length,
+                dailyLimit: dailyLimit,
+                warmupDay: warmupDayCount,
+                testingMode: this.TESTING_MODE
             };
 
         } catch (error) {
+            console.error(`❌ PLAN GENERATION ERROR:`, error);
             return { error: error.message };
         }
     }
-    // NEW: Generate plan specifically for organizational accounts
+
+    // 🚨 FIXED: Ultra-fast testing delays (2-3 minutes)
+    calculateOutboundDelay(sequenceIndex, dailyLimit) {
+        if (this.TESTING_MODE) {
+            // 🚨 TESTING MODE: 1-3 minutes for outbound
+            const baseDelay = 1 * 60 * 1000; // 1 minute base
+            const increment = 1 * 60 * 1000; // 1 minute increment per sequence
+            const delay = baseDelay + (sequenceIndex * increment);
+            console.log(`   📤 OUTBOUND TESTING DELAY: ${(delay / 1000).toFixed(0)} seconds`);
+            return delay;
+        } else {
+            // Production: Spread across 8 business hours
+            const businessHoursOffset = 9 * 60 * 60 * 1000; // Start at 9 AM
+            const spreadDuration = 8 * 60 * 60 * 1000; // Spread over 8 hours
+            return businessHoursOffset + (sequenceIndex * spreadDuration) / Math.max(1, dailyLimit - 1);
+        }
+    }
+
+    calculateInboundDelay(sequenceIndex, dailyLimit) {
+        if (this.TESTING_MODE) {
+            // 🚨 TESTING MODE: 2-4 minutes for inbound
+            const baseDelay = 2 * 60 * 1000; // 2 minutes base
+            const increment = 1 * 60 * 1000; // 1 minute increment per sequence
+            const delay = baseDelay + (sequenceIndex * increment);
+            console.log(`   📥 INBOUND TESTING DELAY: ${(delay / 1000).toFixed(0)} seconds`);
+            return delay;
+        } else {
+            // Production: Replies come 1-4 hours after outbound emails
+            const replyDelay = (1 + (sequenceIndex * 3 / Math.max(1, dailyLimit - 1))) * 60 * 60 * 1000;
+            return replyDelay;
+        }
+    }
+
+    // 🚨 FIXED: Dynamic organizational account detection (no hardcoded domains)
+    isOrganizationalAccount(email, accountData = null) {
+        try {
+            const domain = email.split('@')[1];
+
+            // Method 1: Check domain characteristics
+            const isLikelyCorporate =
+                domain.includes('-inc.') ||
+                domain.includes('-corp.') ||
+                domain.includes('-llc.') ||
+                domain.endsWith('.local') ||
+                domain.split('.').length > 2; // subdomain.company.com
+
+            // Method 2: Check account data if available
+            if (accountData) {
+                if (accountData.provider === 'microsoft' && accountData.tenantId) {
+                    return true; // Microsoft with tenant ID = organizational
+                }
+                if (accountData.organizational === true) {
+                    return true;
+                }
+            }
+
+            return isLikelyCorporate;
+
+        } catch (error) {
+            console.log(`❌ Error detecting organizational account for ${email}:`, error);
+            return false;
+        }
+    }
+
+    // 🚨 UPDATED: Organizational plan with testing mode support
     generateOrganizationalAccountPlan(account, availablePools) {
         console.log(`🏢 Generating RECEIVE-ONLY plan for organizational account: ${account.email}`);
 
@@ -60,12 +190,11 @@ class UnifiedWarmupStrategy {
         const receiveLimit = Math.min(Math.max(calculatedSendLimit, 1), maxEmailsPerDay);
 
         console.log(`   Day: ${warmupDayCount}, Receive Limit: ${receiveLimit}`);
-        console.log(`   ⚠️  Organizational account - SENDING DISABLED (admin consent required)`);
-        console.log(`   📥 Proceeding with receiving-only warmup`);
+        console.log(`   ⚠️  Organizational account - SENDING DISABLED`);
+        console.log(`   ⏱️  Testing Mode: ${this.TESTING_MODE ? 'YES (fast delays)' : 'NO'}`);
 
-        // Organizational accounts can only receive emails
         const accountCapabilities = {
-            supportedDirections: ['POOL_TO_WARMUP'], // Only receiving
+            supportedDirections: ['POOL_TO_WARMUP'],
             organizational: true,
             adminConsentRequired: true
         };
@@ -78,166 +207,71 @@ class UnifiedWarmupStrategy {
             sequence: [],
             warmupDay: warmupDayCount,
             capabilities: accountCapabilities,
-            organizational: true,
-            dbValues: {
-                startEmailsPerDay: account.startEmailsPerDay,
-                increaseEmailsPerDay: account.increaseEmailsPerDay,
-                maxEmailsPerDay: account.maxEmailsPerDay,
-                calculatedLimit: receiveLimit
-            }
+            organizational: true
         };
 
         // Only create inbound emails (Pool → Warmup)
         const inboundPools = this.getCompatiblePoolsForDirection(availablePools, 'POOL_TO_WARMUP');
-
         console.log(`   📊 Compatible pools for receiving: ${inboundPools.length}`);
 
-        // Create inbound emails (Pool → Warmup)
+        // Create inbound emails with testing mode delays
         for (let i = 0; i < receiveLimit && i < inboundPools.length; i++) {
             const pool = inboundPools[i];
-            const emailJob = this.createEmailJob(pool, account, 'POOL_TO_WARMUP', i, receiveLimit, 'inbound');
+            const scheduleDelay = this.TESTING_MODE
+                ? (2 * 60 * 1000) + (i * 30 * 1000) // 2-5 minutes in testing
+                : this.calculateInboundDelay(i, receiveLimit);
+
+            const emailJob = {
+                senderEmail: pool.email,
+                receiverEmail: account.email,
+                direction: 'POOL_TO_WARMUP',
+                scheduleDelay: scheduleDelay,
+                type: 'inbound',
+                replyRate: 0 // No replies for organizational accounts
+            };
+
             plan.inbound.push(emailJob);
             plan.sequence.push(emailJob);
         }
 
         console.log(`   📧 Final sequence: ${plan.sequence.length} RECEIVE-ONLY emails`);
-        console.log(`   💡 Admin consent required for sending: Use Azure Admin Consent URL`);
-
-        if (account.email === 'jonathon.shults@elmstreetweb.com') {
-            console.log(`   🔐 Application ID: 511cc857-4fb9-4738-b063-fdf68e2ef980`);
-            console.log(`   🌐 Admin Consent URL: https://login.microsoftonline.com/common/adminconsent?client_id=511cc857-4fb9-4738-b063-fdf68e2ef980&redirect_uri=YOUR_REDIRECT_URI`);
-        }
+        console.log(`   💡 Admin consent required for sending capabilities`);
 
         return plan;
     }
 
-    // NEW: Check if account is organizational
-    isOrganizationalAccount(email) {
-        const domain = email.split('@')[1];
-        return this.ORGANIZATIONAL_DOMAINS.includes(domain);
-    }
-
-    getStrategyForDay(warmupDayCount, totalEmails) {
-        let baseStrategy = { phase: 'INITIAL', outboundRatio: 0.33 }; // 1:2 ratio = 33% outbound
-
-        // Base strategy based on warmup day
-        if (warmupDayCount === 0) {
-            baseStrategy = { phase: 'DAY_0', outboundRatio: 0.33 }; // 1 outbound : 2 inbound
-        } else if (warmupDayCount === 1) {
-            baseStrategy = { phase: 'DAY_1', outboundRatio: 0.4 }; // 2 outbound : 3 inbound
-        } else if (warmupDayCount === 2) {
-            baseStrategy = { phase: 'DAY_2', outboundRatio: 0.43 }; // 3 outbound : 4 inbound  
-        } else if (warmupDayCount < 7) {
-            baseStrategy = { phase: 'WEEK_1', outboundRatio: 0.45 }; // Nearly 1:1
-        } else if (warmupDayCount < 14) {
-            baseStrategy = { phase: 'WEEK_2', outboundRatio: 0.5 }; // 1:1 ratio
-        } else {
-            baseStrategy = { phase: 'MATURE', outboundRatio: 0.6 }; // More outbound
-        }
-
-        console.log(`   Final strategy: ${baseStrategy.phase} (${(baseStrategy.outboundRatio * 100).toFixed(0)}% outbound)`);
-        return baseStrategy;
-    }
-
-    // Add this debug method to UnifiedWarmupStrategy
-    async createEmailSequence(account, availablePools, outboundCount, inboundCount, warmupDay, capabilities) {
-
-
-        const plan = {
-            account: account,
-            totalEmails: outboundCount + inboundCount,
-            outbound: [],
-            inbound: [],
-            sequence: [],
-            warmupDay: warmupDay,
-            capabilities: capabilities,
-            dbValues: {
-                startEmailsPerDay: account.startEmailsPerDay,
-                increaseEmailsPerDay: account.increaseEmailsPerDay,
-                maxEmailsPerDay: account.maxEmailsPerDay,
-                calculatedLimit: outboundCount + inboundCount
-            }
-        };
-
-        // Filter pools based on capabilities for each direction
-        const outboundPools = this.getCompatiblePoolsForDirection(availablePools, 'WARMUP_TO_POOL');
-        const inboundPools = this.getCompatiblePoolsForDirection(availablePools, 'POOL_TO_WARMUP');
-
-        console.log(`   📊 Compatible pools - Outbound: ${outboundPools.length}, Inbound: ${inboundPools.length}`);
-
-        // Create outbound emails (Warmup → Pool) - only if capability allows
-        if (capabilities.supportedDirections.includes('WARMUP_TO_POOL') && outboundCount > 0) {
-            console.log(`   📤 Creating ${outboundCount} outbound emails`);
-            for (let i = 0; i < outboundCount && i < outboundPools.length; i++) {
-                const pool = outboundPools[i];
-                plan.outbound.push(this.createEmailJob(account, pool, 'WARMUP_TO_POOL', i, outboundCount, 'outbound'));
-            }
-        }
-
-        // Create inbound emails (Pool → Warmup) - only if capability allows
-        if (capabilities.supportedDirections.includes('POOL_TO_WARMUP') && inboundCount > 0) {
-            console.log(`   📥 Creating ${inboundCount} inbound emails`);
-            for (let i = 0; i < inboundCount && i < inboundPools.length; i++) {
-                const pool = inboundPools[(i + outboundCount) % inboundPools.length];
-                plan.inbound.push(this.createEmailJob(pool, account, 'POOL_TO_WARMUP', i, inboundCount, 'inbound'));
-            }
-        }
-
-        // Interleave for natural flow
-        plan.sequence = this.interleaveEmails(plan.outbound, plan.inbound);
-
-        console.log(`   📧 Final sequence: ${plan.sequence.length} emails (${plan.outbound.length} outbound, ${plan.inbound.length} inbound)`);
-
-        return plan;
-    }
-
-    // In UnifiedWarmupStrategy.js - fix getCompatiblePoolsForDirection
+    // 🚨 SIMPLIFIED: Get compatible pools
     getCompatiblePoolsForDirection(pools, direction) {
         const compatiblePools = [];
 
         for (const pool of pools) {
-            // Validate pool has required fields
-            if (!pool || !pool.email || typeof pool.email !== 'string') {
-                console.log(`   ⚠️  Skipping invalid pool: missing email field`);
+            if (!pool || !pool.email) {
                 continue;
             }
 
             try {
-                // For pool accounts, use buildPoolConfig instead of buildWarmupConfig
                 const poolConfig = buildPoolConfig(pool);
-
-                // Simple capability check for pool accounts
                 const poolCapabilities = this.getPoolCapabilities(poolConfig, direction);
 
                 if (poolCapabilities.supportedDirections.includes(direction)) {
                     compatiblePools.push(pool);
-
-                } else {
-                    console.log(`   ❌ Incompatible pool: ${pool.email} cannot handle ${direction}`);
-                    console.log(`      Available directions: ${poolCapabilities.supportedDirections.join(', ')}`);
-                    console.log(`      Required direction: ${direction}`);
                 }
             } catch (error) {
-                console.log(`   ⚠️  Error checking pool ${pool.email} compatibility: ${error.message}`);
+                console.log(`   ⚠️  Error checking pool ${pool.email}: ${error.message}`);
                 continue;
             }
         }
 
-        console.log(`   📋 Total compatible pools for ${direction}: ${compatiblePools.length}`);
         return compatiblePools;
     }
 
-    // In UnifiedWarmupStrategy.js - make pool capability detection more robust
+    // 🚨 SIMPLIFIED: Pool capabilities
     getPoolCapabilities(poolConfig, direction) {
         const capabilities = {
-            supportedDirections: []
+            supportedDirections: ['WARMUP_TO_POOL'] // All pools can receive
         };
 
-        // All pool accounts can receive emails (WARMUP_TO_POOL)
-        capabilities.supportedDirections.push('WARMUP_TO_POOL');
-
-        // Pool accounts can send (POOL_TO_WARMUP) if they have basic credentials
-        // Check for any authentication method
+        // Pool accounts can send if they have credentials
         const hasCredentials =
             poolConfig.appPassword ||
             poolConfig.accessToken ||
@@ -247,14 +281,12 @@ class UnifiedWarmupStrategy {
 
         if (hasCredentials) {
             capabilities.supportedDirections.push('POOL_TO_WARMUP');
-
-        } else {
-            console.log(`      ⚠️  Pool ${poolConfig.email} cannot SEND - missing credentials`);
         }
 
         return capabilities;
     }
 
+    // 🚨 SIMPLIFIED: Create email job
     createEmailJob(sender, receiver, direction, sequence, total, type) {
         const baseDelay = this.TESTING_MODE ?
             this.calculateTestingDelay(sequence, type) :
@@ -262,93 +294,50 @@ class UnifiedWarmupStrategy {
                 this.calculateOutboundDelay(sequence, total) :
                 this.calculateInboundDelay(sequence, total));
 
-        // Get sender capabilities for reply rate adjustment
         let replyRate = sender.replyRate || 0.15;
-
-        // Adjust reply rate based on direction and capabilities
         if (direction === 'POOL_TO_WARMUP') {
-            // Inbound emails from pools typically don't need replies
-            replyRate = 0;
-        }
-
-        // SPECIAL HANDLING: If receiver is organizational, ensure proper configuration
-        if (this.isOrganizationalAccount(receiver.email) && direction === 'WARMUP_TO_POOL') {
-            console.log(`   ⚠️  WARNING: Attempting to send TO organizational account ${receiver.email}`);
-            console.log(`   💡 This may fail if organizational account has sending restrictions`);
+            replyRate = 0; // Inbound emails don't need replies
         }
 
         return {
-            sender: sender,
             senderEmail: sender.email,
             senderType: this.getAccountType(sender),
-            receiver: receiver,
             receiverEmail: receiver.email,
             receiverType: this.getAccountType(receiver),
             direction: direction,
-            isInitialEmail: true,
             scheduleDelay: baseDelay,
-            sequence: sequence,
-            replyRate: replyRate,
-            // Add organizational flags for better handling
-            isOrganizationalSender: this.isOrganizationalAccount(sender.email),
-            isOrganizationalReceiver: this.isOrganizationalAccount(receiver.email)
+            replyRate: replyRate
         };
     }
 
-    // TESTING MODE: Immediate execution with small delays
+    // 🚨 FIXED: Testing mode delays (2-3 minutes)
     calculateTestingDelay(sequence, type) {
-        // 1-5 minute delays for testing
-        const baseDelay = 1 * 60 * 1000; // 1 minute base
-        const increment = 1 * 60 * 1000; // 1 minute increment
-
-        return baseDelay + (sequence * increment);
-    }
-
-    // PRODUCTION: Normal delays
-    calculateOutboundDelay(sequence, total) {
-        // Outbound: Spread across business hours (9 AM - 5 PM)
-        const businessHoursOffset = 9 * 60 * 60 * 1000;
-        const spread = 8 * 60 * 60 * 1000;
-        return businessHoursOffset + (sequence * spread) / Math.max(1, total - 1);
-    }
-
-    calculateInboundDelay(sequence, total) {
-        // Inbound: More random, throughout the day
-        const randomOffset = Math.random() * 12 * 60 * 60 * 1000;
-        return randomOffset + (sequence * 2 * 60 * 60 * 1000);
-    }
-
-    interleaveEmails(outbound, inbound) {
-        const sequence = [];
-        const maxLength = Math.max(outbound.length, inbound.length);
-
-        for (let i = 0; i < maxLength; i++) {
-            if (i < outbound.length) sequence.push(outbound[i]);
-            if (i < inbound.length) sequence.push(inbound[i]);
+        if (type === 'outbound') {
+            return (1 + sequence) * 60 * 1000; // 1, 2, 3... minutes
+        } else {
+            return (2 + sequence) * 60 * 1000; // 2, 3, 4... minutes
         }
-
-        return sequence;
     }
 
     getAccountType(account) {
         if (account.provider === 'google') return 'google';
         if (account.provider === 'microsoft') return 'microsoft';
         if (account.smtp_host) return 'smtp';
-        if (account.providerType) return account.providerType; // For pool accounts
+        if (account.providerType) return account.providerType;
         return 'unknown';
     }
 
-    createEmptyPlan(account, error) {
-        return {
-            account: account,
-            totalEmails: 0,
-            outbound: [],
-            inbound: [],
-            sequence: [],
-            warmupDay: account?.warmupDayCount || 0,
-            error: error
-        };
+    shuffleArray(array) {
+        const shuffled = [...array];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
+        return shuffled;
     }
+
+
+
 }
 
 module.exports = UnifiedWarmupStrategy;
