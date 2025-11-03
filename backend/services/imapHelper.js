@@ -1,5 +1,6 @@
 const imaps = require('imap-simple');
 const { getSenderType } = require('../utils/senderConfig');
+const trackingService = require('./trackingService');
 
 function detectAccountType(account) {
     // Handle pool accounts properly
@@ -17,6 +18,328 @@ function detectAccountType(account) {
 
     // Use the existing getSenderType function for consistency
     return getSenderType(account);
+}
+// 🚨 NEW: Comprehensive Spam Folder Detection and Tracking
+async function checkEmailStatusWithSpamTracking(receiver, messageId, direction = 'WARMUP_TO_POOL', senderEmail = null) {
+    const result = await checkEmailStatus(receiver, messageId, direction);
+
+    // 🚨 TRACK SPAM FOLDER PLACEMENT
+    if (result.success && result.exists) {
+        const isSpamFolder = this.isSpamFolder(result.folder);
+
+        if (isSpamFolder && senderEmail) {
+            console.log(`⚠️  SPAM DETECTED: Email placed in ${result.folder} folder`);
+
+            // Track spam complaint
+            await trackingService.trackSpamComplaint(messageId, {
+                complaintType: 'automated_filter',
+                complaintSource: 'ISP_FILTER',
+                complaintFeedback: `Automatically placed in ${result.folder} folder by email provider`,
+                reportingIsp: this.detectISP(receiver.email),
+                folder: result.folder,
+                senderEmail: senderEmail,
+                receiverEmail: receiver.email
+            }).catch(err => console.error('❌ Error tracking spam complaint:', err));
+        }
+
+        // Enhanced result with spam info
+        return {
+            ...result,
+            isSpamFolder: isSpamFolder,
+            spamRisk: this.calculateSpamRiskFromFolder(result.folder)
+        };
+    }
+
+    return result;
+}
+
+// 🚨 NEW: Spam Folder Detection
+function isSpamFolder(folderName) {
+    if (!folderName) return false;
+
+    const spamIndicators = [
+        'spam', 'junk', 'bulk', 'trash', 'deleted',
+        'quarantine', 'blocked', 'suspicious', 'phishing'
+    ];
+
+    const folderLower = folderName.toLowerCase();
+    return spamIndicators.some(indicator => folderLower.includes(indicator));
+}
+
+// 🚨 NEW: Spam Risk Calculation from Folder
+function calculateSpamRiskFromFolder(folderName) {
+    if (!folderName) return 'unknown';
+
+    const folderLower = folderName.toLowerCase();
+
+    if (folderLower.includes('spam') || folderLower.includes('junk')) {
+        return 'high';
+    } else if (folderLower.includes('bulk') || folderLower.includes('promotion')) {
+        return 'medium';
+    } else if (folderLower.includes('social') || folderLower.includes('update')) {
+        return 'low';
+    } else if (folderLower.includes('inbox') || folderLower.includes('important')) {
+        return 'none';
+    }
+
+    return 'unknown';
+}
+
+// 🚨 NEW: ISP Detection for Spam Tracking
+function detectISP(email) {
+    if (!email) return 'unknown';
+
+    const domain = email.split('@')[1]?.toLowerCase();
+    if (!domain) return 'unknown';
+
+    const ispMap = {
+        'gmail.com': 'Google',
+        'googlemail.com': 'Google',
+        'outlook.com': 'Microsoft',
+        'hotmail.com': 'Microsoft',
+        'live.com': 'Microsoft',
+        'yahoo.com': 'Yahoo',
+        'ymail.com': 'Yahoo',
+        'aol.com': 'AOL',
+        'icloud.com': 'Apple',
+        'me.com': 'Apple',
+        'protonmail.com': 'ProtonMail',
+        'zoho.com': 'Zoho'
+    };
+
+    return ispMap[domain] || domain;
+}
+
+// 🚨 NEW: Enhanced Move to Inbox with Spam Tracking
+async function moveEmailToInboxWithTracking(receiver, messageId, currentFolder, direction = 'WARMUP_TO_POOL', senderEmail = null) {
+    const wasSpamFolder = this.isSpamFolder(currentFolder);
+
+    const result = await moveEmailToInbox(receiver, messageId, currentFolder, direction);
+
+    // 🚨 TRACK SPAM RECOVERY ATTEMPT
+    if (wasSpamFolder && result.success && !result.skipped && senderEmail) {
+        console.log(`🔄 SPAM RECOVERY: Moved email from ${currentFolder} to INBOX`);
+
+        await trackingService.trackSpamComplaint(messageId, {
+            complaintType: 'recovered_from_spam',
+            complaintSource: 'MANUAL_RECOVERY',
+            complaintFeedback: `Successfully moved from ${currentFolder} to INBOX`,
+            reportingIsp: this.detectISP(receiver.email),
+            resolved: true,
+            resolvedAt: new Date(),
+            resolutionNotes: 'Automatically moved from spam folder to inbox'
+        }).catch(err => console.error('❌ Error tracking spam recovery:', err));
+    }
+
+    return {
+        ...result,
+        wasSpamFolder: wasSpamFolder,
+        spamRecoveryAttempted: wasSpamFolder && !result.skipped
+    };
+}
+
+// 🚨 NEW: Bulk Spam Analysis
+async function analyzeSpamPatterns(account, days = 7) {
+    let connection;
+    try {
+        console.log(`🔍 Analyzing spam patterns for: ${account.email}`);
+        const config = getImapConfig(account);
+        connection = await imaps.connect(config);
+
+        const spamStats = {
+            totalSpam: 0,
+            spamFolders: [],
+            recentSpam: 0,
+            spamSources: new Map()
+        };
+
+        // Check spam folders
+        const spamFolders = ['Spam', 'Junk', 'Bulk'];
+
+        for (const folderName of spamFolders) {
+            try {
+                await connection.openBox(folderName, false);
+                const sinceDate = new Date();
+                sinceDate.setDate(sinceDate.getDate() - days);
+
+                const searchCriteria = ['SINCE', sinceDate];
+                const results = await connection.search(searchCriteria, {
+                    bodies: ['HEADER.FIELDS (FROM SUBJECT)'],
+                    struct: true
+                });
+
+                if (results.length > 0) {
+                    spamStats.totalSpam += results.length;
+                    spamStats.spamFolders.push({
+                        name: folderName,
+                        count: results.length
+                    });
+
+                    // Analyze spam sources
+                    for (const message of results.slice(0, 50)) { // Sample first 50
+                        const fromHeader = message.parts.find(part => part.which === 'HEADER.FIELDS (FROM SUBJECT)');
+                        if (fromHeader && fromHeader.body) {
+                            const fromMatch = fromHeader.body.match(/From:\s*(.*)/i);
+                            if (fromMatch) {
+                                const fromEmail = fromMatch[1];
+                                const domain = fromEmail.split('@')[1];
+                                if (domain) {
+                                    spamStats.spamSources.set(domain, (spamStats.spamSources.get(domain) || 0) + 1);
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (folderError) {
+                console.log(`   ⚠️  Cannot analyze folder ${folderName}: ${folderError.message}`);
+            }
+        }
+
+        await connection.end();
+
+        // Calculate spam rate
+        const inboxStats = await getMailboxStats(account);
+        const totalRecent = inboxStats.success ? inboxStats.totalMessages : 0;
+        const spamRate = totalRecent > 0 ? (spamStats.totalSpam / totalRecent) * 100 : 0;
+
+        return {
+            success: true,
+            analysisPeriod: `${days} days`,
+            totalEmails: totalRecent,
+            spamEmails: spamStats.totalSpam,
+            spamRate: parseFloat(spamRate.toFixed(2)),
+            spamFolders: spamStats.spamFolders,
+            topSpamSources: Array.from(spamStats.spamSources.entries())
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10),
+            riskLevel: spamRate > 10 ? 'HIGH' : spamRate > 5 ? 'MEDIUM' : 'LOW'
+        };
+
+    } catch (error) {
+        console.error(`❌ Error analyzing spam patterns: ${error.message}`);
+        if (connection) await connection.end().catch(() => { });
+        return { success: false, error: error.message };
+    }
+}
+
+// 🚨 NEW: Monitor Spam Folder for Warmup Emails
+async function monitorSpamFolderForWarmup(account, warmupDomains = []) {
+    let connection;
+    try {
+        console.log(`👀 Monitoring spam folder for warmup emails: ${account.email}`);
+        const config = getImapConfig(account);
+        connection = await imaps.connect(config);
+
+        const foundWarmupEmails = [];
+        const spamFolders = ['Spam', 'Junk'];
+
+        for (const folderName of spamFolders) {
+            try {
+                await connection.openBox(folderName, false);
+
+                // Search for warmup-related emails
+                const searchCriteria = [
+                    'OR',
+                    ['SUBJECT', 'Warmup'],
+                    ['SUBJECT', 'Test'],
+                    ['FROM', warmupDomains.map(domain => `@${domain}`).join(' ')]
+                ];
+
+                const results = await connection.search(searchCriteria, {
+                    bodies: ['HEADER.FIELDS (FROM SUBJECT MESSAGE-ID)'],
+                    struct: true
+                });
+
+                for (const message of results) {
+                    const headerPart = message.parts.find(part => part.which === 'HEADER.FIELDS (FROM SUBJECT MESSAGE-ID)');
+                    if (headerPart && headerPart.body) {
+                        const fromMatch = headerPart.body.match(/From:\s*(.*)/i);
+                        const subjectMatch = headerPart.body.match(/Subject:\s*(.*)/i);
+                        const messageIdMatch = headerPart.body.match(/Message-ID:\s*(.*)/i);
+
+                        if (fromMatch && subjectMatch) {
+                            foundWarmupEmails.push({
+                                folder: folderName,
+                                from: fromMatch[1],
+                                subject: subjectMatch[1],
+                                messageId: messageIdMatch ? messageIdMatch[1] : null,
+                                detectedAt: new Date()
+                            });
+                        }
+                    }
+                }
+
+            } catch (folderError) {
+                console.log(`   ⚠️  Cannot monitor folder ${folderName}: ${folderError.message}`);
+            }
+        }
+
+        await connection.end();
+
+        return {
+            success: true,
+            warmupEmailsInSpam: foundWarmupEmails.length,
+            details: foundWarmupEmails,
+            recommendation: foundWarmupEmails.length > 0 ?
+                `Found ${foundWarmupEmails.length} warmup emails in spam folders. Consider adjusting warmup strategy.` :
+                'No warmup emails detected in spam folders.'
+        };
+
+    } catch (error) {
+        console.error(`❌ Error monitoring spam folder: ${error.message}`);
+        if (connection) await connection.end().catch(() => { });
+        return { success: false, error: error.message };
+    }
+}
+
+// 🚨 NEW: Get Spam Filter Strength Analysis
+async function analyzeSpamFilterStrength(account) {
+    const stats = await getFolderStats(account);
+
+    if (!stats.success) {
+        return { success: false, error: stats.error };
+    }
+
+    const folderStats = stats.folderStats;
+    const spamCount = (folderStats.Spam?.total || 0) + (folderStats.Junk?.total || 0);
+    const inboxCount = folderStats.INBOX?.total || 0;
+    const totalCount = spamCount + inboxCount;
+
+    let filterStrength = 'UNKNOWN';
+    let spamRatio = totalCount > 0 ? (spamCount / totalCount) * 100 : 0;
+
+    if (spamRatio > 20) {
+        filterStrength = 'AGGRESSIVE';
+    } else if (spamRatio > 10) {
+        filterStrength = 'MODERATE';
+    } else if (spamRatio > 5) {
+        filterStrength = 'LENIENT';
+    } else if (totalCount > 0) {
+        filterStrength = 'VERY_LENIENT';
+    }
+
+    return {
+        success: true,
+        totalEmails: totalCount,
+        spamEmails: spamCount,
+        inboxEmails: inboxCount,
+        spamRatio: parseFloat(spamRatio.toFixed(2)),
+        filterStrength: filterStrength,
+        analysis: this.getFilterStrengthAnalysis(filterStrength, spamRatio)
+    };
+}
+
+// 🚨 NEW: Filter Strength Analysis Helper
+function getFilterStrengthAnalysis(strength, ratio) {
+    const analyses = {
+        'AGGRESSIVE': `High spam filtering (${ratio}% spam rate). Warmup emails may be flagged.`,
+        'MODERATE': `Moderate spam filtering (${ratio}% spam rate). Standard warmup approach should work.`,
+        'LENIENT': `Lenient spam filtering (${ratio}% spam rate). Good for warmup progression.`,
+        'VERY_LENIENT': `Very lenient filtering (${ratio}% spam rate). Ideal for warmup.`,
+        'UNKNOWN': 'Insufficient data to determine filter strength.'
+    };
+
+    return analyses[strength] || analyses.UNKNOWN;
 }
 
 // **ENHANCED: Email status check with bidirectional support**
@@ -587,5 +910,14 @@ module.exports = {
     detectAccountType,
     getMailboxStats,
     getFolderStats,
-    bulkCheckEmailStatus
+    bulkCheckEmailStatus,
+
+    checkEmailStatusWithSpamTracking,
+    isSpamFolder,
+    calculateSpamRiskFromFolder,
+    detectISP,
+    moveEmailToInboxWithTracking,
+    analyzeSpamPatterns,
+    monitorSpamFolderForWarmup,
+    analyzeSpamFilterStrength
 };

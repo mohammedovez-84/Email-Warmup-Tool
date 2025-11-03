@@ -1,4 +1,4 @@
-
+const cron = require('node-cron');
 const moment = require('moment');
 moment.suppressDeprecationWarnings = true;
 require('dotenv').config();
@@ -21,9 +21,10 @@ const warmupRoutes = require('./routes/warmupRoutes');
 const userRoutes = require('./routes/users');
 const metricsRoutes = require('./routes/metricsRoutes');
 const healthRoutes = require('./routes/healthRoutes');
-const msoauthRoutesAdmin = require("./routes/ms-oauth-admin")
+// In your server.js or app.js
+require('./models/associations')();
 const warmupScheduler = require('./services/Scheduler');
-
+const dailyResetService = require('./services/dailyReset');
 
 
 
@@ -56,6 +57,8 @@ app.use('/api/health', healthRoutes);
 
 
 
+// In your server.js file, replace the scheduler startup section:
+
 (async () => {
     try {
         await sequelize.authenticate();
@@ -64,26 +67,34 @@ app.use('/api/health', healthRoutes);
 
         await sequelize.sync();
 
+        // 🚨 DAILY CRON - This is the ONLY place that should increment days
+        cron.schedule('0 0 * * *', async () => {
+            console.log('⏰ DAILY CRON: Running warmup day increment...');
+            await dailyResetService.performDailyReset();
+        });
 
+        // Run every 10 minutes for testing
+        // cron.schedule('*/10 * * * *', async () => {
+        //     console.log('⏰ TEST CRON (10min): Running warmup day increment...');
+        //     await dailyResetService.performDailyReset();
+        // });
 
-        // Start the scheduler
+        // 🚨 FIXED: Start the scheduler WITHOUT day increment
         setTimeout(async () => {
             try {
                 console.log('🚀 Starting Warmup Scheduler...');
-                await warmupScheduler.scheduleWarmup();
 
-                // Reschedule every 6 hours
-                setInterval(async () => {
-                    console.log('🔄 Rescheduling warmup jobs...');
-                    await warmupScheduler.scheduleWarmup();
-                }, 6 * 60 * 60 * 1000);
+                // 🚨 CRITICAL: Use a method that doesn't increment days
+                await warmupScheduler.scheduleWarmup()
+
+                // Or if that method doesn't exist, create it in your scheduler:
+                // await warmupScheduler.scheduleWarmupWithoutReset();
 
                 console.log('✅ Warmup scheduler started successfully');
             } catch (error) {
                 console.error('❌ Failed to start scheduler:', error);
             }
         }, 5000);
-
 
         app.listen(PORT, () => {
             console.log(`🚀 Server started on http://localhost:${PORT}`);
