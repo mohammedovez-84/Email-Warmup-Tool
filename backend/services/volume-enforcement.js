@@ -1,4 +1,3 @@
-// services/volumeEnforcement.js - COMPLETE VERSION WITH ALL METHODS
 const { Op } = require('sequelize');
 const EmailExchange = require('../models/MailExchange');
 const GoogleUser = require('../models/GoogleUser');
@@ -11,7 +10,7 @@ class VolumeEnforcement {
     constructor() {
         this.strictMode = true;
         this.blockedAccounts = new Map();
-        this.sentCounts = new Map();
+        this.sentCounts = new Map(); // In-memory cache for real-time tracking
         this.initialized = false;
     }
 
@@ -21,11 +20,59 @@ class VolumeEnforcement {
 
         console.log('🔧 INITIALIZING VOLUME ENFORCEMENT SERVICE...');
         await volumeInitializer.initializeAllAccounts();
+
+        // Pre-populate sent counts from database
+        await this.initializeSentCounts();
+
         this.initialized = true;
         console.log('✅ VOLUME ENFORCEMENT SERVICE READY');
     }
 
-    // 🚨 MAIN: Check if account can send email
+    // 🚨 NEW: Initialize sent counts from database
+    async initializeSentCounts() {
+        try {
+            console.log('📊 INITIALIZING SENT COUNTS FROM DATABASE...');
+
+            const today = new Date();
+            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+            // Get all exchanges from today
+            const todaysExchanges = await EmailExchange.findAll({
+                where: {
+                    sentAt: {
+                        [Op.gte]: startOfDay
+                    },
+                    status: {
+                        [Op.in]: ['sent', 'delivered']
+                    }
+                }
+            });
+
+            // Count emails per account
+            const counts = {};
+            todaysExchanges.forEach(exchange => {
+                // Count warmup accounts
+                if (exchange.warmupAccount) {
+                    counts[exchange.warmupAccount] = (counts[exchange.warmupAccount] || 0) + 1;
+                }
+                // Count pool accounts  
+                if (exchange.poolAccount) {
+                    counts[exchange.poolAccount] = (counts[exchange.poolAccount] || 0) + 1;
+                }
+            });
+
+            // Store in memory cache
+            Object.entries(counts).forEach(([email, count]) => {
+                this.sentCounts.set(email, count);
+            });
+
+            console.log(`📊 LOADED ${Object.keys(counts).length} ACCOUNT COUNTS FROM DATABASE`);
+        } catch (error) {
+            console.error('❌ Error initializing sent counts:', error);
+        }
+    }
+
+    // 🚨 MAIN: Check if account can send email - FIXED
     async canAccountSendEmail(accountEmail, accountType = 'warmup') {
         try {
             // Ensure initialization
@@ -60,43 +107,127 @@ class VolumeEnforcement {
         }
     }
 
-    // 🚨 NEW: Account for reply emails in volume limits
-    async trackReplyEmail(warmupEmail, poolEmail) {
+    // 🚨 FIXED: Get emails sent today - uses both cache and database
+    async getSentTodayCount(email, accountType = 'warmup') {
         try {
-            console.log(`📨 TRACKING REPLY: ${poolEmail} → ${warmupEmail}`);
+            // Check memory cache first for real-time accuracy
+            if (this.sentCounts.has(email)) {
+                const cachedCount = this.sentCounts.get(email);
+                console.log(`📨 SENT TODAY (CACHED): ${email} - ${cachedCount} emails`);
+                return cachedCount;
+            }
 
-            // Increment pool account sent count (reply counts against pool limits)
-            await this.incrementSentCount(poolEmail, 1, 'pool');
+            // Fallback to database count
+            const today = new Date();
+            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
 
-            // Note: Warmup account receiving reply doesn't count against their outbound limit
-            // but we might want to track this for analytics
-
-        } catch (error) {
-            console.error(`❌ Error tracking reply email:`, error);
-        }
-    }
-
-    // 🚨 NEW: Check if this is a reply to existing conversation
-    async isReplyToExistingConversation(warmupEmail, poolEmail) {
-        try {
-            const existingExchange = await EmailExchange.findOne({
+            const sentToday = await EmailExchange.count({
                 where: {
-                    warmupAccount: warmupEmail,
-                    poolAccount: poolEmail,
-                    direction: 'WARMUP_TO_POOL',
-                    status: 'sent'
-                },
-                order: [['sentAt', 'DESC']]
+                    [accountType === 'warmup' ? 'warmupAccount' : 'poolAccount']: email,
+                    sentAt: {
+                        [Op.gte]: startOfDay,
+                        [Op.lt]: endOfDay
+                    },
+                    status: {
+                        [Op.in]: ['sent', 'delivered']
+                    }
+                }
             });
 
-            return !!existingExchange;
+            // Update cache
+            this.sentCounts.set(email, sentToday);
+
+            console.log(`📨 SENT TODAY (DB): ${email} - ${sentToday} emails`);
+            return sentToday;
         } catch (error) {
-            console.error(`❌ Error checking existing conversation:`, error);
-            return false;
+            console.error(`❌ Sent count error for ${email}:`, error);
+            return 999; // Fail safe
         }
     }
 
-    // 🚨 IMPROVED: Get account volume limit with proper warmup progression
+    // 🚨 NEW: Increment sent count immediately when email is scheduled
+    async incrementSentCount(email, count = 1, accountType = 'warmup') {
+        try {
+            const currentCount = this.sentCounts.get(email) || 0;
+            const newCount = currentCount + count;
+            this.sentCounts.set(email, newCount);
+
+            console.log(`📈 INCREMENTED COUNT: ${email} - ${currentCount} → ${newCount} (${accountType})`);
+
+            // Also update database for persistence
+            await this.updateDatabaseCount(email, accountType);
+
+        } catch (error) {
+            console.error(`❌ Error incrementing sent count for ${email}:`, error);
+        }
+    }
+
+    // 🚨 NEW: Update database count for an account
+    async updateDatabaseCount(email, accountType = 'warmup') {
+        try {
+            const sentToday = this.sentCounts.get(email) || 0;
+            const currentTime = new Date();
+
+            if (accountType === 'warmup') {
+                let account = await GoogleUser.findOne({ where: { email } }) ||
+                    await MicrosoftUser.findOne({ where: { email } }) ||
+                    await SmtpAccount.findOne({ where: { email } });
+
+                if (account) {
+                    const updates = {
+                        current_day_sent: sentToday,
+                        last_reset_date: currentTime
+                    };
+
+                    if (account instanceof GoogleUser) {
+                        await GoogleUser.update(updates, { where: { email } });
+                    } else if (account instanceof MicrosoftUser) {
+                        await MicrosoftUser.update(updates, { where: { email } });
+                    } else if (account instanceof SmtpAccount) {
+                        await SmtpAccount.update(updates, { where: { email } });
+                    }
+                }
+            } else if (accountType === 'pool') {
+                await EmailPool.update({
+                    currentDaySent: sentToday,
+                    lastResetDate: currentTime
+                }, { where: { email } });
+            }
+
+            console.log(`💾 UPDATED DATABASE: ${email} - ${sentToday} emails`);
+        } catch (error) {
+            console.error(`❌ Error updating database count for ${email}:`, error);
+        }
+    }
+
+    // 🚨 NEW: Track email immediately when scheduled (FIXES THE ISSUE)
+    async trackScheduledEmail(warmupEmail, poolEmail, direction) {
+        try {
+            console.log(`📝 TRACKING SCHEDULED: ${warmupEmail} ↔ ${poolEmail} (${direction})`);
+
+            // Increment counts immediately
+            if (direction === 'WARMUP_TO_POOL') {
+                await this.incrementSentCount(warmupEmail, 1, 'warmup');
+                await this.incrementSentCount(poolEmail, 1, 'pool');
+            } else if (direction === 'POOL_TO_WARMUP') {
+                await this.incrementSentCount(poolEmail, 1, 'pool');
+                await this.incrementSentCount(warmupEmail, 1, 'warmup');
+            }
+
+            console.log(`✅ SCHEDULED EMAIL TRACKED: ${warmupEmail} and ${poolEmail} counts updated`);
+
+        } catch (error) {
+            console.error('❌ Error tracking scheduled email:', error);
+        }
+    }
+
+    // 🚨 NEW: Get real-time count (memory cache only)
+    getRealTimeCount(email) {
+        return this.sentCounts.get(email) || 0;
+    }
+
+    // 🚨 FIXED: Get account volume limit - MATCHES computeEmailsToSend exactly
     async getAccountVolumeLimit(email, accountType = 'warmup') {
         try {
             if (accountType === 'pool') {
@@ -104,7 +235,6 @@ class VolumeEnforcement {
                 return pool?.maxEmailsPerDay || 50;
             }
 
-            // Get warmup account with proper defaults
             const account = await GoogleUser.findOne({ where: { email } }) ||
                 await MicrosoftUser.findOne({ where: { email } }) ||
                 await SmtpAccount.findOne({ where: { email } });
@@ -114,7 +244,6 @@ class VolumeEnforcement {
                 return 0;
             }
 
-            // Use actual values from database with proper defaults
             const startEmailsPerDay = this.ensureNumber(account.startEmailsPerDay, 3);
             const increaseEmailsPerDay = this.ensureNumber(account.increaseEmailsPerDay, 3);
             const maxEmailsPerDay = this.ensureNumber(account.maxEmailsPerDay, 25);
@@ -127,10 +256,11 @@ class VolumeEnforcement {
             console.log(`   ├── Day Count: ${warmupDayCount}`);
             console.log(`   └── Type: ${account.provider || 'smtp'}`);
 
-            // Calculate volume based on warmup progression
+            // 🚨 CRITICAL: Use EXACT SAME calculation as computeEmailsToSend
             let volume = startEmailsPerDay + (increaseEmailsPerDay * warmupDayCount);
             volume = Math.min(volume, maxEmailsPerDay);
-            volume = Math.max(1, volume); // At least 1 email per day
+            volume = Math.min(volume, 25); // Match RATE_LIMIT_CONFIG.maxEmailsPerDay
+            volume = Math.max(1, volume); // Ensure at least 1
 
             console.log(`   📊 FINAL VOLUME: ${volume}`);
 
@@ -142,7 +272,7 @@ class VolumeEnforcement {
         }
     }
 
-    // 🚨 Add this method to your VolumeEnforcement class in services/volumeEnforcement.js
+    // 🚨 Get daily summary
     async getDailySummary(email, accountType = 'warmup') {
         try {
             const volumeLimit = await this.getAccountVolumeLimit(email, accountType);
@@ -181,36 +311,132 @@ class VolumeEnforcement {
         }
     }
 
-    // 🚨 IMPROVED: Get emails sent today with better counting
-    async getSentTodayCount(email, accountType = 'warmup') {
+    // 🚨 Get max emails to schedule
+    async getMaxEmailsToSchedule(accountEmail, accountType = 'warmup') {
         try {
-            const today = new Date();
-            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+            const volumeLimit = await this.getAccountVolumeLimit(accountEmail, accountType);
+            const sentToday = await this.getSentTodayCount(accountEmail, accountType);
+            const remaining = Math.max(0, volumeLimit - sentToday);
 
-            const sentToday = await EmailExchange.count({
-                where: {
-                    [accountType === 'warmup' ? 'warmupAccount' : 'poolAccount']: email,
-                    sentAt: {
-                        [Op.gte]: startOfDay,
-                        [Op.lt]: endOfDay
-                    },
-                    status: {
-                        [Op.in]: ['sent', 'delivered'] // Only count successfully sent emails
-                    }
-                }
-            });
+            console.log(`📊 SCHEDULING LIMIT: ${accountEmail}`);
+            console.log(`   ├── Limit: ${volumeLimit}`);
+            console.log(`   ├── Sent: ${sentToday}`);
+            console.log(`   └── Can Schedule: ${remaining} emails`);
 
-            console.log(`📨 SENT TODAY: ${email} - ${sentToday} emails`);
+            return remaining;
 
-            return sentToday;
         } catch (error) {
-            console.error(`❌ Sent count error for ${email}:`, error);
-            return 999; // Fail safe - return high number to block sending
+            console.error(`❌ Scheduling limit error for ${accountEmail}:`, error);
+            return 0;
         }
     }
 
-    // 🚨 NEW: Increment warmup day count for accounts
+    // 🚨 Get remaining capacity
+    async getRemainingCapacity(email, accountType = 'warmup') {
+        try {
+            const volumeLimit = await this.getAccountVolumeLimit(email, accountType);
+            const sentToday = await this.getSentTodayCount(email, accountType);
+            return Math.max(0, volumeLimit - sentToday);
+        } catch (error) {
+            console.error(`❌ Error getting remaining capacity for ${email}:`, error);
+            return 0;
+        }
+    }
+
+    // 🚨 FIXED: Reset for new day
+    async resetForNewDay() {
+        try {
+            console.log('🔄 RESETTING FOR NEW DAY...');
+
+            // Reset daily counts for all accounts
+            await volumeInitializer.resetAllDailyCounts();
+
+            // Increment warmup day count for active accounts
+            await this.incrementWarmupDayForActiveAccounts();
+
+            // Clear memory cache
+            const previouslyBlocked = Array.from(this.blockedAccounts.keys());
+            this.blockedAccounts.clear();
+            this.sentCounts.clear();
+
+            console.log(`✅ NEW DAY RESET: Cleared ${previouslyBlocked.length} blocked accounts and reset counts`);
+            return previouslyBlocked;
+
+        } catch (error) {
+            console.error('❌ Error resetting for new day:', error);
+        }
+    }
+
+    // 🚨 ADD TO VolumeEnforcement class
+    async reverseScheduledEmail(email, direction) {
+        try {
+            console.log(`🔄 REVERSING scheduled email count for: ${email}`);
+
+            // Decrement the sent count
+            const currentCount = this.sentCounts.get(email) || 0;
+            if (currentCount > 0) {
+                this.sentCounts.set(email, currentCount - 1);
+                console.log(`   📉 Count reversed: ${currentCount} → ${currentCount - 1}`);
+            }
+
+            // Remove from blocked accounts if now under limit
+            if (this.blockedAccounts.has(email)) {
+                const volumeLimit = await this.getAccountVolumeLimit(email, direction === 'WARMUP_TO_POOL' ? 'warmup' : 'pool');
+                const newCount = this.sentCounts.get(email) || 0;
+
+                if (newCount < volumeLimit) {
+                    this.blockedAccounts.delete(email);
+                    console.log(`   🔓 Unblocked: ${email} (${newCount}/${volumeLimit})`);
+                }
+            }
+
+            // Update database count
+            await this.updateDatabaseCount(email, direction === 'WARMUP_TO_POOL' ? 'warmup' : 'pool');
+
+        } catch (error) {
+            console.error(`❌ Error reversing scheduled email for ${email}:`, error);
+        }
+    }
+    // 🚨 ADD THIS METHOD TO YOUR VolumeEnforcement CLASS
+    async trackSentEmail(warmupEmail, poolEmail, direction) {
+        try {
+            console.log(`📝 TRACKING ACTUAL SENT: ${warmupEmail} ↔ ${poolEmail} (${direction})`);
+
+            // 🚨 CRITICAL: Only increment counts for the SENDER
+            if (direction === 'WARMUP_TO_POOL') {
+                await this.incrementSentCount(warmupEmail, 1, 'warmup');
+                console.log(`✅ ACTUAL SENT TRACKED: ${warmupEmail} (warmup) count incremented`);
+            } else if (direction === 'POOL_TO_WARMUP') {
+                await this.incrementSentCount(poolEmail, 1, 'pool');
+                console.log(`✅ ACTUAL SENT TRACKED: ${poolEmail} (pool) count incremented`);
+            }
+
+        } catch (error) {
+            console.error('❌ Error tracking sent email:', error);
+        }
+    }
+    // 🚨 Increment warmup day for active accounts
+    async incrementWarmupDayForActiveAccounts() {
+        try {
+            console.log('📈 INCREMENTING WARMUP DAY FOR ALL ACTIVE ACCOUNTS...');
+
+            const googleAccounts = await GoogleUser.findAll({ where: { warmupStatus: 'active' } });
+            const microsoftAccounts = await MicrosoftUser.findAll({ where: { warmupStatus: 'active' } });
+            const smtpAccounts = await SmtpAccount.findAll({ where: { warmupStatus: 'active' } });
+
+            const allAccounts = [...googleAccounts, ...microsoftAccounts, ...smtpAccounts];
+
+            for (const account of allAccounts) {
+                await this.incrementWarmupDayCount(account.email);
+            }
+
+            console.log(`✅ INCREMENTED WARMUP DAY FOR ${allAccounts.length} ACCOUNTS`);
+        } catch (error) {
+            console.error('❌ Error incrementing warmup days:', error);
+        }
+    }
+
+    // 🚨 Increment warmup day count
     async incrementWarmupDayCount(email) {
         try {
             let account = await GoogleUser.findOne({ where: { email } }) ||
@@ -238,7 +464,7 @@ class VolumeEnforcement {
         return 0;
     }
 
-    // 🚨 NEW: Reset warmup progression
+    // 🚨 Reset warmup progression
     async resetWarmupProgression(email) {
         try {
             let account = await GoogleUser.findOne({ where: { email } }) ||
@@ -261,14 +487,14 @@ class VolumeEnforcement {
                 }
 
                 console.log(`🔄 RESET WARMUP: ${email} - Back to day 0`);
-                this.forceUnblock(email); // Unblock if previously blocked
+                this.forceUnblock(email);
             }
         } catch (error) {
             console.error(`❌ Error resetting warmup progression for ${email}:`, error);
         }
     }
 
-    // 🚨 NEW: Get warmup progression status
+    // 🚨 Get warmup progression status
     async getWarmupProgression(email) {
         try {
             const volumeLimit = await this.getAccountVolumeLimit(email, 'warmup');
@@ -297,26 +523,6 @@ class VolumeEnforcement {
         }
     }
 
-    // 🚨 IMPROVED: Get max emails to schedule
-    async getMaxEmailsToSchedule(accountEmail, accountType = 'warmup') {
-        try {
-            const volumeLimit = await this.getAccountVolumeLimit(accountEmail, accountType);
-            const sentToday = await this.getSentTodayCount(accountEmail, accountType);
-            const remaining = Math.max(0, volumeLimit - sentToday);
-
-            console.log(`📊 SCHEDULING LIMIT: ${accountEmail}`);
-            console.log(`   ├── Limit: ${volumeLimit}`);
-            console.log(`   ├── Sent: ${sentToday}`);
-            console.log(`   └── Can Schedule: ${remaining} emails`);
-
-            return remaining;
-
-        } catch (error) {
-            console.error(`❌ Scheduling limit error for ${accountEmail}:`, error);
-            return 0;
-        }
-    }
-
     // 🚨 UTILITY: Ensure number with default
     ensureNumber(value, defaultValue = 0) {
         if (typeof value === 'number' && !isNaN(value)) {
@@ -329,99 +535,15 @@ class VolumeEnforcement {
         return defaultValue;
     }
 
-    // 🚨 Reset for new day with warmup progression
-    async resetForNewDay() {
-        try {
-            console.log('🔄 RESETTING FOR NEW DAY...');
-
-            // Reset daily counts for all accounts
-            await volumeInitializer.resetAllDailyCounts();
-
-            // Increment warmup day count for active accounts
-            await this.incrementWarmupDayForActiveAccounts();
-
-            const previouslyBlocked = Array.from(this.blockedAccounts.keys());
-            this.blockedAccounts.clear();
-            this.sentCounts.clear();
-
-            console.log(`✅ NEW DAY RESET: Cleared ${previouslyBlocked.length} blocked accounts`);
-            return previouslyBlocked;
-
-        } catch (error) {
-            console.error('❌ Error resetting for new day:', error);
-        }
-    }
-
-    // 🚨 NEW: Increment warmup day for all active accounts
-    async incrementWarmupDayForActiveAccounts() {
-        try {
-            console.log('📈 INCREMENTING WARMUP DAY FOR ALL ACTIVE ACCOUNTS...');
-
-            const googleAccounts = await GoogleUser.findAll({ where: { warmupStatus: 'active' } });
-            const microsoftAccounts = await MicrosoftUser.findAll({ where: { warmupStatus: 'active' } });
-            const smtpAccounts = await SmtpAccount.findAll({ where: { warmupStatus: 'active' } });
-
-            const allAccounts = [...googleAccounts, ...microsoftAccounts, ...smtpAccounts];
-
-            for (const account of allAccounts) {
-                await this.incrementWarmupDayCount(account.email);
-            }
-
-            console.log(`✅ INCREMENTED WARMUP DAY FOR ${allAccounts.length} ACCOUNTS`);
-        } catch (error) {
-            console.error('❌ Error incrementing warmup days:', error);
-        }
-    }
-
-    // 🚨 Get real-time capacity (with pending)
-    async getRealTimeCapacity(email, accountType = 'warmup') {
-        try {
-            const volumeLimit = await this.getAccountVolumeLimit(email, accountType);
-            const sentToday = await this.getSentTodayCount(email, accountType);
-            const remaining = Math.max(0, volumeLimit - sentToday);
-
-            console.log(`📊 REAL-TIME CAPACITY: ${email}`);
-            console.log(`   ├── Limit: ${volumeLimit}`);
-            console.log(`   ├── Sent: ${sentToday}`);
-            console.log(`   └── Remaining: ${remaining}`);
-
-            return remaining;
-        } catch (error) {
-            console.error(`❌ Error getting real-time capacity:`, error);
-            return 0;
-        }
-    }
-
-    // 🚨 Track pending emails
-    trackPendingEmail(accountEmail, count = 1) {
-        console.log(`📝 TRACKING: ${accountEmail} has ${count} pending emails`);
-        // We're not using pending counts for now to keep it simple
-    }
-
-    // 🚨 Complete pending email
-    completePendingEmail(accountEmail, count = 1) {
-        console.log(`📝 COMPLETED: ${accountEmail} completed ${count} pending emails`);
-        // We're not using pending counts for now to keep it simple
-    }
-
-    // 🚨 Reset for new day
-    resetForNewDay() {
-        const previouslyBlocked = Array.from(this.blockedAccounts.keys());
-        this.blockedAccounts.clear();
-        this.sentCounts.clear();
-        console.log(`🔄 RESET: Cleared ${previouslyBlocked.length} blocked accounts`);
-        return previouslyBlocked;
+    // 🚨 Force unblock account
+    forceUnblock(email) {
+        this.blockedAccounts.delete(email);
+        console.log(`🔓 FORCE UNBLOCK: ${email}`);
     }
 
     // 🚨 Get blocked accounts
     getBlockedAccounts() {
         return Object.fromEntries(this.blockedAccounts);
-    }
-
-    // 🚨 Force unblock account
-    forceUnblock(email) {
-        this.blockedAccounts.delete(email);
-        console.log(`🔓 FORCE UNBLOCK: ${email}`);
     }
 
     // 🚨 Reset pending counts

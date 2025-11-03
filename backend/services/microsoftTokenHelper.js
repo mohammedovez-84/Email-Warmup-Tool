@@ -1,94 +1,72 @@
 const axios = require('axios');
 
-/**
- * Refresh Microsoft OAuth2 token with enhanced error handling
- * @param {string} clientId - your Azure app client ID  
- * @param {string} clientSecret - your Azure app client secret
- * @param {string} refreshToken - refresh token from DB
- * @param {string} tenantId - Azure tenant ID or 'common'
- * @returns {Promise<{access_token: string, expires_in: number, refresh_token?: string}>}
- */
-async function refreshMicrosoftToken(clientId, clientSecret, refreshToken, tenantId = 'common') {
-  const url = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
-
-  const params = new URLSearchParams();
-  params.append('client_id', clientId);
-  params.append('scope', 'https://outlook.office365.com/IMAP.AccessAsUser.All https://outlook.office365.com/SMTP.Send offline_access');
-  params.append('refresh_token', refreshToken);
-  params.append('grant_type', 'refresh_token');
-  params.append('client_secret', clientSecret);
-
+// 🚨 UPDATED: Microsoft Token Refresh with Personal Account Support
+async function refreshMicrosoftToken(account) {
   try {
-    console.log('🔄 Refreshing Microsoft token...');
+    console.log(`   🔄 Attempting to refresh Microsoft token for: ${account.email}`);
 
-    const response = await axios.post(url, params.toString(), {
+    if (!account.refresh_token) {
+      console.log(`   ❌ No refresh token available for ${account.email}`);
+
+      // 🚨 CHECK IF THIS IS A PERSONAL ACCOUNT THAT NEEDS DIFFERENT AUTH
+      const isPersonal = account.email.includes('@outlook.com') || account.email.includes('@hotmail.com');
+      if (isPersonal) {
+        console.log(`   🔐 Personal Outlook account detected - may need different authentication flow`);
+        console.log(`   💡 Personal accounts may require re-authentication with proper scopes`);
+      }
+
+      return null;
+    }
+
+    const tokenUrl = 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
+    const params = new URLSearchParams({
+      client_id: process.env.MS_CLIENT_ID,
+      client_secret: process.env.MS_CLIENT_SECRET,
+      refresh_token: account.refresh_token,
+      grant_type: 'refresh_token',
+      // 🚨 USE CORRECT SCOPES FOR PERSONAL ACCOUNTS
+      scope: 'https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Mail.Read offline_access'
+    });
+
+    console.log(`   🔄 Refreshing token with scopes: Mail.Send, Mail.Read`);
+
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
+      body: params,
       timeout: 10000
     });
 
-    console.log('✅ Microsoft token refreshed successfully');
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`   ❌ Token refresh failed: ${response.status} - ${errorText}`);
+
+      // 🚨 SPECIFIC ERROR HANDLING
+      if (response.status === 400) {
+        console.log(`   🔐 Authentication issue: May need re-authentication`);
+      } else if (response.status === 401) {
+        console.log(`   🔐 Unauthorized: Client credentials may be invalid`);
+      }
+      return null;
+    }
+
+    const tokenData = await response.json();
+    console.log(`   ✅ Microsoft token refreshed successfully`);
+    console.log(`   📊 Token expires in: ${tokenData.expires_in} seconds`);
 
     return {
-      access_token: response.data.access_token,
-      expires_in: response.data.expires_in,
-      refresh_token: response.data.refresh_token, // Important: get new refresh token
-      token_type: response.data.token_type
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token || account.refresh_token,
+      token_expires_at: Date.now() + (tokenData.expires_in * 1000)
     };
 
   } catch (error) {
-    console.error('❌ Microsoft token refresh failed:');
-
-    // 🚨 ENHANCED ERROR HANDLING
-    const errorData = error.response?.data;
-
-    if (errorData) {
-      console.error('   Error:', errorData.error);
-      console.error('   Description:', errorData.error_description);
-      console.error('   Error Codes:', errorData.error_codes);
-
-      // 🚨 SPECIFIC ERROR HANDLING
-      switch (errorData.error) {
-        case 'invalid_grant':
-          if (errorData.error_codes?.includes(65001)) {
-            throw new Error('CONSENT_REQUIRED: User or admin consent needed for application');
-          } else if (errorData.suberror === 'consent_required') {
-            throw new Error('CONSENT_REQUIRED: Application permissions need consent');
-          } else {
-            throw new Error('INVALID_GRANT: Refresh token is invalid or expired');
-          }
-
-        case 'invalid_client':
-          throw new Error('INVALID_CLIENT: Client ID or secret is incorrect');
-
-        case 'invalid_request':
-          throw new Error('INVALID_REQUEST: Missing required parameters');
-
-        case 'unauthorized_client':
-          throw new Error('UNAUTHORIZED_CLIENT: Client not authorized for this flow');
-
-        case 'unsupported_grant_type':
-          throw new Error('UNSUPPORTED_GRANT_TYPE: Grant type not supported');
-
-        default:
-          throw new Error(`MICROSOFT_AUTH_ERROR: ${errorData.error} - ${errorData.error_description}`);
-      }
-    }
-
-    // Network or timeout errors
-    if (error.code === 'ECONNABORTED') {
-      throw new Error('REQUEST_TIMEOUT: Token refresh request timed out');
-    }
-
-    if (error.code === 'ENOTFOUND') {
-      throw new Error('NETWORK_ERROR: Cannot reach Microsoft servers');
-    }
-
-    throw new Error(`UNKNOWN_ERROR: ${error.message}`);
+    console.log(`   ❌ Token refresh error: ${error.message}`);
+    return null;
   }
 }
-
 /**
  * 🚨 NEW: Check if token needs refresh before attempting
  */
