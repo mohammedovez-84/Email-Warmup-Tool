@@ -11,9 +11,15 @@ const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
 const EmailPool = require('../models/EmailPool');
-const { buildSenderConfig, buildWarmupConfig, buildPoolConfig } = require('../utils/senderConfig');
+const { buildWarmupConfig, buildPoolConfig } = require('../utils/senderConfig');
 const volumeEnforcement = require('../services/volume-enforcement');
-
+const trackingService = require('../services/trackingService');
+const analyticsService = require('../services/analyticsService');
+// Add to your imports at the top
+const {
+    checkEmailStatusWithSpamTracking,
+    moveEmailToInboxWithTracking
+} = require('../services/imapHelper');
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 class WarmupWorker {
@@ -119,6 +125,10 @@ class WarmupWorker {
 
             if (!canExecute) {
                 console.log(`💥 EXECUTION BLOCKED: ${warmupAccount} at volume limit - ACKNOWLEDGING JOB`);
+
+                // 🚨 CRITICAL: REVERSE THE TRACKING SINCE WE'RE NOT EXECUTING
+                await volumeEnforcement.reverseScheduledEmail(warmupAccount, job.direction);
+
                 channel.ack(msg);
                 return;
             }
@@ -135,6 +145,13 @@ class WarmupWorker {
 
         } catch (error) {
             console.error(`❌ EXECUTION FAILED:`, error);
+
+            // 🚨 REVERSE TRACKING ON FAILURE TOO
+            if (job.warmupAccount) {
+                await volumeEnforcement.reverseScheduledEmail(job.warmupAccount, job.direction)
+                    .catch(err => console.error('Error reversing tracking on failure:', err));
+            }
+
             channel.ack(msg);
         }
     }
@@ -159,11 +176,13 @@ class WarmupWorker {
         }
     }
 
-    // 🚨 UPDATED: Handle Warmup to Pool with Status Tracking
+    // 🚨 UPDATED: Handle Warmup to Pool with Graph API Support
     async handleWarmupToPool(pair, warmupAccount) {
         console.log(`   🔄 HANDLING SENDING: ${pair.senderEmail} → ${pair.receiverEmail}`);
 
         let exchangeRecord;
+        let sendResult;
+
         try {
             // 🚨 GRACEFUL ACCOUNT CHECK
             const accountStatus = await this.checkWarmupAccountStatus(warmupAccount);
@@ -195,6 +214,18 @@ class WarmupWorker {
 
             console.log(`   📧 Processing: ${pair.senderEmail} → ${pair.receiverEmail} [WARMUP_TO_POOL]`);
 
+            // 🚨 CHECK FOR OUTLOOK PERSONAL ACCOUNT
+            const isOutlookPersonal = pair.senderEmail.includes('@outlook.com') || pair.senderEmail.includes('@hotmail.com');
+            if (isOutlookPersonal) {
+                console.log(`   🔐 OUTLOOK PERSONAL: Using Graph API for ${pair.senderEmail}`);
+
+                // Ensure account has valid tokens
+                if (!sender.access_token) {
+                    console.log(`   ❌ OUTLOOK PERSONAL: No access token available for ${pair.senderEmail}`);
+                    throw new Error(`Outlook personal account ${pair.senderEmail} needs valid access token`);
+                }
+            }
+
             // RECORD THE EXCHANGE BEFORE SENDING
             exchangeRecord = await EmailExchange.create({
                 warmupAccount: warmupAccount,
@@ -206,7 +237,8 @@ class WarmupWorker {
             let senderConfig = buildWarmupConfig(sender);
             const safeReplyRate = pair.replyRate || 0.25;
 
-            const sendResult = await this.sendEmailWithFallback(
+            // 🚨 EXECUTE EMAIL SENDING WITH GRAPH API
+            sendResult = await this.sendEmailWithFallback(
                 senderConfig,
                 receiver,
                 safeReplyRate,
@@ -216,20 +248,77 @@ class WarmupWorker {
                 'WARMUP_TO_POOL'
             );
 
-            // 🚨 CRITICAL: UPDATE THE STATUS BASED ON ACTUAL RESULT
-            let finalStatus = 'sent';
+            // 🚨 VALIDATE SEND RESULT - USE FALLBACK MESSAGE ID IF NEEDED
+            if (!sendResult || !sendResult.messageId) {
+                console.log(`   ⚠️  No messageId returned, using fallback ID`);
+                sendResult = sendResult || {};
+                sendResult.messageId = sendResult.messageId || `graph-fallback-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                sendResult.success = false;
+                sendResult.error = sendResult.error || 'No messageId returned from Graph API';
+            }
 
-            if (sendResult && sendResult.success) {
-                finalStatus = sendResult.messageId ? 'delivered' : 'sent';
+            // 🚨 FIXED: Ensure ALL required fields are present with proper validation
+            const emailData = {
+                senderEmail: pair.senderEmail,
+                senderType: pair.senderType || this.determineAccountType(sender) || 'warmup',
+                receiverEmail: pair.receiverEmail,
+                receiverType: 'pool',
+                subject: sendResult.subject || 'Warmup Email',
+                messageId: sendResult.messageId,
+                emailType: 'warmup_send',
+                direction: 'WARMUP_TO_POOL',
+                warmupDay: warmupAccount.warmupDayCount || 0,
+                replyRate: safeReplyRate,
+                industry: warmupAccount.industry || 'general',
+                isCoordinated: true,
+                graphApiUsed: true // 🚨 TRACK GRAPH API USAGE
+            };
+
+            console.log(`📊 Tracking WARMUP email:`, {
+                senderType: emailData.senderType,
+                receiverType: emailData.receiverType,
+                direction: emailData.direction,
+                messageId: emailData.messageId,
+                graphApiUsed: emailData.graphApiUsed
+            });
+
+            // 🚨 TRACK EMAIL WITH ERROR HANDLING
+            await trackingService.trackEmailSent(emailData);
+
+            // 🚨 CRITICAL: UPDATE THE STATUS BASED ON ACTUAL RESULT
+            let finalStatus = sendResult.success ? 'sent' : 'failed';
+
+            if (sendResult.success) {
+                finalStatus = 'delivered';
+
+                // 🚨 TRACK SUCCESSFUL DELIVERY
+                if (sendResult.deliveredInbox !== undefined) {
+                    await trackingService.trackEmailDelivered(sendResult.messageId, {
+                        deliveredInbox: sendResult.deliveredInbox,
+                        deliveryFolder: sendResult.deliveryFolder || 'INBOX',
+                        isSpamFolder: sendResult.deliveryFolder === 'SPAM' || sendResult.deliveryFolder === 'JUNK',
+                        graphApiUsed: true
+                    }).catch(err => console.error('❌ Error tracking delivery:', err.message));
+                }
             } else {
-                finalStatus = 'failed';
+                // 🚨 TRACK BOUNCE ON FAILURE
+                await trackingService.trackEmailBounce(sendResult.messageId, {
+                    bounceType: 'soft_bounce',
+                    bounceCategory: 'transient',
+                    bounceReason: sendResult.error || 'Graph API send failed',
+                    canRetry: true,
+                    senderEmail: pair.senderEmail,
+                    receiverEmail: pair.receiverEmail,
+                    graphApiError: true
+                }).catch(err => console.error('❌ Error tracking bounce:', err.message));
             }
 
             // UPDATE EXCHANGE RECORD WITH REAL STATUS
             await exchangeRecord.update({
-                messageId: sendResult?.messageId,
+                messageId: sendResult.messageId,
                 status: finalStatus,
-                sentAt: new Date()
+                sentAt: new Date(),
+                graphApiUsed: true
             });
 
             // 🚨 UPDATE DAILY COUNT
@@ -237,24 +326,44 @@ class WarmupWorker {
 
             console.log(`   ✅ WARMUP_TO_POOL email completed: ${pair.senderEmail} → ${pair.receiverEmail} [${finalStatus}]`);
 
+            // 🚨 STORE DAILY ANALYTICS ASYNC
+            analyticsService.storeDailyAnalytics(warmupAccount).catch(err => {
+                console.error('❌ Error storing daily analytics:', err.message);
+            });
+
         } catch (error) {
             console.error(`   ❌ Failed WARMUP_TO_POOL email: ${error.message}`);
+
+            // 🚨 TRACK BOUNCE ON EXCEPTION WITH FALLBACK MESSAGE ID
+            const fallbackMessageId = `graph-exception-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+            await trackingService.trackEmailBounce(fallbackMessageId, {
+                bounceType: this.determineBounceType(error),
+                bounceCategory: 'permanent',
+                bounceReason: error.message,
+                canRetry: false,
+                senderEmail: pair.senderEmail,
+                receiverEmail: pair.receiverEmail,
+                graphApiError: true,
+                exception: true
+            }).catch(err => console.error('❌ Error tracking exception bounce:', err.message));
 
             // 🚨 MARK AS FAILED ON ERROR
             if (exchangeRecord) {
                 await exchangeRecord.update({
                     status: 'failed',
-                    error: error.message
-                });
+                    error: error.message.substring(0, 500),
+                    graphApiUsed: true
+                }).catch(err => console.error('❌ Error updating exchange record:', err.message));
             }
         }
     }
-
-    // 🚨 UPDATED: Handle Pool to Warmup with Status Tracking
+    // 🚨 UPDATED: Handle Pool to Warmup with Complete Error Handling
     async handlePoolToWarmup(pair, warmupAccount) {
         console.log(`   🔄 HANDLING RECEIVING: ${pair.senderEmail} → ${pair.receiverEmail}`);
 
         let exchangeRecord;
+        let sendResult;
+
         try {
             // 🚨 GRACEFUL ACCOUNT CHECK
             const accountStatus = await this.checkWarmupAccountStatus(warmupAccount);
@@ -303,7 +412,8 @@ class WarmupWorker {
                 return;
             }
 
-            const sendResult = await this.sendEmailWithFallback(
+            // 🚨 EXECUTE EMAIL SENDING
+            sendResult = await this.sendEmailWithFallback(
                 senderConfig,
                 receiver,
                 safeReplyRate,
@@ -313,13 +423,65 @@ class WarmupWorker {
                 'POOL_TO_WARMUP'
             );
 
+            // 🚨 VALIDATE SEND RESULT BEFORE TRACKING
+            if (!sendResult || !sendResult.messageId) {
+                throw new Error('Pool email sending failed - no messageId returned');
+            }
+
+            // 🚨 FIXED: Ensure ALL required fields for POOL emails with validation
+            const emailData = {
+                senderEmail: pair.senderEmail,
+                senderType: 'pool', // 🚨 EXPLICITLY SET
+                receiverEmail: pair.receiverEmail,
+                receiverType: pair.receiverType || this.determineAccountType(receiver) || 'warmup', // 🚨 MULTIPLE FALLBACKS
+                subject: sendResult.subject || 'Warmup Email',
+                messageId: sendResult.messageId,
+                emailType: 'pool_send',
+                direction: 'POOL_TO_WARMUP',
+                warmupDay: warmupAccount.warmupDayCount || 0,
+                replyRate: safeReplyRate,
+                industry: warmupAccount.industry || 'general',
+                isCoordinated: true
+            };
+
+            console.log(`📊 Tracking POOL email:`, {
+                senderType: emailData.senderType,
+                receiverType: emailData.receiverType,
+                direction: emailData.direction,
+                messageId: emailData.messageId
+            });
+
+            // 🚨 TRACK POOL EMAIL WITH ERROR HANDLING
+            await trackingService.trackEmailSent(emailData);
+
             // 🚨 CRITICAL: UPDATE THE STATUS BASED ON ACTUAL RESULT
             let finalStatus = 'sent';
 
             if (sendResult && sendResult.success) {
                 finalStatus = sendResult.messageId ? 'delivered' : 'sent';
+
+                // 🚨 TRACK SUCCESSFUL DELIVERY FOR POOL EMAILS TOO
+                if (sendResult.deliveredInbox !== undefined) {
+                    await trackingService.trackEmailDelivered(sendResult.messageId, {
+                        deliveredInbox: sendResult.deliveredInbox,
+                        deliveryFolder: sendResult.deliveryFolder || 'INBOX',
+                        isSpamFolder: sendResult.deliveryFolder === 'SPAM' || sendResult.deliveryFolder === 'JUNK'
+                    }).catch(err => console.error('❌ Error tracking pool delivery:', err.message));
+                }
             } else {
                 finalStatus = 'failed';
+
+                // 🚨 TRACK BOUNCE ON FAILURE FOR POOL EMAILS
+                if (sendResult && sendResult.messageId) {
+                    await trackingService.trackEmailBounce(sendResult.messageId, {
+                        bounceType: 'soft_bounce',
+                        bounceCategory: 'transient',
+                        bounceReason: sendResult.error || 'Pool send failed',
+                        canRetry: true,
+                        senderEmail: pair.senderEmail,
+                        receiverEmail: pair.receiverEmail
+                    }).catch(err => console.error('❌ Error tracking pool bounce:', err.message));
+                }
             }
 
             // UPDATE EXCHANGE RECORD WITH REAL STATUS
@@ -335,17 +497,100 @@ class WarmupWorker {
 
             console.log(`   ✅ POOL_TO_WARMUP email completed: ${pair.senderEmail} → ${pair.receiverEmail} [${finalStatus}]`);
 
+            // 🚨 STORE DAILY ANALYTICS FOR BOTH ACCOUNTS
+            analyticsService.storeDailyAnalytics(warmupAccount).catch(err => {
+                console.error('❌ Error storing warmup analytics:', err.message);
+            });
+
+            analyticsService.storeDailyAnalytics(pair.senderEmail).catch(err => {
+                console.error('❌ Error storing pool analytics:', err.message);
+            });
+
         } catch (error) {
             console.error(`   ❌ Failed POOL_TO_WARMUP email: ${error.message}`);
+
+            // 🚨 TRACK BOUNCE ON EXCEPTION FOR POOL EMAILS
+            if (sendResult && sendResult.messageId) {
+                await trackingService.trackEmailBounce(sendResult.messageId, {
+                    bounceType: this.determineBounceType(error),
+                    bounceCategory: 'permanent',
+                    bounceReason: error.message,
+                    canRetry: false,
+                    senderEmail: pair.senderEmail,
+                    receiverEmail: pair.receiverEmail
+                }).catch(err => console.error('❌ Error tracking pool exception bounce:', err.message));
+            }
 
             // 🚨 MARK AS FAILED ON ERROR
             if (exchangeRecord) {
                 await exchangeRecord.update({
                     status: 'failed',
-                    error: error.message
-                });
+                    error: error.message.substring(0, 500)
+                }).catch(err => console.error('❌ Error updating pool exchange record:', err.message));
             }
         }
+    }
+
+    // 🚨 UPDATED: Better Microsoft Account Detection
+    determineAccountType(account) {
+        if (!account) return 'unknown';
+
+        // Check provider fields
+        if (account.provider === 'google' || account.roundRobinIndexGoogle !== undefined) {
+            return 'google';
+        } else if (account.provider === 'microsoft' || account.roundRobinIndexMicrosoft !== undefined) {
+            return 'microsoft';
+        } else if (account.smtp_host || account.roundRobinIndexCustom !== undefined) {
+            return 'smtp';
+        } else if (account.providerType) {
+            return account.providerType.toLowerCase();
+        }
+
+        // Fallback based on email domain - ALL Outlook/Hotmail use Microsoft Graph API
+        if (account.email) {
+            if (account.email.includes('@gmail.com') || account.email.includes('@googlemail.com')) {
+                return 'google';
+            } else if (account.email.includes('@outlook.com') || account.email.includes('@hotmail.com') ||
+                account.email.includes('@live.com') || account.email.includes('@msn.com')) {
+                return 'microsoft'; // 🚨 ALL PERSONAL ACCOUNTS USE GRAPH API
+            }
+        }
+
+        return 'unknown';
+    }
+    // 🚨 ADD THIS HELPER METHOD TO YOUR CLASS
+    determineBounceType(error) {
+        const errorMessage = error.message.toLowerCase();
+
+        // Hard bounces (permanent failures)
+        if (errorMessage.includes('permanent') ||
+            errorMessage.includes('invalid') ||
+            errorMessage.includes('not found') ||
+            errorMessage.includes('no such user') ||
+            errorMessage.includes('mailbox not found') ||
+            errorMessage.includes('does not exist') ||
+            errorMessage.includes('rejected') ||
+            errorMessage.includes('blacklist')) {
+            return 'hard_bounce';
+        }
+
+        // Spam/complaint bounces
+        if (errorMessage.includes('spam') ||
+            errorMessage.includes('complaint') ||
+            errorMessage.includes('abuse') ||
+            errorMessage.includes('blocked')) {
+            return 'spam';
+        }
+
+        // Content rejection
+        if (errorMessage.includes('content') ||
+            errorMessage.includes('policy') ||
+            errorMessage.includes('filtered')) {
+            return 'blocked';
+        }
+
+        // Default to soft bounce (temporary issues)
+        return 'soft_bounce';
     }
 
     // 🚨 ADDED: Graceful Account Status Check
@@ -386,7 +631,7 @@ class WarmupWorker {
         }
     }
 
-    // 🚨 ADDED: Get Warmup Account
+    // 🚨 UPDATED: Get Warmup Account with Token Validation
     async getWarmupAccount(senderType, email) {
         try {
             console.log(`🔍 Searching for warmup account: ${email} (type: ${senderType})`);
@@ -415,6 +660,19 @@ class WarmupWorker {
             }
 
             const plainSender = this.convertToPlainObject(sender);
+
+            // 🚨 VALIDATE MICROSOFT TOKENS FOR OUTLOOK ACCOUNTS
+            if ((plainSender.email.includes('@outlook.com') || plainSender.email.includes('@hotmail.com')) &&
+                plainSender.access_token) {
+                console.log(`   🔐 Outlook personal account: ${plainSender.email}`);
+                console.log(`   📊 Token status: ${plainSender.access_token ? 'PRESENT' : 'MISSING'}`);
+
+                // Check token expiry
+                if (plainSender.token_expiry && new Date(plainSender.token_expiry) < new Date()) {
+                    console.log(`   ⚠️  Token expired: ${plainSender.token_expiry}`);
+                }
+            }
+
             console.log(`   ✅ Found warmup account: ${plainSender.email}`);
             console.log(`   📊 Status: ${plainSender.warmupStatus || 'unknown'}`);
 
@@ -651,30 +909,44 @@ class WarmupWorker {
         }
     }
 
-    // 5. Token Expiry Check
+    // 🚨 UPDATED: Better Token Expiry Check
     isTokenExpired(account) {
         if (!account.token_expiry && !account.token_expires_at) {
             console.log(`   ⚠️  No token expiry information available`);
-            return true;
+            return true; // Assume expired if no info
         }
+
         try {
             let expiryTime;
-            if (account.token_expiry) expiryTime = new Date(account.token_expiry).getTime();
-            else if (account.token_expires_at) expiryTime = Number(account.token_expires_at);
+
+            if (account.token_expiry) {
+                expiryTime = new Date(account.token_expiry).getTime();
+            } else if (account.token_expires_at) {
+                // Handle both string and number formats
+                expiryTime = typeof account.token_expires_at === 'string'
+                    ? new Date(account.token_expires_at).getTime()
+                    : Number(account.token_expires_at);
+            }
 
             const now = Date.now();
-            const bufferTime = 5 * 60 * 1000;
+            const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
+
             const isExpired = now >= (expiryTime - bufferTime);
 
             if (isExpired) {
                 console.log(`   ⏰ Token expired or expiring soon`);
                 console.log(`      Now: ${new Date(now).toISOString()}`);
                 console.log(`      Expiry: ${new Date(expiryTime).toISOString()}`);
+            } else {
+                const timeLeft = Math.round((expiryTime - now) / 60000); // minutes
+                console.log(`   ✅ Token valid for ${timeLeft} minutes`);
             }
+
             return isExpired;
+
         } catch (error) {
             console.error(`   ❌ Error checking token expiry:`, error);
-            return true;
+            return true; // Assume expired on error
         }
     }
 
@@ -874,18 +1146,58 @@ class WarmupWorker {
         }
     }
 
-    // 13. Email Sending with Fallback
+    // 🚨 UPDATED: Force Graph API with proper authentication handling
     async sendEmailWithFallback(senderConfig, receiver, replyRate, isCoordinatedJob = true, isInitialEmail = true, isReply = false, direction = 'unknown') {
         let retryCount = 0;
         const maxRetries = 2;
 
+        // 🚨 ENSURE GRAPH API IS USED FOR OUTLOOK PERSONAL ACCOUNTS
+        const isOutlookPersonal = senderConfig.email &&
+            (senderConfig.email.includes('@outlook.com') || senderConfig.email.includes('@hotmail.com'));
+
+        if (isOutlookPersonal) {
+            console.log(`🔐 Outlook personal account detected: ${senderConfig.email}`);
+            console.log(`   📤 Using Graph API for Outlook personal account`);
+
+            // 🚨 CRITICAL: Validate and fix the access token
+            if (senderConfig.access_token) {
+                // Check if token is malformed (no dots)
+                if (!senderConfig.access_token.includes('.')) {
+                    console.log(`   ❌ MALFORMED TOKEN: Access token has no dots - needs refresh`);
+                    // Force token refresh
+                    senderConfig.access_token = null;
+                } else {
+                    console.log(`   ✅ Token format appears valid`);
+                }
+            }
+
+            // Ensure Graph API is enabled
+            senderConfig.useGraphAPI = true;
+            senderConfig.forceSMTP = false;
+        }
+
         while (retryCount <= maxRetries) {
             try {
                 console.log(`📧 Sending ${direction} email from ${senderConfig.email} to ${receiver.email}`);
-                const originalSenderConfig = { ...senderConfig };
 
+                // 🚨 PRE-SEND TOKEN VALIDATION FOR OUTLOOK
+                if (isOutlookPersonal && (!senderConfig.access_token || this.isTokenExpired(senderConfig))) {
+                    console.log(`   🔄 Token missing or expired, attempting refresh...`);
+                    const refreshed = await this.refreshMicrosoftToken(senderConfig);
+                    if (refreshed) {
+                        senderConfig.access_token = refreshed.access_token;
+                        senderConfig.refresh_token = refreshed.refresh_token;
+                        senderConfig.token_expires_at = refreshed.token_expires_at;
+                        console.log(`   ✅ Token refreshed successfully`);
+                    } else {
+                        throw new Error('Failed to refresh Microsoft token');
+                    }
+                }
+
+                const originalSenderConfig = { ...senderConfig };
                 const sendResult = await warmupSingleEmail(senderConfig, receiver, replyRate, isReply, isCoordinatedJob, isInitialEmail, direction);
 
+                // 🚨 SAVE REFRESHED TOKENS IF CHANGED
                 if (senderConfig.access_token !== originalSenderConfig.access_token) {
                     await this.saveRefreshedTokens(senderConfig.email, {
                         access_token: senderConfig.access_token,
@@ -896,19 +1208,44 @@ class WarmupWorker {
 
                 // 🚨 RETURN PROPER RESULT OBJECT
                 return {
-                    success: true,
-                    messageId: sendResult?.messageId || sendResult?.emailId || this.extractMessageIdFromResponse(sendResult) || `msg-${Date.now()}`
+                    success: sendResult?.success !== false,
+                    messageId: sendResult?.messageId || sendResult?.emailId || this.extractMessageIdFromResponse(sendResult) || `graph-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    subject: sendResult?.subject || 'Warmup Email',
+                    deliveredInbox: sendResult?.deliveredInbox,
+                    deliveryFolder: sendResult?.deliveryFolder,
+                    error: sendResult?.error
                 };
 
             } catch (error) {
                 retryCount++;
 
+                // 🚨 SPECIFIC ERROR HANDLING FOR GRAPH API ISSUES
+                if (error.message.includes('InvalidAuthenticationToken') || error.message.includes('JWT') || error.message.includes('token')) {
+                    console.log(`   🔐 Graph API Authentication Error: ${error.message}`);
+
+                    // Force token refresh on authentication errors
+                    console.log(`   🔄 Forcing token refresh due to authentication error`);
+                    const refreshed = await this.refreshMicrosoftToken(senderConfig);
+                    if (refreshed) {
+                        senderConfig.access_token = refreshed.access_token;
+                        senderConfig.refresh_token = refreshed.refresh_token;
+                        senderConfig.token_expires_at = refreshed.token_expires_at;
+                        console.log(`   ✅ Token refreshed after authentication error`);
+                    }
+                }
+
                 if (retryCount > maxRetries) {
                     console.log(`❌ Max retries exceeded for: ${senderConfig.email}`);
+
+                    // 🚨 GENERATE FALLBACK MESSAGE ID FOR TRACKING
+                    const fallbackMessageId = `graph-fallback-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
                     return {
                         success: false,
-                        messageId: null,
-                        error: error.message
+                        messageId: fallbackMessageId,
+                        error: error.message,
+                        subject: 'Warmup Email',
+                        graphApiError: true
                     };
                 }
 
@@ -917,9 +1254,79 @@ class WarmupWorker {
             }
         }
 
-        return { success: false, messageId: null };
+        // 🚨 FINAL FALLBACK
+        const finalFallbackId = `graph-final-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        return {
+            success: false,
+            messageId: finalFallbackId,
+            error: 'All retry attempts failed',
+            graphApiError: true
+        };
     }
 
+    // 🚨 NEW: Enhanced Delivery Verification with Spam Tracking
+    async verifyEmailDeliveryWithSpamTracking(messageId, receiver, direction, senderEmail, sendResult) {
+        try {
+            console.log(`🔍 Verifying delivery with spam tracking: ${messageId}`);
+
+            // Skip IMAP check for Graph API emails
+            if (messageId && messageId.startsWith('graph-')) {
+                console.log(`⏩ Skipping IMAP check for Graph API email`);
+                return;
+            }
+
+            // Skip for pool accounts in inbound direction
+            if (direction === 'POOL_TO_WARMUP' && receiver.providerType) {
+                console.log(`⏩ Skipping IMAP check for pool account in inbound direction`);
+                return;
+            }
+
+            // Wait a bit for delivery
+            await this.delay(10000);
+
+            // 🚨 USE ENHANCED SPAM TRACKING
+            const statusResult = await checkEmailStatusWithSpamTracking(
+                receiver,
+                messageId,
+                direction,
+                senderEmail
+            );
+
+            // 🚨 HANDLE SPAM FOLDER PLACEMENT
+            if (statusResult.isSpamFolder) {
+                console.log(`⚠️  Email placed in spam folder: ${statusResult.folder}`);
+
+                // Attempt to move from spam to inbox
+                const moveResult = await moveEmailToInboxWithTracking(
+                    receiver,
+                    messageId,
+                    statusResult.folder,
+                    direction,
+                    senderEmail
+                );
+
+                if (moveResult.success && !moveResult.skipped) {
+                    console.log(`✅ Successfully moved email from spam to inbox`);
+                }
+            }
+
+            // Update tracking based on final status
+            if (statusResult.success && statusResult.exists) {
+                const finalDeliveredInbox = statusResult.deliveredInbox && !statusResult.isSpamFolder;
+
+                await trackingService.trackEmailDelivered(messageId, {
+                    deliveredInbox: finalDeliveredInbox,
+                    deliveryFolder: statusResult.folder,
+                    isSpamFolder: statusResult.isSpamFolder,
+                    spamRecoveryAttempted: statusResult.isSpamFolder
+                });
+            }
+
+        } catch (error) {
+            console.error(`❌ Delivery verification failed: ${error.message}`);
+            // Don't throw error - this shouldn't break the main email sending flow
+        }
+    }
     // 14. Message ID Extraction
     extractMessageIdFromResponse(sendResult) {
         if (!sendResult) return null;

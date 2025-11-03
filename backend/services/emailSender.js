@@ -85,8 +85,14 @@ async function sendEmail(senderConfig, emailData) {
       senderConfig.email.endsWith('@hotmail.com') ||
       senderConfig.email.endsWith('@live.com');
 
-    if (isOutlookPersonal && senderConfig.accessToken) {
+    // 🚨 CRITICAL: FORCE GRAPH API FOR OUTLOOK PERSONAL ACCOUNTS
+    if (isOutlookPersonal) {
       console.log('   🔐 FORCING Graph API for Outlook personal account');
+
+      // 🚨 ENSURE GRAPH API IS USED
+      senderConfig.useGraphApi = true;
+      senderConfig.forceSMTP = false;
+
       return await sendOutlookWithGraphAPI(senderConfig, emailData);
     }
 
@@ -103,6 +109,7 @@ async function sendEmail(senderConfig, emailData) {
       console.log(`   🔧 Using configured SMTP: ${senderConfig.smtpHost}:${senderConfig.smtpPort}`);
       return await sendOutlookWithOAuth2(senderConfig, emailData);
     }
+
 
     // 🔥 Only do domain discovery for actual custom SMTP accounts
     const isCustomDomain = !isStandardEmailProvider(senderConfig.email);
@@ -169,11 +176,36 @@ async function sendOutlookWithGraphAPI(senderConfig, emailData) {
   try {
     console.log('   🔐 Using Microsoft Graph API for Outlook account...');
 
-    // Get fresh account data
+    // 🚨 CRITICAL FIX: Get fresh account data with proper validation
     const freshAccount = await tokenManager.getFreshAccountData(senderConfig.email);
 
     if (!freshAccount.access_token) {
-      throw new Error('No access token available');
+      throw new Error('No access token available for Graph API');
+    }
+
+    // 🚨 VALIDATE TOKEN FORMAT FOR PERSONAL ACCOUNTS
+    const isOutlookPersonal = senderConfig.email.endsWith('@outlook.com') ||
+      senderConfig.email.endsWith('@hotmail.com') ||
+      senderConfig.email.endsWith('@live.com');
+
+    if (isOutlookPersonal) {
+      console.log(`   🔐 Outlook personal account detected: ${senderConfig.email}`);
+
+      // 🚨 CHECK IF TOKEN IS MALFORMED (no dots = invalid)
+      if (!freshAccount.access_token.includes('.')) {
+        console.log(`   ❌ MALFORMED TOKEN: Access token has no dots - needs refresh`);
+
+        // Attempt to refresh the token
+        const refreshed = await tokenManager.refreshOutlookToken(senderConfig);
+        if (refreshed && refreshed.access_token) {
+          freshAccount.access_token = refreshed.access_token;
+          console.log(`   ✅ Token refreshed successfully`);
+        } else {
+          throw new Error('Invalid token format for Outlook personal account - needs re-authentication');
+        }
+      } else {
+        console.log(`   ✅ Token format appears valid`);
+      }
     }
 
     const message = {
@@ -196,23 +228,43 @@ async function sendOutlookWithGraphAPI(senderConfig, emailData) {
 
     console.log('   📤 Sending email via Graph API...');
     const startTime = Date.now();
+
+    // 🚨 ADD BETTER ERROR HANDLING FOR GRAPH API CALLS
     const response = await axios.post(
       'https://graph.microsoft.com/v1.0/me/sendMail',
       message,
       {
         headers: {
           'Authorization': `Bearer ${freshAccount.access_token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'User-Agent': 'EmailWarmupTool/1.0'
         },
-        timeout: 30000
+        timeout: 30000,
+        validateStatus: function (status) {
+          return status < 500; // Resolve only if status code < 500
+        }
       }
     );
     const endTime = Date.now();
 
+    // 🚨 CHECK RESPONSE STATUS
+    if (response.status >= 400) {
+      const errorData = response.data;
+      console.error(`❌ Graph API returned error: ${response.status}`, errorData);
+
+      if (response.status === 401) {
+        throw new Error(`Authentication failed: ${errorData.error?.message || 'Invalid token'}`);
+      } else if (response.status === 403) {
+        throw new Error(`Permission denied: ${errorData.error?.message || 'Insufficient permissions'}`);
+      } else {
+        throw new Error(`Graph API error: ${errorData.error?.message || response.statusText}`);
+      }
+    }
+
     console.log(`✅ Email sent successfully via Graph API`);
     console.log(`   ⏱️  Delivery time: ${endTime - startTime}ms`);
 
-    // For Graph API, we can't get a real message ID for IMAP tracking
+    // 🚨 GENERATE PROPER MESSAGE ID FOR TRACKING
     const graphMessageId = `graph-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
     return {
@@ -221,26 +273,56 @@ async function sendOutlookWithGraphAPI(senderConfig, emailData) {
       usedAuth: 'GraphAPI',
       deliveryTime: endTime - startTime,
       deliveredInbox: true,
-      skipImapCheck: true
+      skipImapCheck: true,
+      graphApiResponse: response.status
     };
 
   } catch (error) {
     console.error('❌ Graph API failed:', error.response?.data || error.message);
 
-    // NEVER fall back to SMTP for personal Outlook accounts
+    // 🚨 BETTER ERROR CLASSIFICATION
+    const errorMessage = error.response?.data?.error?.message || error.message;
+    const errorCode = error.response?.data?.error?.code;
+
+    console.log(`   🔍 Error details:`, {
+      code: errorCode,
+      message: errorMessage,
+      status: error.response?.status
+    });
+
+    // 🚨 DETERMINE IF REAUTH IS NEEDED
+    const requiresReauth = errorMessage.includes('InvalidAuthenticationToken') ||
+      errorMessage.includes('AuthenticationFailed') ||
+      errorMessage.includes('token') ||
+      errorCode === 'InvalidAuthenticationToken' ||
+      error.response?.status === 401;
+
+    // 🚨 PERSONAL ACCOUNTS: NEVER FALL BACK TO SMTP
     const isPersonalAccount = senderConfig.email.endsWith('@outlook.com') ||
       senderConfig.email.endsWith('@hotmail.com') ||
       senderConfig.email.endsWith('@live.com');
 
+    if (isPersonalAccount) {
+      console.log('   💡 Outlook personal account requires working Graph API - SMTP will not work');
+      return {
+        success: false,
+        error: `Graph API failed: ${errorMessage}`,
+        requiresReauth: requiresReauth,
+        graphApiError: true,
+        personalAccount: true
+      };
+    }
+
+    // 🚨 ORGANIZATIONAL ACCOUNTS: CAN FALL BACK TO SMTP
     if (!isPersonalAccount && senderConfig.providerType !== 'OUTLOOK_PERSONAL') {
       console.log('   🔄 Falling back to SMTP for organizational account...');
       return await sendOutlookWithOAuth2(senderConfig, emailData);
     } else {
-      console.log('   💡 Outlook personal account requires working Graph API - SMTP will not work');
       return {
         success: false,
-        error: `Graph API failed: ${error.response?.data?.error?.message || error.message}`,
-        requiresReauth: true
+        error: `Graph API failed: ${errorMessage}`,
+        requiresReauth: requiresReauth,
+        graphApiError: true
       };
     }
   }
