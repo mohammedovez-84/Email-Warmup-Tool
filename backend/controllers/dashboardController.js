@@ -554,13 +554,13 @@ exports.deleteByEmail = async (req, res) => {
         // Note: We don't delete from EmailPool or EmailExchange as they're shared
 
         console.log(`✅ Deleted account(s) for: ${email}`);
-        console.log(`📊 Deleted ${deletedLogs} warmup logs, ${deletedMetrics} metrics`);
+        // console.log(`📊 Deleted ${deletedLogs} warmup logs, ${deletedMetrics} metrics`);
 
         res.json({
             message: `Account(s) for ${email} and user-specific data deleted successfully`,
             stats: {
                 accounts: deletedGoogle + deletedSmtp + deletedMicrosoft,
-                warmupLogs: deletedLogs,
+                // warmupLogs: deletedLogs,
                 metrics: deletedMetrics
             }
         });
