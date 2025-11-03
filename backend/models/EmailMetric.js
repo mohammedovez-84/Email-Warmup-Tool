@@ -1,3 +1,4 @@
+// models/EmailMetric.js
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
 
@@ -36,6 +37,16 @@ const EmailMetric = sequelize.define('email_metrics', {
         allowNull: false,
         defaultValue: DataTypes.NOW
     },
+
+    // DELIVERY STATUS
+    status: {
+        type: DataTypes.ENUM('sent', 'delivered', 'bounced', 'deferred', 'rejected'),
+        defaultValue: 'sent'
+    },
+    deliveredAt: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
     deliveredInbox: {
         type: DataTypes.BOOLEAN,
         defaultValue: false
@@ -44,22 +55,8 @@ const EmailMetric = sequelize.define('email_metrics', {
         type: DataTypes.STRING,
         allowNull: true
     },
-    movedToInbox: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
-    },
-    replied: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
-    },
-    repliedAt: {
-        type: DataTypes.DATE,
-        allowNull: true
-    },
-    replyMessageId: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
+
+    // WARMUP SPECIFIC
     replyRate: {
         type: DataTypes.FLOAT,
         defaultValue: 0.25
@@ -68,10 +65,24 @@ const EmailMetric = sequelize.define('email_metrics', {
         type: DataTypes.INTEGER,
         defaultValue: 0
     },
-    status: {
-        type: DataTypes.ENUM('pending', 'completed', 'failed'),
-        defaultValue: 'pending'
+    emailType: {
+        type: DataTypes.ENUM('warmup_send', 'warmup_reply', 'pool_send'),
+        allowNull: false
     },
+    industry: {
+        type: DataTypes.STRING,
+        defaultValue: 'general'
+    },
+    isCoordinated: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false
+    },
+    direction: {
+        type: DataTypes.ENUM('WARMUP_TO_POOL', 'POOL_TO_WARMUP'),
+        allowNull: false
+    },
+
+    // ERROR TRACKING
     error: {
         type: DataTypes.TEXT,
         allowNull: true
@@ -79,20 +90,8 @@ const EmailMetric = sequelize.define('email_metrics', {
     completedAt: {
         type: DataTypes.DATE,
         allowNull: true
-    },
-    // Add to EmailMetric model
-    replyError: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
-    movedToInbox: {
-        type: DataTypes.BOOLEAN,
-        defaultValue: false
-    },
-    deliveryFolder: {
-        type: DataTypes.STRING,
-        allowNull: true
     }
+
 }, {
     tableName: 'email_metrics',
     timestamps: true,

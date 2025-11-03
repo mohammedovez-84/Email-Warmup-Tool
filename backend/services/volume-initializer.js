@@ -49,7 +49,7 @@ class VolumeInitializer {
                 await this.initializePoolAccount(account);
             }
 
-            console.log('✅ VOLUME ENFORCEMENT INITIALIZATION COMPLETE');
+
             this.initialized = true;
 
         } catch (error) {
@@ -129,7 +129,7 @@ class VolumeInitializer {
 
             if (needsUpdate) {
                 await EmailPool.update(updates, { where: { id: account.id } });
-                console.log(`   ✅ Initialized pool account: ${account.email}`);
+
             }
 
         } catch (error) {

@@ -292,8 +292,10 @@ async function resetPoolDailyCount(poolEmail) {
     }
 }
 
+// In warmupSingleEmail function - COMPLETE UPDATED VERSION
+const trackingService = require('./trackingService');
+
 async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isScheduledReply = false, isCoordinatedJob = false, isInitialEmail = false, direction = 'WARMUP_TO_POOL') {
-    let emailMetric = null;
     let messageId = null;
 
     try {
@@ -345,24 +347,23 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
             await updatePoolSentCount(senderConfig.email);
         }
 
-        // Create email metric with direction information
-        emailMetric = await EmailMetric.create({
+        // 🚨 TRACK EMAIL SENT WITH NEW SYSTEM
+        const emailData = {
             senderEmail: senderConfig.email,
             senderType: senderType,
             receiverEmail: receiver.email,
             receiverType: getReceiverTypeFromModel(receiver),
-            messageId: messageId,
             subject: subject,
-            sentAt: new Date(),
-            deliveredInbox: sendResult.deliveredInbox || false,
-            replied: false,
+            messageId: messageId,
+            emailType: isInitialEmail ? 'warmup_send' : 'warmup_reply',
+            direction: direction,
             warmupDay: warmupDay,
             replyRate: replyRate,
-            emailType: isInitialEmail ? 'warmup_send' : 'warmup_reply',
             industry: industry,
-            isCoordinated: isCoordinatedJob,
-            direction: direction
-        });
+            isCoordinated: isCoordinatedJob
+        };
+
+        await trackingService.trackEmailSent(emailData);
 
         // Skip IMAP check for Graph API emails or if explicitly skipped
         if (!sendResult.skipImapCheck) {
@@ -373,31 +374,57 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
                 const statusResult = await checkEmailStatus(receiver, messageId);
                 if (statusResult.success) {
                     const deliveredInbox = statusResult.folder === 'INBOX';
-                    await EmailMetric.update({
-                        deliveredInbox,
+
+                    // 🚨 TRACK DELIVERY STATUS
+                    await trackingService.trackEmailDelivered(messageId, {
+                        deliveredInbox: deliveredInbox,
                         deliveryFolder: statusResult.folder
-                    }, { where: { id: emailMetric.id } });
+                    });
 
                     // Try to move to inbox if not delivered
                     if (!deliveredInbox) {
                         try {
                             await moveEmailToInbox(receiver, messageId, statusResult.folder);
                             console.log(`📥 Attempted to move email to inbox`);
+
+                            // Track inbox movement attempt
+                            await trackingService.trackEmailDelivered(messageId, {
+                                deliveredInbox: true, // Assume successful after move attempt
+                                deliveryFolder: 'INBOX',
+                                movedToInbox: true
+                            });
                         } catch (moveError) {
                             console.log(`⚠️  Could not move email to inbox: ${moveError.message}`);
                         }
                     }
+                } else {
+                    // 🚨 TRACK DELIVERY FAILURE
+                    await trackingService.trackEmailBounce(messageId, {
+                        bounceType: 'soft_bounce',
+                        bounceCategory: 'transient',
+                        bounceReason: 'IMAP verification failed',
+                        canRetry: true
+                    });
                 }
             } catch (imapError) {
                 console.error(`❌ IMAP operation error: ${imapError.message}`);
+
+                // 🚨 TRACK IMAP VERIFICATION ERROR
+                await trackingService.trackEmailBounce(messageId, {
+                    bounceType: 'soft_bounce',
+                    bounceCategory: 'transient',
+                    bounceReason: `IMAP error: ${imapError.message}`,
+                    canRetry: true
+                });
             }
         } else {
             console.log(`⏩ Skipping IMAP check for Graph API email`);
             // For Graph API emails, mark as delivered immediately
-            await EmailMetric.update({
+            await trackingService.trackEmailDelivered(messageId, {
                 deliveredInbox: true,
-                deliveryFolder: 'GRAPH_API'
-            }, { where: { id: emailMetric.id } });
+                deliveryFolder: 'GRAPH_API',
+                skipImapCheck: true
+            });
         }
 
         // Handle automatic replies based on reply rate (only for initial emails, not replies)
@@ -411,27 +438,64 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
             }
         }
 
-        await EmailMetric.update({
-            completedAt: new Date(),
-            status: 'completed'
-        }, { where: { id: emailMetric.id } });
-
         console.log(`✅ ${direction} email completed: ${senderConfig.email} → ${receiver.email}`);
+
+        return {
+            success: true,
+            messageId: messageId,
+            subject: subject,
+            deliveredInbox: sendResult.deliveredInbox || false,
+            deliveryFolder: sendResult.deliveryFolder
+        };
 
     } catch (error) {
         console.error(`❌ Error in warmupSingleEmail:`, error);
 
-        if (emailMetric) {
-            await EmailMetric.update({
-                error: error.message.substring(0, 500),
-                status: 'failed',
-                completedAt: new Date()
-            }, { where: { id: emailMetric.id } });
+        // 🚨 TRACK FAILURE/BOUNCE
+        if (messageId) {
+            const bounceType = this.determineBounceType(error);
+            await trackingService.trackEmailBounce(messageId, {
+                bounceType: bounceType,
+                bounceCategory: bounceType === 'hard_bounce' ? 'permanent' : 'transient',
+                bounceReason: error.message,
+                canRetry: bounceType !== 'hard_bounce'
+            });
         }
+
         throw error;
     }
 }
 
+// 🚨 ADDED: Helper function to determine bounce type
+function determineBounceType(error) {
+    const errorMessage = error.message.toLowerCase();
+
+    if (errorMessage.includes('permanent') ||
+        errorMessage.includes('invalid') ||
+        errorMessage.includes('not found') ||
+        errorMessage.includes('no such user') ||
+        errorMessage.includes('mailbox not found')) {
+        return 'hard_bounce';
+    }
+
+    if (errorMessage.includes('quota') ||
+        errorMessage.includes('full') ||
+        errorMessage.includes('spam') ||
+        errorMessage.includes('blocked')) {
+        return 'blocked';
+    }
+
+    if (errorMessage.includes('rate limit') ||
+        errorMessage.includes('too many') ||
+        errorMessage.includes('temporary') ||
+        errorMessage.includes('timeout')) {
+        return 'soft_bounce';
+    }
+
+    return 'soft_bounce'; // Default to soft bounce for unknown errors
+}
+
+// 🚨 UPDATED: processAutomaticReply with new tracking
 async function processAutomaticReply(senderConfig, originalReceiver, originalEmail, originalMessageId) {
     try {
         console.log(`🤖 Generating reply from ${originalReceiver.email} to ${senderConfig.email}`);
@@ -471,42 +535,74 @@ async function processAutomaticReply(senderConfig, originalReceiver, originalEma
             if (replyResult?.success) {
                 console.log(`✅ Reply sent successfully from ${senderConfig.email}`);
 
-                // Update metrics
-                await EmailMetric.update({
-                    replied: true,
+                // 🚨 TRACK REPLY WITH NEW SYSTEM
+                await trackingService.trackReply(originalMessageId, {
+                    replySender: senderConfig.email,
+                    replyReceiver: originalReceiver.email,
+                    replyMessageId: replyResult.messageId,
                     repliedAt: new Date(),
-                    replyMessageId: replyResult.messageId
-                }, {
-                    where: {
-                        messageId: originalMessageId
-                    }
+                    isAutomatedReply: true,
+                    replyQuality: aiReply.is_fallback ? 'generic' : 'medium'
                 });
+
             } else {
                 console.error(`❌ Reply failed from ${senderConfig.email}: ${replyResult?.error}`);
+
+                // 🚨 TRACK REPLY FAILURE
+                await trackingService.trackReply(originalMessageId, {
+                    replySender: senderConfig.email,
+                    replyReceiver: originalReceiver.email,
+                    repliedAt: new Date(),
+                    isAutomatedReply: true,
+                    replyQuality: 'failed',
+                    error: replyResult?.error
+                });
             }
         }
     } catch (replyError) {
         console.error(`❌ Reply error in processAutomaticReply:`, replyError.message);
+
+        // 🚨 TRACK REPLY ERROR
+        await trackingService.trackReply(originalMessageId, {
+            replySender: senderConfig.email,
+            replyReceiver: originalReceiver.email,
+            repliedAt: new Date(),
+            isAutomatedReply: true,
+            replyQuality: 'error',
+            error: replyError.message
+        });
     }
 }
 
+// 🚨 UPDATED: generateReplyWithFallback with tracking
 async function generateReplyWithFallback(originalEmail, maxRetries = 2) {
     let attempts = 0;
+    let usedFallback = false;
+
     while (attempts <= maxRetries) {
         try {
             const aiReply = await generateReplyWithRetry(originalEmail);
             if (aiReply && aiReply.reply_content && aiReply.reply_content.trim().length > 10) {
-                return aiReply;
+                return {
+                    ...aiReply,
+                    is_fallback: usedFallback
+                };
             }
         } catch (error) {
-            console.error(`❌ AI reply generation error:`, error.message);
+            console.error(`❌ AI reply generation error (attempt ${attempts + 1}):`, error.message);
         }
         attempts++;
         if (attempts <= maxRetries) {
             await delay(1000 * Math.pow(2, attempts));
         }
     }
-    return generateFallbackReply(originalEmail);
+
+    // Mark as fallback
+    const fallbackReply = generateFallbackReply(originalEmail);
+    return {
+        ...fallbackReply,
+        is_fallback: true
+    };
 }
 
 function generateFallbackReply(originalEmail) {
@@ -565,5 +661,6 @@ module.exports = {
     canPoolSendMore,
     updatePoolSentCount,
     resetPoolDailyCount,
+    determineBounceType,
     RATE_LIMIT_CONFIG
 };
