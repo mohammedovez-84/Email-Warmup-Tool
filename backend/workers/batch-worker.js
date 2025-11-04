@@ -1,6 +1,6 @@
 require('dotenv').config();
 const getChannel = require('../queues/rabbitConnection');
-const RedisScheduler = require('../services/redis-scheduler');
+const RedisScheduler = require('../services/redis/redis-scheduler');
 const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');

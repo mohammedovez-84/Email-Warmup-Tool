@@ -11,20 +11,20 @@ const passport = require('passport');
 require('./config/microsoftStrategy');
 const { sequelize } = require('./config/db');
 
-const microsoftAuthRoutes = require('./routes/microsoftAuth');
-const authRoutes = require('./routes/auth');
-const googleRoutes = require('./routes/googleRoutes');
-const microsoftRoutes = require('./routes/microsoftRoutes');
-const smtpImapRoutes = require('./routes/SmtpImap');
-const dashboardRoutes = require('./routes/dashboardRoutes');
-const warmupRoutes = require('./routes/warmupRoutes');
-const userRoutes = require('./routes/users');
-const metricsRoutes = require('./routes/metricsRoutes');
-const healthRoutes = require('./routes/healthRoutes');
+const microsoftAuthRoutes = require('./routes/auth/microsoftAuth');
+const authRoutes = require('./routes/auth/auth');
+const googleRoutes = require('./routes/auth/googleRoutes');
+const microsoftRoutes = require('./routes/auth/microsoftRoutes');
+const smtpImapRoutes = require('./routes/auth/SmtpImap');
+const dashboardRoutes = require('./routes/dashboard/dashboardRoutes');
+const warmupRoutes = require('./routes/warmup/warmupRoutes');
+const userRoutes = require('./routes/users/users');
+const metricsRoutes = require('./routes/metrics/metricsRoutes');
+const healthRoutes = require('./routes/health/healthRoutes');
 // In your server.js or app.js
 require('./models/associations')();
-const warmupScheduler = require('./services/Scheduler');
-const dailyResetService = require('./services/dailyReset');
+const warmupScheduler = require('./services/schedule/Scheduler');
+const dailyResetService = require('./services/volume/dailyReset');
 
 
 
