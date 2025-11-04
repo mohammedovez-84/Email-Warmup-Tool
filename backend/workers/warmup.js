@@ -6,20 +6,20 @@ const getChannel = require('../queues/rabbitConnection');
 const {
     warmupSingleEmail,
     canPoolSendMore,
-} = require('../services/warmupWorkflow');
+} = require('../workflows/warmupWorkflow');
 const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
 const EmailPool = require('../models/EmailPool');
 const { buildWarmupConfig, buildPoolConfig } = require('../utils/senderConfig');
-const volumeEnforcement = require('../services/volume-enforcement');
-const trackingService = require('../services/trackingService');
-const analyticsService = require('../services/analyticsService');
+const volumeEnforcement = require('../services/volume/volume-enforcement');
+const trackingService = require('../services/tracking/trackingService');
+const analyticsService = require('../services/analytics/AnalyticsService');
 // Add to your imports at the top
 const {
     checkEmailStatusWithSpamTracking,
     moveEmailToInboxWithTracking
-} = require('../services/imapHelper');
+} = require('../services/schedule/imapHelper');
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 class WarmupWorker {
