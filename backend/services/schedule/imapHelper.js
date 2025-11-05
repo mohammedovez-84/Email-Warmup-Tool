@@ -342,11 +342,10 @@ function getFilterStrengthAnalysis(strength, ratio) {
     return analyses[strength] || analyses.UNKNOWN;
 }
 
-// **ENHANCED: Email status check with bidirectional support**
 async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL') {
     const accountType = detectAccountType(receiver);
 
-    // **FIX: Skip IMAP checks for problematic accounts with clear messaging**
+    // 🚨 SKIP LOGIC - Handle different account types and scenarios
     const hasPassword = receiver.smtp_pass || receiver.smtpPassword || receiver.password || receiver.app_password || receiver.imap_pass;
     const hasOAuthToken = receiver.access_token;
 
@@ -357,6 +356,15 @@ async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL
     // Skip IMAP for Graph API emails
     if (messageId && messageId.startsWith('graph-')) {
         console.log(`⏩ Skipping IMAP check for Graph API email: ${messageId}`);
+
+        // 🚨 TRACK GRAPH API DELIVERY
+        await trackingService.trackEmailDelivery(
+            messageId,
+            true,
+            'GRAPH_API',
+            null
+        );
+
         return {
             success: true,
             folder: 'GRAPH_API',
@@ -369,6 +377,15 @@ async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL
     if ((accountType === 'microsoft_organizational' || accountType === 'outlook_personal') &&
         hasOAuthToken && !hasPassword) {
         console.log(`⏩ Skipping IMAP check for ${accountType} account ${receiver.email} (OAuth token only)`);
+
+        // 🚨 TRACK OAUTH SKIP
+        await trackingService.trackEmailDelivery(
+            messageId,
+            true,
+            'SKIPPED_OAUTH',
+            null
+        );
+
         return {
             success: true,
             folder: 'SKIPPED_OAUTH',
@@ -380,17 +397,35 @@ async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL
     // Skip IMAP for accounts without proper credentials
     if ((accountType === 'microsoft_organizational' || accountType === 'outlook_personal') && !hasPassword && !hasOAuthToken) {
         console.log(`⏩ Skipping IMAP check for ${accountType} account ${receiver.email} (no credentials)`);
+
+        // 🚨 TRACK NO CREDENTIALS SKIP
+        await trackingService.trackEmailDelivery(
+            messageId,
+            false,
+            'SKIPPED_NO_CREDENTIALS',
+            'No IMAP credentials available'
+        );
+
         return {
             success: true,
             folder: 'SKIPPED_NO_CREDENTIALS',
-            exists: true,
-            deliveredInbox: true
+            exists: false,
+            deliveredInbox: false
         };
     }
 
-    // **FIX: Skip IMAP for custom SMTP accounts without IMAP credentials**
+    // 🚨 FIX: Skip IMAP for custom SMTP accounts without IMAP credentials
     if (accountType === 'smtp' && !receiver.imap_host && !receiver.imap_pass) {
         console.log(`⏩ Skipping IMAP check for custom SMTP account ${receiver.email} (no IMAP config)`);
+
+        // 🚨 TRACK NO IMAP CONFIG SKIP
+        await trackingService.trackEmailDelivery(
+            messageId,
+            true,
+            'SKIPPED_NO_IMAP',
+            null
+        );
+
         return {
             success: true,
             folder: 'SKIPPED_NO_IMAP',
@@ -399,9 +434,18 @@ async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL
         };
     }
 
-    // **NEW: Skip IMAP for pool accounts in POOL_TO_WARMUP direction to avoid double-checking**
+    // 🚨 NEW: Skip IMAP for pool accounts in POOL_TO_WARMUP direction to avoid double-checking
     if (direction === 'POOL_TO_WARMUP' && receiver.providerType) {
         console.log(`⏩ Skipping IMAP check for pool account in inbound direction`);
+
+        // 🚨 TRACK POOL INBOUND SKIP
+        await trackingService.trackEmailDelivery(
+            messageId,
+            true,
+            'SKIPPED_POOL_INBOUND',
+            null
+        );
+
         return {
             success: true,
             folder: 'SKIPPED_POOL_INBOUND',
@@ -411,17 +455,19 @@ async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL
     }
 
     let connection;
+    let finalResult;
 
     try {
         console.log(`🔍 Checking email status via IMAP for: ${messageId}`);
         const config = getImapConfig(receiver);
 
-        // **FIX: Enhanced connection with timeout handling**
+        // 🚨 ENHANCED CONNECTION WITH TIMEOUT HANDLING
         connection = await imaps.connect({
             imap: {
                 ...config.imap,
                 authTimeout: 15000,
-                connTimeout: 20000
+                connTimeout: 20000,
+                socketTimeout: 30000
             }
         });
 
@@ -441,18 +487,26 @@ async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL
             try {
                 await connection.openBox(folder, false);
                 const searchCriteria = [['HEADER', 'Message-ID', messageId]];
-                const results = await connection.search(searchCriteria, { bodies: [''], struct: true });
+                const results = await connection.search(searchCriteria, {
+                    bodies: [''],
+                    struct: true
+                });
 
                 if (results.length > 0) {
-                    const deliveredInbox = folder === 'INBOX' || folder === 'Important' || folder === '[Gmail]/Important';
+                    const deliveredInbox = folder === 'INBOX' ||
+                        folder === 'Important' ||
+                        folder === '[Gmail]/Important';
                     console.log(`✅ Email found in: ${folder} (Inbox: ${deliveredInbox})`);
-                    await connection.end();
-                    return {
+
+                    finalResult = {
                         success: true,
                         folder: folder,
                         exists: true,
-                        deliveredInbox: deliveredInbox
+                        deliveredInbox: deliveredInbox,
+                        messageCount: results.length
                     };
+
+                    break;
                 }
             } catch (folderError) {
                 console.log(`   ⚠️  Cannot access folder ${folder}: ${folderError.message}`);
@@ -460,19 +514,54 @@ async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL
             }
         }
 
-        console.log(`❌ Email not found in any folder: ${messageId}`);
+        if (!finalResult) {
+            console.log(`❌ Email not found in any folder: ${messageId}`);
+            finalResult = {
+                success: true,
+                folder: 'NOT_FOUND',
+                exists: false,
+                deliveredInbox: false
+            };
+        }
+
         await connection.end();
-        return {
-            success: true,
-            folder: 'NOT_FOUND',
-            exists: false,
-            deliveredInbox: false
-        };
+
+        // 🚨 TRACK DELIVERY RESULT
+        await trackingService.trackEmailDelivery(
+            messageId,
+            finalResult.exists,
+            finalResult.folder,
+            finalResult.exists ? null : 'Email not found in any folder'
+        );
+
+        return finalResult;
 
     } catch (err) {
         console.error('❌ Error checking email status:', err.message);
 
-        // **FIX: Graceful handling of IMAP failures**
+        // 🚨 ENHANCED ERROR CLASSIFICATION
+        let errorType = 'UNKNOWN_ERROR';
+        let errorDetails = err.message;
+
+        if (err.message.includes('Authentication failed') || err.message.includes('Invalid credentials')) {
+            errorType = 'AUTHENTICATION_FAILED';
+            console.error('   🔐 IMAP AUTH FAILURE: Check your IMAP credentials');
+            if (accountType === 'google') {
+                console.error('   💡 For Gmail: Use App Password, not your regular password');
+            } else if (accountType === 'outlook_personal') {
+                console.error('   💡 For Outlook: Use App Password or enable IMAP access');
+            }
+        } else if (err.message.includes('ECONNREFUSED')) {
+            errorType = 'CONNECTION_REFUSED';
+            console.error('   🌐 CONNECTION REFUSED: Check IMAP host/port settings');
+        } else if (err.message.includes('ETIMEDOUT')) {
+            errorType = 'CONNECTION_TIMEOUT';
+            console.error('   ⏰ TIMEOUT: Server might be down or network issue');
+        } else if (err.message.includes('OAUTH')) {
+            errorType = 'OAUTH_ERROR';
+            console.error('   🔑 OAUTH ISSUE: Token might be expired or invalid');
+        }
+
         if (connection) {
             try {
                 await connection.end();
@@ -481,19 +570,18 @@ async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL
             }
         }
 
-        // For authentication failures, provide specific guidance
-        if (err.message.includes('Authentication failed') || err.message.includes('Invalid credentials')) {
-            console.error('   🔐 IMAP AUTH FAILURE: Check your IMAP credentials');
-            if (accountType === 'google') {
-                console.error('   💡 For Gmail: Use App Password, not your regular password');
-            } else if (accountType === 'outlook_personal') {
-                console.error('   💡 For Outlook: Use App Password or enable IMAP access');
-            }
-        }
+        // 🚨 TRACK DELIVERY FAILURE DUE TO ERROR
+        await trackingService.trackEmailDelivery(
+            messageId,
+            false,
+            `ERROR_${errorType}`,
+            err.message
+        );
 
         return {
             success: false,
             error: err.message,
+            errorType: errorType,
             exists: false,
             deliveredInbox: false
         };

@@ -1,5 +1,5 @@
 const getChannel = require('../queues/rabbitConnection');
-const RedisScheduler = require('../services/redis-scheduler');
+const RedisScheduler = require('../services/redis/redis-scheduler');
 
 async function cleanupInvalidJobs() {
     console.log('🚨 EMERGENCY QUEUE CLEANUP STARTED...');

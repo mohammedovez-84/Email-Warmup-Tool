@@ -62,7 +62,7 @@ class AIService {
         try {
             const model = this.freeModels[0];
             const response = await axios.post(
-                `https://api-inference.huggingface.co/models/${model}`,
+                `https://router.huggingface.co/hf-inference-api/models/${model}`,
                 {
                     inputs: prompt,
                     parameters: {
