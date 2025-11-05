@@ -6,11 +6,15 @@ const EmailMetric = require("../../models/EmailMetric");
 const EmailExchange = require("../../models/MailExchange");
 const { Op } = require("sequelize");
 const UnifiedWarmupStrategy = require('../../services/schedule/unified-strategy');
-const { triggerImmediateScheduling } = require('../../services/schedule/hybrid-scheduler');
+// const { triggerImmediateScheduling } = require('../../services/schedule/hybrid-scheduler');
 
 async function scheduleIncrementalWarmup(emailAddress, senderType) {
   try {
-    console.log(`🎯 Starting incremental scheduling for: ${emailAddress}`);
+    console.log(`🎯 INCREMENTAL SCHEDULING: ${emailAddress}`);
+
+
+    const { markAccountAsIncrementallyScheduled, triggerImmediateScheduling } = require('../../services/schedule/Scheduler');
+    await markAccountAsIncrementallyScheduled(emailAddress);
 
     // Get the specific warmup account with PROPER error handling
     const warmupAccount = await getAccountByEmailAndType(emailAddress, senderType);
@@ -88,7 +92,7 @@ async function scheduleIncrementalWarmup(emailAddress, senderType) {
       console.log(`   ⚠️ No emails scheduled in the sequence`);
     }
 
-    // Schedule using hybrid scheduler's immediate scheduling
+    // 🚨 FIXED: Use the imported triggerImmediateScheduling function
     console.log(`🚀 Triggering immediate scheduling...`);
     await triggerImmediateScheduling();
 
@@ -100,7 +104,8 @@ async function scheduleIncrementalWarmup(emailAddress, senderType) {
       warmupDay: plan.warmupDay || warmupAccount.warmupDayCount,
       totalEmails: plan.totalEmails || plan.sequence?.length || 0,
       outboundCount: plan.outboundCount || plan.outbound?.length || 0,
-      inboundCount: plan.inboundCount || plan.inbound?.length || 0
+      inboundCount: plan.inboundCount || plan.inbound?.length || 0,
+      markedAsIncremental: true
     };
 
   } catch (error) {
@@ -110,11 +115,11 @@ async function scheduleIncrementalWarmup(emailAddress, senderType) {
     return {
       success: false,
       email: emailAddress,
-      error: error.message
+      error: error.message,
+      markedAsIncremental: false
     };
   }
 }
-
 
 async function getAccountMetrics(email) {
   try {
@@ -150,7 +155,7 @@ async function getAccountMetrics(email) {
   }
 }
 
-// 🚨 REALISTIC METRICS THAT HANDLES 'SCHEDULED' STATUS
+
 function calculateRealisticBidirectionalMetrics(emailExchanges, email) {
   console.log(`📊 Calculating realistic bidirectional metrics for ${email}`);
 

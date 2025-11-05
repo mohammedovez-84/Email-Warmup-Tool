@@ -63,6 +63,60 @@ class OutlookTokenManager {
         }
     }
 
+    // 🚨 ADD THIS METHOD TO WarmupWorker class
+    async refreshOutlookPersonalToken(account) {
+        try {
+            console.log(`🔄 Attempting to refresh Outlook personal token for: ${account.email}`);
+
+            if (!account.refresh_token) {
+                console.log(`❌ No refresh token available for ${account.email}`);
+                return null;
+            }
+
+            const tokenUrl = 'https://login.microsoftonline.com/common/oauth2/v2.0/token';
+            const params = new URLSearchParams({
+                client_id: process.env.MS_CLIENT_ID,
+                client_secret: process.env.MS_CLIENT_SECRET,
+                refresh_token: account.refresh_token,
+                grant_type: 'refresh_token',
+                scope: 'https://graph.microsoft.com/Mail.Read https://graph.microsoft.com/Mail.Send offline_access'
+            });
+
+            const response = await fetch(tokenUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: params,
+                timeout: 30000
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.log(`❌ Token refresh failed: ${response.status} - ${errorText}`);
+                return null;
+            }
+
+            const tokenData = await response.json();
+            console.log(`✅ Outlook personal token refreshed successfully`);
+
+            // Calculate expiry (usually 1 hour for personal accounts)
+            const expiresIn = tokenData.expires_in || 3600; // Default to 1 hour
+            const tokenExpiresAt = Date.now() + (expiresIn * 1000);
+
+            return {
+                access_token: tokenData.access_token,
+                refresh_token: tokenData.refresh_token || account.refresh_token,
+                token_expires_at: tokenExpiresAt,
+                token_expiry: new Date(tokenExpiresAt).toISOString()
+            };
+
+        } catch (error) {
+            console.log(`❌ Outlook personal token refresh error: ${error.message}`);
+            return null;
+        }
+    }
+
     /**
   * Get fresh account data with latest tokens from database
   */
