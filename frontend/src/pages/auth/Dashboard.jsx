@@ -20,6 +20,7 @@ import GoogleConnect from './GoogleConnect';
 import MicrosoftConnect from './MicrosoftConnect';
 import SMTPConnect from './SMTPConnect';
 import WarmupReport from './WarmupReport';
+import WarmupSettings from './WarmupSettings'; // Add this line
 const API_BASE_URL = 'http://localhost:5000';
 
 const Dashboard = () => {
@@ -587,6 +588,7 @@ const Dashboard = () => {
     };
 
     // PERFECTED: Enhanced save warmup settings with proper closing
+    // PERFECTED: Enhanced save warmup settings with proper closing and data persistence
     const saveWarmupSettings = async (settings) => {
         try {
             const token = localStorage.getItem('token');
@@ -595,23 +597,37 @@ const Dashboard = () => {
                 return;
             }
 
-            // Optimistic update
+            console.log('💾 Saving warmup settings for:', warmupSettingsEmail.address, settings);
+
+            // PERFECTED: Save to localStorage immediately
+            localStorage.setItem(`warmup_settings_${warmupSettingsEmail.address}`, JSON.stringify(settings));
+            console.log('✅ Saved to localStorage');
+
+            // PERFECTED: Update local state optimistically
             setWarmupEmails(prev =>
                 prev.map(email =>
                     email.address === warmupSettingsEmail.address
-                        ? { ...email, warmupSettings: settings }
+                        ? {
+                            ...email,
+                            warmupSettings: settings,
+                            // Also update sender name if it's in the settings
+                            name: settings.senderName || email.name
+                        }
                         : email
                 )
             );
 
-            await axios.put(
-                `${API_BASE_URL}/api/warmup/emails/${encodeURIComponent(warmupSettingsEmail.address)}/settings`,
+            // PERFECTED: Save to API
+            await axios.patch(
+                `${API_BASE_URL}/api/warmup/update/settings/${encodeURIComponent(warmupSettingsEmail.address)}`,
                 settings,
                 {
                     headers: { Authorization: `Bearer ${token}` },
                     timeout: 5000
                 }
             );
+
+            console.log('✅ Successfully saved to API');
 
             toast.success('Warmup settings saved successfully', {
                 position: "top-right",
@@ -622,8 +638,15 @@ const Dashboard = () => {
             setShowWarmupSettings(false);
             setWarmupSettingsEmail(null);
 
+            // PERFECTED: Refresh data to ensure consistency
+            setTimeout(() => {
+                fetchWarmupEmails();
+            }, 1000);
+
         } catch (error) {
             console.error('Error saving warmup settings:', error);
+
+            // PERFECTED: Revert optimistic update on failure
             fetchWarmupEmails();
 
             if (error.response?.status === 401) {
@@ -1184,188 +1207,23 @@ const Dashboard = () => {
     };
 
     // PERFECTED: Enhanced Warmup Settings Panel with proper closing behavior
+
     const WarmupSettingsPanel = ({ email, onClose, onSave }) => {
-        const [settings, setSettings] = useState({
-            startEmailsPerDay: email?.warmupSettings?.startEmailsPerDay || 3,
-            increaseByPerDay: email?.warmupSettings?.increaseByPerDay || 3,
-            maxEmailsPerDay: email?.warmupSettings?.maxEmailsPerDay || 25,
-            replyRate: email?.warmupSettings?.replyRate || 0,
-            senderName: email?.warmupSettings?.senderName || email?.name || '',
-            customFolderName: email?.warmupSettings?.customFolderName || ''
-        });
-
-        const [errors, setErrors] = useState({});
-        const [saving, setSaving] = useState(false);
-
-        const validateSettings = () => {
-            const newErrors = {};
-
-            if (settings.startEmailsPerDay < 1) newErrors.startEmailsPerDay = 'Must be at least 1';
-            if (settings.increaseByPerDay < 1) newErrors.increaseByPerDay = 'Must be at least 1';
-            if (settings.maxEmailsPerDay < 1) newErrors.maxEmailsPerDay = 'Must be at least 1';
-            if (settings.maxEmailsPerDay < settings.startEmailsPerDay) newErrors.maxEmailsPerDay = 'Must be greater than start emails';
-            if (settings.replyRate < 0 || settings.replyRate > 100) newErrors.replyRate = 'Must be between 0 and 100';
-
-            setErrors(newErrors);
-            return Object.keys(newErrors).length === 0;
-        };
-
-        const handleChange = (e) => {
-            const { name, value, type } = e.target;
-            const processedValue = type === 'number' ? parseInt(value) || 0 : value;
-
-            setSettings(prev => ({ ...prev, [name]: processedValue }));
-            if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
-        };
-
-        const handleSave = async () => {
-            if (!validateSettings()) return;
-
-            setSaving(true);
-            try {
-                await onSave(settings);
-                // PERFECTED: The panel will be closed in the onSave function after successful save
-            } catch (error) {
-                console.error('Error saving settings:', error);
-            } finally {
-                setSaving(false);
-            }
-        };
-
-        const isFormValid = settings.startEmailsPerDay >= 1 &&
-            settings.increaseByPerDay >= 1 &&
-            settings.maxEmailsPerDay >= 1 &&
-            settings.maxEmailsPerDay >= settings.startEmailsPerDay &&
-            settings.replyRate >= 0 &&
-            settings.replyRate <= 100;
-
         if (!showWarmupSettings || !email) return null;
 
         return (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end justify-center z-50 sm:items-center sm:p-4">
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    className="bg-white rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl"
+                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    className="bg-white rounded-t-2xl sm:rounded-xl w-full max-w-md max-h-[90vh] overflow-hidden shadow-2xl"
                 >
-                    <div className="flex justify-between items-center p-4 sm:p-6 border-b border-gray-200 sticky top-0 bg-white">
-                        <div className="flex-1 min-w-0">
-                            <h2 className="text-lg sm:text-xl font-semibold text-gray-800 truncate">Warm-up Settings</h2>
-                            <p className="text-gray-500 text-xs sm:text-sm mt-1 truncate">{email?.address}</p>
-                        </div>
-                        <button
-                            className="text-gray-500 hover:text-gray-700 p-1 flex-shrink-0 ml-2"
-                            onClick={onClose}
-                            disabled={saving}
-                        >
-                            <FiX className="w-5 h-5" />
-                        </button>
-                    </div>
-
-                    <div className="p-4 sm:p-6 space-y-4">
-                        {[
-                            { name: 'startEmailsPerDay', label: 'Start with emails/day (Recommended 3)', min: 1 },
-                            { name: 'increaseByPerDay', label: 'Increase by emails every day (Recommended 3)', min: 1 },
-                            { name: 'maxEmailsPerDay', label: 'Maximum emails to be sent per day (Recommended 25)', min: 1 },
-                            { name: 'replyRate', label: 'Reply rate (%)', min: 0, max: 100 }
-                        ].map((field) => (
-                            <div key={field.name} className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">
-                                    {field.label}
-                                </label>
-                                <input
-                                    type="number"
-                                    name={field.name}
-                                    className={`w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 transition-all ${errors[field.name]
-                                        ? 'border-red-300 focus:border-red-500 focus:ring-red-200'
-                                        : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-200'
-                                        }`}
-                                    value={settings[field.name]}
-                                    onChange={handleChange}
-                                    min={field.min}
-                                    max={field.max}
-                                    disabled={saving}
-                                />
-                                {errors[field.name] && (
-                                    <p className="text-red-600 text-xs">{errors[field.name]}</p>
-                                )}
-                            </div>
-                        ))}
-
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Sender name</label>
-                            <input
-                                type="text"
-                                name="senderName"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                                value={settings.senderName}
-                                onChange={handleChange}
-                                disabled={saving}
-                            />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="checkbox"
-                                id="customFolder"
-                                className="w-4 h-4"
-                                checked={!!settings.customFolderName}
-                                onChange={(e) =>
-                                    setSettings(prev => ({
-                                        ...prev,
-                                        customFolderName: e.target.checked ? " " : "",
-                                    }))
-                                }
-                                disabled={saving}
-                            />
-                            <label htmlFor="customFolder" className="text-sm text-gray-700">
-                                + Add custom name for warmup folder
-                            </label>
-                        </div>
-
-                        {settings.customFolderName && (
-                            <div className="space-y-2">
-                                <input
-                                    type="text"
-                                    name="customFolderName"
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                                    value={settings.customFolderName}
-                                    onChange={handleChange}
-                                    placeholder="Enter folder name"
-                                    disabled={saving}
-                                />
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex justify-between p-4 sm:p-6 border-t border-gray-200 gap-3">
-                        <button
-                            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-all flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                            onClick={onClose}
-                            disabled={saving}
-                        >
-                            <FiX className="w-4 h-4" />
-                            Cancel
-                        </button>
-                        <button
-                            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-teal-600 bg-teal-600 text-white hover:bg-teal-700 transition-all disabled:opacity-60 disabled:cursor-not-allowed flex-1"
-                            onClick={handleSave}
-                            disabled={!isFormValid || saving}
-                        >
-                            {saving ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    Saving...
-                                </>
-                            ) : (
-                                <>
-                                    <FiSave className="w-4 h-4" />
-                                    Save Settings
-                                </>
-                            )}
-                        </button>
-                    </div>
+                    <WarmupSettings
+                        email={email}
+                        onClose={onClose}
+                        onSave={onSave}
+                    />
                 </motion.div>
             </div>
         );
