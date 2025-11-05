@@ -25,7 +25,8 @@ const healthRoutes = require('./routes/health/healthRoutes');
 require('./models/associations')();
 const warmupScheduler = require('./services/schedule/Scheduler');
 const dailyResetService = require('./services/volume/dailyReset');
-
+const analyticsRoutes = require("./routes/analytics/analytics")
+// const analyticsRoutes = require("./routes/analytics/analytics")
 
 
 const app = express();
@@ -46,6 +47,7 @@ app.use(passport.session());
 app.use('/auth/microsoft2', microsoftAuthRoutes);
 app.use('/api/auth', authRoutes);
 // app.use("/api/ms-oauth_admin",)
+app.use("/api/analytics", analyticsRoutes)
 app.use('/api', googleRoutes);
 app.use('/auth', microsoftRoutes);
 app.use('/api', smtpImapRoutes);
@@ -54,6 +56,7 @@ app.use('/api/warmup', warmupRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/health', healthRoutes);
+// app.use("/analytics", analyticsRoutes)
 
 
 
@@ -73,22 +76,13 @@ app.use('/api/health', healthRoutes);
             await dailyResetService.performDailyReset();
         });
 
-        // Run every 10 minutes for testing
-        // cron.schedule('*/10 * * * *', async () => {
-        //     console.log('⏰ TEST CRON (10min): Running warmup day increment...');
-        //     await dailyResetService.performDailyReset();
-        // });
-
-        // 🚨 FIXED: Start the scheduler WITHOUT day increment
         setTimeout(async () => {
             try {
                 console.log('🚀 Starting Warmup Scheduler...');
 
-                // 🚨 CRITICAL: Use a method that doesn't increment days
+
                 await warmupScheduler.scheduleWarmup()
 
-                // Or if that method doesn't exist, create it in your scheduler:
-                // await warmupScheduler.scheduleWarmupWithoutReset();
 
                 console.log('✅ Warmup scheduler started successfully');
             } catch (error) {

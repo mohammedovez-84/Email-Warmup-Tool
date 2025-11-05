@@ -3,7 +3,6 @@ const SmtpAccount = require('../../models/smtpAccounts');
 const MicrosoftUser = require('../../models/MicrosoftUser');
 const EmailMetric = require('../../models/EmailMetric');
 const EmailExchange = require('../../models/MailExchange');
-const EmailPool = require('../../models/EmailPool');
 
 const { getRateLimitStats } = require('../../workflows/warmupWorkflow');
 const { Op } = require("sequelize");
@@ -35,26 +34,30 @@ exports.getDashboardData = async (req, res) => {
             }
         });
 
-        // Get ALL email pool accounts (no user_id filter)
-        const emailPools = await EmailPool.findAll({
-            attributes: {
-                exclude: ["appPassword", "access_token", "refresh_token", "smtpPassword", "imapPassword"]
-            }
-        });
+        // Get email exchanges for user's accounts only
+        const userAccountEmails = [
+            ...googleUsers.map(acc => acc.email),
+            ...smtpAccounts.map(acc => acc.email),
+            ...microsoftUsers.map(acc => acc.email)
+        ];
 
-        // Get ALL email exchanges (no user_id filter)
         const emailExchanges = await EmailExchange.findAll({
+            where: {
+                [Op.or]: [
+                    { warmupAccount: { [Op.in]: userAccountEmails } },
+                    { poolAccount: { [Op.in]: userAccountEmails } }
+                ]
+            },
             order: [['sentAt', 'DESC']],
             limit: 100 // Limit for performance
         });
 
-        // console.log(`📊 Accounts Count for user ${userId}:`, {
-        //     google: googleUsers.length,
-        //     smtp: smtpAccounts.length,
-        //     microsoft: microsoftUsers.length,
-        //     pool: emailPools.length,
-        //     exchanges: emailExchanges.length
-        // });
+        console.log(`📊 Accounts Count for user ${userId}:`, {
+            google: googleUsers.length,
+            smtp: smtpAccounts.length,
+            microsoft: microsoftUsers.length,
+            exchanges: emailExchanges.length
+        });
 
         // Calculate comprehensive metrics
         const metrics = await this.calculateDashboardMetrics(
@@ -62,7 +65,6 @@ exports.getDashboardData = async (req, res) => {
             googleUsers,
             smtpAccounts,
             microsoftUsers,
-            emailPools,
             emailExchanges
         );
 
@@ -70,7 +72,6 @@ exports.getDashboardData = async (req, res) => {
             googleUsers,
             smtpAccounts,
             microsoftUsers,
-            emailPools,
             metrics
         });
     } catch (error) {
@@ -79,9 +80,15 @@ exports.getDashboardData = async (req, res) => {
     }
 };
 
-exports.calculateDashboardMetrics = async (userId, googleUsers, smtpAccounts, microsoftUsers, emailPools = [], emailExchanges = []) => {
+exports.calculateDashboardMetrics = async (userId, googleUsers, smtpAccounts, microsoftUsers, emailExchanges = []) => {
     try {
         const allAccounts = [...googleUsers, ...smtpAccounts, ...microsoftUsers];
+
+        if (allAccounts.length === 0) {
+            console.log('⚠️ No accounts found for user, returning empty metrics');
+            return this.getFallbackMetrics();
+        }
+
         const accountEmails = allAccounts.map(acc => acc.email);
 
         // Get email metrics from the last 7 days for user's accounts only
@@ -106,12 +113,14 @@ exports.calculateDashboardMetrics = async (userId, googleUsers, smtpAccounts, mi
 
         // Calculate comprehensive metrics
         const metrics = {
-            overview: this.calculateOverviewMetrics(allAccounts, emailMetrics, emailPools),
+            overview: this.calculateOverviewMetrics(allAccounts, emailMetrics),
             performance: this.calculatePerformanceMetrics(emailMetrics, userExchanges),
             warmupProgress: this.calculateWarmupProgress(allAccounts),
-            dailyLimits: this.calculateDailyLimits(allAccounts, emailPools),
+            dailyLimits: this.calculateDailyLimits(allAccounts),
             recentActivity: this.getRecentActivity(emailMetrics, userExchanges),
-            rateLimits: getRateLimitStats()
+            rateLimits: getRateLimitStats(),
+            // NEW: Per-email detailed metrics
+            accountDetails: this.calculateAccountDetails(allAccounts, emailMetrics, userExchanges)
         };
 
         return metrics;
@@ -122,22 +131,102 @@ exports.calculateDashboardMetrics = async (userId, googleUsers, smtpAccounts, mi
     }
 };
 
-// UPDATED: Handle models without user_id properly
-exports.calculateOverviewMetrics = (accounts, emailMetrics, emailPools = []) => {
+// NEW: Calculate detailed metrics per email account
+exports.calculateAccountDetails = (accounts, emailMetrics, userExchanges = []) => {
+    return accounts.map(account => {
+        const accountEmail = account.email;
+        const accountMetrics = emailMetrics.filter(metric => metric.senderEmail === accountEmail);
+        const accountExchanges = userExchanges.filter(exchange =>
+            exchange.warmupAccount === accountEmail || exchange.poolAccount === accountEmail
+        );
+
+        const sentEmails = accountMetrics.length;
+        const deliveredEmails = accountMetrics.filter(metric => metric.deliveredInbox).length;
+        const repliedEmails = accountMetrics.filter(metric => metric.replied).length;
+
+        const deliveryRate = sentEmails > 0 ? (deliveredEmails / sentEmails * 100).toFixed(1) : 0;
+        const replyRate = sentEmails > 0 ? (repliedEmails / sentEmails * 100).toFixed(1) : 0;
+
+        // Exchange statistics for this account
+        const sentExchanges = accountExchanges.filter(ex => ex.warmupAccount === accountEmail).length;
+        const receivedExchanges = accountExchanges.filter(ex => ex.poolAccount === accountEmail).length;
+        const successfulExchanges = accountExchanges.filter(ex =>
+            ex.status === 'delivered' || ex.status === 'sent'
+        ).length;
+
+        return {
+            email: accountEmail,
+            provider: account.providerType || account.provider || 'unknown',
+            warmupStatus: account.warmupStatus || 'inactive',
+            warmupDay: account.warmupDayCount || 0,
+            sentToday: account.current_day_sent || 0,
+            dailyLimit: account.maxEmailsPerDay || 25,
+            usagePercent: Math.min(Math.round(((account.current_day_sent || 0) / (account.maxEmailsPerDay || 25)) * 100), 100),
+
+            // Email performance
+            totalSent: sentEmails,
+            delivered: deliveredEmails,
+            replied: repliedEmails,
+            deliveryRate: `${deliveryRate}%`,
+            replyRate: `${replyRate}%`,
+
+            // Exchange activity
+            exchanges: {
+                sent: sentExchanges,
+                received: receivedExchanges,
+                successful: successfulExchanges,
+                successRate: accountExchanges.length > 0 ?
+                    ((successfulExchanges / accountExchanges.length) * 100).toFixed(1) + '%' : '0%'
+            },
+
+            // Recent activity
+            lastActivity: this.getLastActivity(accountMetrics, accountExchanges),
+            healthScore: this.calculateAccountHealthScore(deliveryRate, replyRate, account)
+        };
+    });
+};
+
+// NEW: Get last activity timestamp
+exports.getLastActivity = (metrics, exchanges) => {
+    const allActivities = [...metrics, ...exchanges];
+    if (allActivities.length === 0) return null;
+
+    const latestActivity = allActivities.reduce((latest, activity) => {
+        const activityDate = new Date(activity.sentAt || activity.createdAt);
+        return activityDate > latest ? activityDate : latest;
+    }, new Date(0));
+
+    return latestActivity;
+};
+
+// NEW: Calculate account health score
+exports.calculateAccountHealthScore = (deliveryRate, replyRate, account) => {
+    const numericDeliveryRate = parseFloat(deliveryRate);
+    const numericReplyRate = parseFloat(replyRate);
+    const warmupDay = account.warmupDayCount || 0;
+
+    // Base score on delivery and reply rates
+    let score = (numericDeliveryRate * 0.7) + (numericReplyRate * 0.3);
+
+    // Adjust for warmup progress
+    if (warmupDay > 14) score *= 1.1; // Bonus for advanced warmup
+    else if (warmupDay < 3) score *= 0.9; // Penalty for new accounts
+
+    return Math.min(Math.round(score), 100);
+};
+
+// UPDATED: Remove pool-related calculations
+exports.calculateOverviewMetrics = (accounts, emailMetrics) => {
     const totalAccounts = accounts.length;
     const activeAccounts = accounts.filter(acc => acc.warmupStatus === 'active').length;
     const pausedAccounts = accounts.filter(acc => acc.warmupStatus === 'paused').length;
-
-    const totalPoolAccounts = emailPools.length;
-    const activePoolAccounts = emailPools.filter(pool => pool.isActive).length;
 
     const totalEmails = emailMetrics.length;
     const deliveredEmails = emailMetrics.filter(metric => metric.deliveredInbox).length;
     const repliedEmails = emailMetrics.filter(metric => metric.replied).length;
 
-    // Calculate emails sent today using new current_day_sent field
+    // Calculate emails sent today
     const todaySent = accounts.reduce((sum, acc) => sum + (acc.current_day_sent || 0), 0);
-    const poolTodaySent = emailPools.reduce((sum, pool) => sum + (pool.currentDaySent || 0), 0);
 
     const deliveryRate = totalEmails > 0 ? (deliveredEmails / totalEmails * 100).toFixed(1) : 0;
     const replyRate = totalEmails > 0 ? (repliedEmails / totalEmails * 100).toFixed(1) : 0;
@@ -146,48 +235,36 @@ exports.calculateOverviewMetrics = (accounts, emailMetrics, emailPools = []) => 
         totalAccounts,
         activeAccounts,
         pausedAccounts,
-        totalPoolAccounts,
-        activePoolAccounts,
         totalEmails,
         deliveredEmails,
         repliedEmails,
         todaySent,
-        poolTodaySent,
         deliveryRate: `${deliveryRate}%`,
         replyRate: `${replyRate}%`,
         overallHealth: this.calculateOverallHealth(deliveryRate, replyRate)
     };
 };
 
-// NEW: Calculate daily limits usage
-exports.calculateDailyLimits = (accounts, emailPools = []) => {
-    const warmupLimits = accounts.map(acc => ({
+// UPDATED: Remove pool limits
+exports.calculateDailyLimits = (accounts) => {
+    const accountLimits = accounts.map(acc => ({
         email: acc.email,
-        provider: acc.provider || 'custom',
+        provider: acc.providerType || acc.provider || 'custom',
         current: acc.current_day_sent || 0,
         max: acc.maxEmailsPerDay || 25,
-        usagePercent: Math.min(Math.round(((acc.current_day_sent || 0) / (acc.maxEmailsPerDay || 25)) * 100), 100)
-    }));
-
-    const poolLimits = emailPools.map(pool => ({
-        email: pool.email,
-        provider: pool.providerType,
-        current: pool.currentDaySent || 0,
-        max: pool.maxEmailsPerDay || 50,
-        usagePercent: Math.min(Math.round(((pool.currentDaySent || 0) / (pool.maxEmailsPerDay || 50)) * 100), 100)
+        usagePercent: Math.min(Math.round(((acc.current_day_sent || 0) / (acc.maxEmailsPerDay || 25)) * 100), 100),
+        warmupStatus: acc.warmupStatus || 'inactive'
     }));
 
     return {
-        warmupAccounts: warmupLimits,
-        poolAccounts: poolLimits,
-        totalUsage: {
-            warmup: warmupLimits.reduce((sum, acc) => sum + acc.current, 0),
-            pool: poolLimits.reduce((sum, pool) => sum + pool.current, 0)
-        }
+        accounts: accountLimits,
+        totalUsage: accountLimits.reduce((sum, acc) => sum + acc.current, 0),
+        accountsAtLimit: accountLimits.filter(acc => acc.usagePercent >= 100).length,
+        accountsActive: accountLimits.filter(acc => acc.current > 0).length
     };
 };
 
-// UPDATED: Filter exchanges by user accounts
+// UPDATED: Filter exchanges by user accounts only
 exports.calculatePerformanceMetrics = (emailMetrics, userExchanges = []) => {
     const last30Days = new Date();
     last30Days.setDate(last30Days.getDate() - 30);
@@ -219,7 +296,7 @@ exports.calculatePerformanceMetrics = (emailMetrics, userExchanges = []) => {
     };
 };
 
-// UPDATED: Use filtered exchanges
+// UPDATED: Use filtered exchanges only
 exports.getRecentActivity = (emailMetrics, userExchanges = []) => {
     // Combine both metrics and exchanges for recent activity
     const metricActivities = emailMetrics.slice(0, 10).map(metric => ({
@@ -252,7 +329,7 @@ exports.getRecentActivity = (emailMetrics, userExchanges = []) => {
     return allActivities;
 };
 
-// Rest of the methods remain the same as previous version...
+// Rest of the helper methods remain the same...
 exports.calculateWarmupProgress = (accounts) => {
     const activeAccounts = accounts.filter(acc => acc.warmupStatus === 'active');
 
@@ -455,13 +532,10 @@ exports.getFallbackMetrics = () => {
             totalAccounts: 0,
             activeAccounts: 0,
             pausedAccounts: 0,
-            totalPoolAccounts: 0,
-            activePoolAccounts: 0,
             totalEmails: 0,
             deliveredEmails: 0,
             repliedEmails: 0,
             todaySent: 0,
-            poolTodaySent: 0,
             deliveryRate: '0%',
             replyRate: '0%',
             overallHealth: 'excellent'
@@ -500,15 +574,14 @@ exports.getFallbackMetrics = () => {
             }
         },
         dailyLimits: {
-            warmupAccounts: [],
-            poolAccounts: [],
-            totalUsage: {
-                warmup: 0,
-                pool: 0
-            }
+            accounts: [],
+            totalUsage: 0,
+            accountsAtLimit: 0,
+            accountsActive: 0
         },
         recentActivity: [],
-        rateLimits: getRateLimitStats()
+        rateLimits: getRateLimitStats(),
+        accountDetails: [] // NEW: Empty account details array
     };
 };
 
@@ -546,21 +619,16 @@ exports.deleteByEmail = async (req, res) => {
             where: { email, user_id: userId }
         });
 
-
         const deletedMetrics = await EmailMetric.destroy({
             where: { senderEmail: email }
         });
 
-        // Note: We don't delete from EmailPool or EmailExchange as they're shared
-
         console.log(`✅ Deleted account(s) for: ${email}`);
-        // console.log(`📊 Deleted ${deletedLogs} warmup logs, ${deletedMetrics} metrics`);
 
         res.json({
             message: `Account(s) for ${email} and user-specific data deleted successfully`,
             stats: {
                 accounts: deletedGoogle + deletedSmtp + deletedMicrosoft,
-                // warmupLogs: deletedLogs,
                 metrics: deletedMetrics
             }
         });

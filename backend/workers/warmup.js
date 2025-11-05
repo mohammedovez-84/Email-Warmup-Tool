@@ -531,32 +531,251 @@ class WarmupWorker {
         }
     }
 
-    // 🚨 UPDATED: Better Microsoft Account Detection
+    // 🚨 FIXED: Enhanced account type detection for custom domains
     determineAccountType(account) {
         if (!account) return 'unknown';
+
+        // 🚨 CHECK FOR OUTLOOK PERSONAL ACCOUNTS FIRST
+        if (account.email && (account.email.includes('@outlook.com') || account.email.includes('@hotmail.com'))) {
+            return 'microsoft_personal';
+        }
+
+        // 🚨 CHECK FOR CUSTOM DOMAINS (like ping-prospects.com)
+        if (account.email && this.isCustomDomain(account.email)) {
+            console.log(`   🌐 Custom domain detected: ${account.email}`);
+
+            // Check if it has Microsoft organizational characteristics
+            if (account.provider === 'microsoft' || account.microsoft_id || account.tenantId) {
+                return 'microsoft_organizational';
+            }
+            // Check if it has Google Workspace characteristics  
+            else if (account.provider === 'google' || account.google_id) {
+                return 'google';
+            }
+            // Default to SMTP for custom domains
+            else {
+                return 'smtp';
+            }
+        }
 
         // Check provider fields
         if (account.provider === 'google' || account.roundRobinIndexGoogle !== undefined) {
             return 'google';
         } else if (account.provider === 'microsoft' || account.roundRobinIndexMicrosoft !== undefined) {
-            return 'microsoft';
+            return 'microsoft_organizational';
         } else if (account.smtp_host || account.roundRobinIndexCustom !== undefined) {
             return 'smtp';
         } else if (account.providerType) {
             return account.providerType.toLowerCase();
         }
 
-        // Fallback based on email domain - ALL Outlook/Hotmail use Microsoft Graph API
+        // 🚨 FALLBACK: Check email domain for common providers
         if (account.email) {
             if (account.email.includes('@gmail.com') || account.email.includes('@googlemail.com')) {
                 return 'google';
-            } else if (account.email.includes('@outlook.com') || account.email.includes('@hotmail.com') ||
-                account.email.includes('@live.com') || account.email.includes('@msn.com')) {
-                return 'microsoft'; // 🚨 ALL PERSONAL ACCOUNTS USE GRAPH API
+            } else if (account.email.includes('@outlook.com') || account.email.includes('@hotmail.com')) {
+                return 'microsoft_personal';
             }
         }
 
         return 'unknown';
+    }
+
+    // 🚨 NEW: Check if domain is custom (not standard email provider)
+    isCustomDomain(email) {
+        if (!email) return false;
+
+        const standardProviders = [
+            'gmail.com', 'googlemail.com',
+            'outlook.com', 'hotmail.com', 'live.com',
+            'yahoo.com', 'ymail.com',
+            'aol.com', 'icloud.com', 'me.com',
+            'protonmail.com', 'proton.me'
+        ];
+
+        const domain = email.toLowerCase().split('@')[1];
+        return domain && !standardProviders.includes(domain);
+    }
+
+    // 🚨 FIXED: Enhanced SMTP configuration for custom domains
+    async buildTransporterConfig(senderConfig) {
+        console.log(`🔧 Building SMTP config for: ${senderConfig.email}`);
+
+        // 🚨 DETECT CUSTOM DOMAINS AND APPLY SMART CONFIG
+        const isCustomDomain = this.isCustomDomain(senderConfig.email);
+
+        let config = {
+            host: senderConfig.smtpHost,
+            port: senderConfig.smtpPort,
+            secure: senderConfig.smtpSecure || false,
+            auth: {
+                user: senderConfig.smtpUser || senderConfig.email,
+                pass: senderConfig.smtpPass
+            },
+            connectionTimeout: 30000,
+            greetingTimeout: 15000,
+            socketTimeout: 30000,
+            tls: {
+                rejectUnauthorized: false
+            }
+        };
+
+        // 🚨 SMART CONFIGURATION FOR CUSTOM DOMAINS
+        if (isCustomDomain && (!senderConfig.smtpHost || !senderConfig.smtpPort)) {
+            console.log(`   🔍 Auto-configuring custom domain: ${senderConfig.email}`);
+
+            const domain = senderConfig.email.split('@')[1];
+
+            // Try common SMTP configurations for custom domains
+            const commonConfigs = [
+                { host: `mail.${domain}`, port: 587, secure: false, requireTLS: true },
+                { host: `mail.${domain}`, port: 465, secure: true },
+                { host: `smtp.${domain}`, port: 587, secure: false, requireTLS: true },
+                { host: `smtp.${domain}`, port: 465, secure: true },
+                { host: domain, port: 587, secure: false, requireTLS: true },
+                { host: domain, port: 465, secure: true }
+            ];
+
+            // Test configurations and use the first working one
+            for (const testConfig of commonConfigs) {
+                try {
+                    console.log(`   🔄 Testing: ${testConfig.host}:${testConfig.port}`);
+
+                    const testTransporter = nodemailer.createTransport({
+                        ...testConfig,
+                        auth: config.auth,
+                        connectionTimeout: 10000,
+                        greetingTimeout: 5000
+                    });
+
+                    await testTransporter.verify();
+                    console.log(`   ✅ Found working config: ${testConfig.host}:${testConfig.port}`);
+
+                    // Use this configuration
+                    config.host = testConfig.host;
+                    config.port = testConfig.port;
+                    config.secure = testConfig.secure;
+                    if (testConfig.requireTLS) config.requireTLS = true;
+
+                    break;
+                } catch (error) {
+                    console.log(`   ❌ Failed: ${testConfig.host}:${testConfig.port} - ${error.message}`);
+                    continue;
+                }
+            }
+        }
+
+        // Handle different service types
+        if (senderConfig.smtpHost === 'smtp.gmail.com') {
+            config.service = 'gmail';
+        }
+
+        if (senderConfig.smtpHost === 'smtp.office365.com') {
+            config.requireTLS = true;
+        }
+
+        console.log(`   📧 Final SMTP config: ${config.host}:${config.port} (secure: ${config.secure})`);
+
+        return config;
+    }
+    // 🚨 FIXED: Enhanced token mapping for different account types
+    normalizeAccountTokens(account) {
+        if (!account) return account;
+
+        const normalized = { ...account };
+
+        // 🚨 HANDLE OUTLOOK PERSONAL ACCOUNTS DIFFERENTLY
+        const isOutlookPersonal = account.email &&
+            (account.email.includes('@outlook.com') || account.email.includes('@hotmail.com'));
+
+        if (isOutlookPersonal) {
+            console.log(`   🔐 Normalizing Outlook personal account tokens`);
+
+            // Outlook personal accounts use Graph API tokens
+            if (!normalized.access_token && normalized.accessToken) {
+                normalized.access_token = normalized.accessToken;
+            }
+            if (!normalized.refresh_token && normalized.refreshToken) {
+                normalized.refresh_token = normalized.refreshToken;
+            }
+
+            // Token expiry handling for personal accounts
+            if (normalized.token_expires_at && !normalized.token_expiry) {
+                const expiryDate = new Date(Number(normalized.token_expires_at));
+                normalized.token_expiry = expiryDate.toISOString();
+                console.log(`   🔄 Converted token_expires_at to token_expiry: ${normalized.token_expiry}`);
+            }
+
+            // 🚨 CRITICAL: Check if we have the required tokens
+            if (!normalized.access_token) {
+                console.log(`   ❌ MISSING ACCESS TOKEN for Outlook personal account`);
+            }
+            if (!normalized.refresh_token) {
+                console.log(`   ⚠️  MISSING REFRESH TOKEN for Outlook personal account`);
+            }
+
+        } else {
+            // Organizational accounts - existing logic
+            if (normalized.token_expires_at && !normalized.token_expiry) {
+                const expiryDate = new Date(Number(normalized.token_expires_at));
+                normalized.token_expiry = expiryDate.toISOString();
+                console.log(`   🔄 Converted token_expires_at to token_expiry: ${normalized.token_expiry}`);
+            }
+            if (!normalized.access_token && normalized.accessToken) normalized.access_token = normalized.accessToken;
+            if (!normalized.refresh_token && normalized.refreshToken) normalized.refresh_token = normalized.refreshToken;
+        }
+
+        return normalized;
+    }
+
+    // 🚨 FIXED: Get Warmup Account with proper token normalization
+    async getWarmupAccount(senderType, email) {
+        try {
+            console.log(`🔍 Searching for warmup account: ${email} (type: ${senderType})`);
+
+            let sender = null;
+
+            // Try specific model first if type is provided
+            if (senderType === 'google') {
+                sender = await GoogleUser.findOne({ where: { email } });
+            } else if (senderType === 'microsoft') {
+                sender = await MicrosoftUser.findOne({ where: { email } });
+            } else if (senderType === 'smtp') {
+                sender = await SmtpAccount.findOne({ where: { email } });
+            }
+
+            // If not found by specific type OR no type provided, search all models
+            if (!sender) {
+                sender = await GoogleUser.findOne({ where: { email } }) ||
+                    await MicrosoftUser.findOne({ where: { email } }) ||
+                    await SmtpAccount.findOne({ where: { email } });
+            }
+
+            if (!sender) {
+                console.log(`❌ Warmup account not found: ${email}`);
+                return null;
+            }
+
+            const plainSender = this.convertToPlainObject(sender);
+
+            // 🚨 NORMALIZE TOKENS BASED ON ACCOUNT TYPE
+            const normalizedSender = this.normalizeAccountTokens(plainSender);
+
+            // 🚨 DETERMINE CORRECT ACCOUNT TYPE
+            const accountType = this.determineAccountType(normalizedSender);
+            normalizedSender.accountType = accountType; // Add for reference
+
+            console.log(`   ✅ Found warmup account: ${normalizedSender.email}`);
+            console.log(`   📊 Type: ${accountType}`);
+            console.log(`   📊 Status: ${normalizedSender.warmupStatus || 'unknown'}`);
+            console.log(`   🔐 Token Status: ${normalizedSender.access_token ? 'PRESENT' : 'MISSING'}`);
+
+            return normalizedSender;
+
+        } catch (error) {
+            console.error(`❌ Error fetching warmup account ${email}:`, error.message);
+            return null;
+        }
     }
     // 🚨 ADD THIS HELPER METHOD TO YOUR CLASS
     determineBounceType(error) {
@@ -909,7 +1128,7 @@ class WarmupWorker {
         }
     }
 
-    // 🚨 UPDATED: Better Token Expiry Check
+    // 🚨 IMPROVED: Token expiry check
     isTokenExpired(account) {
         if (!account.token_expiry && !account.token_expires_at) {
             console.log(`   ⚠️  No token expiry information available`);
@@ -929,7 +1148,7 @@ class WarmupWorker {
             }
 
             const now = Date.now();
-            const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
+            const bufferTime = 10 * 60 * 1000; // 10 minutes buffer
 
             const isExpired = now >= (expiryTime - bufferTime);
 
@@ -947,6 +1166,30 @@ class WarmupWorker {
         } catch (error) {
             console.error(`   ❌ Error checking token expiry:`, error);
             return true; // Assume expired on error
+        }
+    }
+
+    // 🚨 MARK ACCOUNT FOR REAUTHENTICATION
+    async markAccountAsNeedsReauth(email) {
+        try {
+            const MicrosoftUser = require('../models/MicrosoftUser');
+
+            const updated = await MicrosoftUser.update(
+                {
+                    warmupStatus: 'needs_reauth',
+                    is_connected: false,
+                    last_error: 'Graph API authentication failed - requires reauthentication'
+                },
+                { where: { email } }
+            );
+
+            if (updated[0] > 0) {
+                console.log(`🔐 MARKED FOR REAUTH: ${email} - Graph API authentication failed`);
+            } else {
+                console.log(`⚠️  Could not mark ${email} for reauth - account not found in MicrosoftUser`);
+            }
+        } catch (error) {
+            console.error(`❌ Error marking account for reauth:`, error);
         }
     }
 
@@ -1146,122 +1389,84 @@ class WarmupWorker {
         }
     }
 
-    // 🚨 UPDATED: Force Graph API with proper authentication handling
+    // 🚨 FIXED: Enhanced email sending with better error handling
     async sendEmailWithFallback(senderConfig, receiver, replyRate, isCoordinatedJob = true, isInitialEmail = true, isReply = false, direction = 'unknown') {
         let retryCount = 0;
         const maxRetries = 2;
 
-        // 🚨 ENSURE GRAPH API IS USED FOR OUTLOOK PERSONAL ACCOUNTS
-        const isOutlookPersonal = senderConfig.email &&
-            (senderConfig.email.includes('@outlook.com') || senderConfig.email.includes('@hotmail.com'));
+        // 🚨 DETERMINE ACCOUNT TYPE PROPERLY
+        const accountType = this.determineAccountType(senderConfig);
+        console.log(`📧 Account Type: ${accountType} for ${senderConfig.email}`);
 
-        if (isOutlookPersonal) {
-            console.log(`🔐 Outlook personal account detected: ${senderConfig.email}`);
-            console.log(`   📤 Using Graph API for Outlook personal account`);
+        // 🚨 VALIDATE CONFIGURATION BEFORE SENDING
+        if (accountType === 'smtp' || accountType === 'unknown') {
+            console.log(`🔧 Validating SMTP configuration for ${senderConfig.email}`);
 
-            // 🚨 CRITICAL: Validate and fix the access token
-            if (senderConfig.access_token) {
-                // Check if token is malformed (no dots)
-                if (!senderConfig.access_token.includes('.')) {
-                    console.log(`   ❌ MALFORMED TOKEN: Access token has no dots - needs refresh`);
-                    // Force token refresh
-                    senderConfig.access_token = null;
+            // Check for required SMTP credentials
+            const hasSmtpCredentials = senderConfig.smtpHost && senderConfig.smtpPort &&
+                (senderConfig.smtpPass || senderConfig.appPassword);
+
+            if (!hasSmtpCredentials) {
+                console.log(`❌ Missing SMTP credentials for ${senderConfig.email}`);
+
+                // Try to auto-configure for custom domains
+                if (this.isCustomDomain(senderConfig.email)) {
+                    console.log(`🔄 Attempting auto-configuration for custom domain`);
+                    // The buildTransporterConfig will handle auto-configuration
                 } else {
-                    console.log(`   ✅ Token format appears valid`);
+                    throw new Error(`SMTP account ${senderConfig.email} missing credentials (host, port, and password required)`);
                 }
             }
-
-            // Ensure Graph API is enabled
-            senderConfig.useGraphAPI = true;
-            senderConfig.forceSMTP = false;
         }
 
         while (retryCount <= maxRetries) {
             try {
                 console.log(`📧 Sending ${direction} email from ${senderConfig.email} to ${receiver.email}`);
+                console.log(`   Method: ${accountType === 'microsoft_personal' ? 'Graph API' : 'SMTP'}`);
 
-                // 🚨 PRE-SEND TOKEN VALIDATION FOR OUTLOOK
-                if (isOutlookPersonal && (!senderConfig.access_token || this.isTokenExpired(senderConfig))) {
-                    console.log(`   🔄 Token missing or expired, attempting refresh...`);
-                    const refreshed = await this.refreshMicrosoftToken(senderConfig);
-                    if (refreshed) {
-                        senderConfig.access_token = refreshed.access_token;
-                        senderConfig.refresh_token = refreshed.refresh_token;
-                        senderConfig.token_expires_at = refreshed.token_expires_at;
-                        console.log(`   ✅ Token refreshed successfully`);
-                    } else {
-                        throw new Error('Failed to refresh Microsoft token');
-                    }
-                }
-
-                const originalSenderConfig = { ...senderConfig };
                 const sendResult = await warmupSingleEmail(senderConfig, receiver, replyRate, isReply, isCoordinatedJob, isInitialEmail, direction);
 
-                // 🚨 SAVE REFRESHED TOKENS IF CHANGED
-                if (senderConfig.access_token !== originalSenderConfig.access_token) {
-                    await this.saveRefreshedTokens(senderConfig.email, {
-                        access_token: senderConfig.access_token,
-                        refresh_token: senderConfig.refresh_token,
-                        token_expires_at: senderConfig.token_expires_at
-                    });
+                if (!sendResult || sendResult.success === false) {
+                    throw new Error(sendResult?.error || 'Email sending failed');
                 }
 
-                // 🚨 RETURN PROPER RESULT OBJECT
                 return {
-                    success: sendResult?.success !== false,
-                    messageId: sendResult?.messageId || sendResult?.emailId || this.extractMessageIdFromResponse(sendResult) || `graph-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                    success: true,
+                    messageId: sendResult?.messageId || sendResult?.emailId || `sent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                     subject: sendResult?.subject || 'Warmup Email',
                     deliveredInbox: sendResult?.deliveredInbox,
                     deliveryFolder: sendResult?.deliveryFolder,
-                    error: sendResult?.error
+                    method: accountType === 'microsoft_personal' ? 'graph_api' : 'smtp'
                 };
 
             } catch (error) {
                 retryCount++;
+                console.log(`❌ Send attempt ${retryCount}/${maxRetries + 1} failed: ${error.message}`);
 
-                // 🚨 SPECIFIC ERROR HANDLING FOR GRAPH API ISSUES
-                if (error.message.includes('InvalidAuthenticationToken') || error.message.includes('JWT') || error.message.includes('token')) {
-                    console.log(`   🔐 Graph API Authentication Error: ${error.message}`);
+                // 🚨 SPECIFIC ERROR HANDLING FOR CONNECTION ISSUES
+                if (error.message.includes('ETIMEDOUT') || error.message.includes('ECONNREFUSED')) {
+                    console.log(`   🌐 Connection issue detected: ${error.message}`);
 
-                    // Force token refresh on authentication errors
-                    console.log(`   🔄 Forcing token refresh due to authentication error`);
-                    const refreshed = await this.refreshMicrosoftToken(senderConfig);
-                    if (refreshed) {
-                        senderConfig.access_token = refreshed.access_token;
-                        senderConfig.refresh_token = refreshed.refresh_token;
-                        senderConfig.token_expires_at = refreshed.token_expires_at;
-                        console.log(`   ✅ Token refreshed after authentication error`);
+                    if (accountType === 'smtp' && this.isCustomDomain(senderConfig.email)) {
+                        console.log(`   🔄 Custom domain connection failed, might need manual SMTP configuration`);
                     }
                 }
 
                 if (retryCount > maxRetries) {
-                    console.log(`❌ Max retries exceeded for: ${senderConfig.email}`);
-
-                    // 🚨 GENERATE FALLBACK MESSAGE ID FOR TRACKING
-                    const fallbackMessageId = `graph-fallback-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                    console.log(`💥 Max retries exceeded for: ${senderConfig.email}`);
 
                     return {
                         success: false,
-                        messageId: fallbackMessageId,
+                        messageId: `failed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                         error: error.message,
                         subject: 'Warmup Email',
-                        graphApiError: true
+                        requiresManualConfig: error.message.includes('ETIMEDOUT') && this.isCustomDomain(senderConfig.email)
                     };
                 }
 
-                console.log(`🔄 Retrying (${retryCount}/${maxRetries})...`);
                 await this.delay(2000 * retryCount);
             }
         }
-
-        // 🚨 FINAL FALLBACK
-        const finalFallbackId = `graph-final-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        return {
-            success: false,
-            messageId: finalFallbackId,
-            error: 'All retry attempts failed',
-            graphApiError: true
-        };
     }
 
     // 🚨 NEW: Enhanced Delivery Verification with Spam Tracking
@@ -1369,20 +1574,33 @@ class WarmupWorker {
         }
     }
 
-    // 17. Save Refreshed Tokens
+    // 🚨 UPDATE THIS METHOD IN WarmupWorker class
     async saveRefreshedTokens(email, tokens) {
         try {
-            await EmailPool.update(
+            const MicrosoftUser = require('../models/MicrosoftUser');
+
+            // Update MicrosoftUser table for warmup accounts
+            const updated = await MicrosoftUser.update(
                 {
                     access_token: tokens.access_token,
                     refresh_token: tokens.refresh_token,
-                    token_expires_at: tokens.token_expires_at
+                    token_expires_at: tokens.token_expires_at,
+                    expires_at: tokens.token_expiry // Map to expires_at field
                 },
                 { where: { email } }
             );
-            console.log(`💾 Saved refreshed tokens for ${email}`);
+
+            if (updated[0] > 0) {
+                console.log(`✅ Saved refreshed tokens in MicrosoftUser for: ${email}`);
+                return true;
+            }
+
+            console.log(`❌ Could not save tokens - account not found in MicrosoftUser: ${email}`);
+            return false;
+
         } catch (error) {
-            console.error('❌ Failed to save refreshed tokens:', error.message);
+            console.error('❌ Error saving refreshed tokens:', error.message);
+            return false;
         }
     }
 
