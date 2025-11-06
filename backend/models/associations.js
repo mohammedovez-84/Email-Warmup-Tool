@@ -3,6 +3,7 @@ const EmailMetric = require('./EmailMetric');
 const EngagementTracking = require('./EngagementTracking');
 const SpamMonitoring = require('./SpamComplaint');
 const BounceTracking = require('./BounceTracking');
+const ReplyTracking = require('./ReplyTracking');
 
 // Set up associations
 module.exports = function setupAssociations() {
@@ -24,6 +25,30 @@ module.exports = function setupAssociations() {
             foreignKey: 'messageId',
             sourceKey: 'messageId',
             as: 'spamReports'
+        });
+
+        // ReplyTracking associations
+        ReplyTracking.belongsTo(EmailMetric, {
+            foreignKey: 'originalEmailMetricId',
+            targetKey: 'id',
+            as: 'originalEmail'
+        });
+
+        ReplyTracking.belongsTo(EmailMetric, {
+            foreignKey: 'replyEmailMetricId',
+            targetKey: 'id',
+            as: 'replyEmail'
+        });
+
+        // EmailMetric has replies
+        EmailMetric.hasMany(ReplyTracking, {
+            foreignKey: 'originalEmailMetricId',
+            as: 'sentReplies'
+        });
+
+        EmailMetric.hasMany(ReplyTracking, {
+            foreignKey: 'replyEmailMetricId',
+            as: 'receivedReplies'
         });
 
         // EngagementTracking associations

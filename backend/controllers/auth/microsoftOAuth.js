@@ -5,7 +5,7 @@ const CLIENT_ID = process.env.MS_CLIENT_ID;
 const CLIENT_SECRET = process.env.MS_CLIENT_SECRET;
 
 if (!CLIENT_ID || !CLIENT_SECRET) {
-  console.error('Missing required Microsoft OAuth environment variables');
+  console.error('❌ Missing required Microsoft OAuth environment variables');
   throw new Error('Microsoft OAuth configuration is incomplete');
 }
 
@@ -23,35 +23,52 @@ const config = {
 
 const client = new AuthorizationCode(config);
 
-// Delegated permissions scopes
 const scopes = [
   'openid',
   'profile',
   'offline_access',
-  'User.Read',
-  'Mail.Read',
-  'Mail.Send',
-  'Mail.ReadWrite'
+  'https://graph.microsoft.com/Mail.Read',
+  'https://graph.microsoft.com/Mail.Send',
+  'https://graph.microsoft.com/Mail.ReadWrite',
+  'https://graph.microsoft.com/User.Read'
 ];
 
-function getAuthUrl(redirectUri) {
+function getAuthUrl(redirectUri, email = null) {
   try {
-    const url = client.authorizeURL({
+    const authParams = {
       redirect_uri: redirectUri,
       scope: scopes.join(' '),
-      prompt: 'select_account'
-    });
-    console.log('Generated auth URL:', url);
+      prompt: 'consent', // 🚨 FORCE CONSENT
+      response_type: 'code'
+    };
+
+    // Add login hint for reauthentication
+    if (email) {
+      authParams.login_hint = email;
+    }
+
+    const url = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?` +
+      `client_id=${process.env.MS_CLIENT_ID}` +
+      `&response_type=code` +
+      `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+      `&scope=${encodeURIComponent(scopes.join(' '))}` +
+      `&prompt=consent`; // 🚨 CRITICAL
+
+    if (email) {
+      url += `&login_hint=${encodeURIComponent(email)}`;
+    }
+
+    console.log('🔐 Generated Microsoft auth URL with full Graph API scopes');
     return url;
+
   } catch (error) {
-    console.error('Error generating auth URL:', error);
+    console.error('❌ Error generating auth URL:', error);
     throw error;
   }
 }
-
 async function getTokenFromCode(redirectUri, code) {
   try {
-    console.log('Exchanging code for token, redirectUri:', redirectUri);
+    console.log('🔄 Exchanging code for token...');
     const tokenParams = {
       code,
       redirect_uri: redirectUri,
@@ -59,20 +76,27 @@ async function getTokenFromCode(redirectUri, code) {
     };
 
     const accessToken = await client.getToken(tokenParams);
-    console.log('✅ Token exchange successful');
+
+    // 🚨 VALIDATE REFRESH TOKEN EXISTS
+    if (!accessToken.token.refresh_token) {
+      throw new Error('❌ No refresh token received - check offline_access scope');
+    }
+
+    console.log('✅ Token exchange successful with refresh token');
 
     // Log token details for debugging
     console.log('🔐 Token details:', {
       has_access_token: !!accessToken.token.access_token,
       has_refresh_token: !!accessToken.token.refresh_token,
       expires_in: accessToken.token.expires_in,
-      token_type: accessToken.token.token_type
+      token_type: accessToken.token.token_type,
+      token_format: accessToken.token.access_token.includes('.') ? 'Valid JWT' : 'INVALID'
     });
 
     return accessToken.token;
   } catch (error) {
-    console.error('❌ Error exchanging code for token:', error);
-    console.error('Error details:', error.message);
+    console.error('❌ Error exchanging code for token:', error.message);
+    console.error('Error details:', error.response?.data || error);
     throw error;
   }
 }

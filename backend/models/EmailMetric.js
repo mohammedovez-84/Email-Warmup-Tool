@@ -111,4 +111,7 @@ const EmailMetric = sequelize.define('email_metrics', {
     ]
 });
 
+
+
+
 module.exports = EmailMetric;
