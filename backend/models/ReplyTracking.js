@@ -100,4 +100,5 @@ const ReplyTracking = sequelize.define('reply_tracking', {
     ]
 });
 
+
 module.exports = ReplyTracking;
