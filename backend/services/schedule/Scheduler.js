@@ -8,6 +8,7 @@ const RedisScheduler = require('../redis/redis-scheduler');
 const UnifiedWarmupStrategy = require('./unified-strategy');
 
 const VolumeEnforcement = require('../volume/volume-enforcement');
+const EmailExchange = require('../../models/MailExchange');
 
 class WarmupScheduler {
     constructor() {
@@ -16,29 +17,344 @@ class WarmupScheduler {
         this.EMAIL_INTERVAL_MS = 15 * 60 * 1000;
         this.TESTING_MODE = process.env.WARMUP_TESTING_MODE === 'true';
 
-        // 🚨 NEW: Track server startup to prevent duplicate scheduling
+        // Track server startup to prevent duplicate scheduling
         this.serverStartTime = new Date();
         this.recoveryCompleted = false;
         this.lastSchedulingTime = 0;
-        this.SCHEDULING_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes cooldown
+        this.SCHEDULING_COOLDOWN_MS = 5 * 60 * 1000;
 
-        // ADD REDIS PERSISTENCE (only for job recovery, not volume)
+        // Redis persistence
         this.redis = new RedisScheduler();
+
+
+        this.volumeEnforcement = new VolumeEnforcement();
     }
 
     async initialize() {
         console.log('🚀 Initializing Bidirectional Warmup Scheduler...');
 
-        // 🚨 FIRST: Clear any stale jobs from previous server runs
-        await this.cleanupStaleJobs();
+        try {
+            // 🚨 FIRST: Initialize volume enforcement with retry logic
+            await this.volumeEnforcement.initialize(); // ✅ FIX: Use this.volumeEnforcement
 
-        // 🚨 SECOND: Initialize volume enforcement
-        await VolumeEnforcement.initialize();
+            // 🚨 SECOND: Wait a bit for everything to stabilize
+            await this.delay(2000);
 
-        console.log('✅ Warmup scheduler started successfully');
+            // 🚨 THIRD: Sync volume with database
+            await this.syncVolumeWithDatabase();
+
+            // 🚨 FOURTH: Clear any stale jobs from previous server runs
+            await this.cleanupStaleJobs();
+
+            console.log('✅ Warmup scheduler started successfully');
+        } catch (error) {
+            console.error('❌ Warmup scheduler initialization failed:', error);
+        }
+    }
+    // 🚨 NEW: Utility delay function
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
-    // 🚨 NEW: Clean up stale jobs from previous server runs
+    // 🚨 IMPROVED: Safe volume sync
+    async syncVolumeWithDatabase() {
+        try {
+            console.log('🔄 Syncing volume counts with database...');
+
+            // Add a small delay to ensure tables are ready
+            await this.delay(1000);
+
+            const activeAccounts = await this.getActiveWarmupAccounts();
+            const activePools = await this.getActivePoolAccounts();
+
+            let syncedCount = 0;
+
+            for (const account of activeAccounts) {
+                try {
+                    const summary = await this.volumeEnforcement.getDailySummary(account.email, 'warmup');
+                    console.log(`   📊 ${account.email}: ${summary.sentToday}/${summary.volumeLimit} (${summary.percentage}%)`);
+                    syncedCount++;
+                } catch (error) {
+                    console.log(`   ⚠️ Could not sync ${account.email}: ${error.message}`);
+                }
+            }
+
+            for (const pool of activePools) {
+                try {
+                    const summary = await this.volumeEnforcement.getDailySummary(pool.email, 'pool');
+                    console.log(`   🏊 ${pool.email}: ${summary.sentToday}/${summary.volumeLimit} (${summary.percentage}%)`);
+                    syncedCount++;
+                } catch (error) {
+                    console.log(`   ⚠️ Could not sync pool ${pool.email}: ${error.message}`);
+                }
+            }
+
+            console.log(`✅ Volume sync completed: ${syncedCount} accounts synchronized`);
+
+        } catch (error) {
+            console.error('❌ Volume sync error:', error);
+        }
+    }
+
+
+    async scheduleBidirectionalWarmup(channel) {
+        // Check cooldown period
+        const timeSinceLastScheduling = Date.now() - this.lastSchedulingTime;
+        if (timeSinceLastScheduling < this.SCHEDULING_COOLDOWN_MS) {
+            console.log(`⏸️ Skipping scheduling - in cooldown period`);
+            this.isRunning = false;
+
+
+            return 0;
+        }
+
+        console.log('📧 GLOBAL SCHEDULING: Finding accounts needing emails...');
+
+        const activeAccounts = await this.getActiveWarmupAccounts();
+        const activePools = await this.getActivePoolAccounts();
+
+        if (activeAccounts.length === 0 || activePools.length === 0) {
+            console.log('⚠️ No active accounts or pools found');
+            this.isRunning = false;
+
+
+            return 0;
+        }
+
+        console.log(`📊 Found ${activeAccounts.length} warmup accounts and ${activePools.length} pool accounts`);
+
+        this.clearScheduledJobs();
+
+        // 🚨 GET VOLUME STATUS BEFORE SCHEDULING
+        console.log('\n🔍 PRE-SCHEDULING VOLUME CHECK:');
+        const accountsWithCapacity = await this.filterAccountsWithCapacity(activeAccounts, activePools);
+
+        if (accountsWithCapacity.length === 0) {
+            console.log('🚫 No accounts with capacity available for scheduling');
+            this.isRunning = false;
+
+
+            return 0;
+        }
+
+        // Filter out recently incremental accounts
+        const accountsForGlobalScheduling = await this.filterOutRecentlyIncrementalAccounts(accountsWithCapacity);
+
+        if (accountsForGlobalScheduling.length === 0) {
+            console.log('💤 All capable accounts were recently handled by incremental scheduling');
+            this.isRunning = false;
+
+
+            return 0;
+        }
+
+        console.log(`🎯 Global scheduling: ${accountsForGlobalScheduling.length} accounts`);
+
+        let totalScheduled = 0;
+        let scheduledPerAccount = new Map();
+
+        // 🚨 SCHEDULE FOR EACH ACCOUNT
+        for (const warmupAccount of accountsForGlobalScheduling) {
+            const scheduledCount = await this.createAndScheduleBidirectionalPlan(warmupAccount, activePools, channel);
+            totalScheduled += scheduledCount;
+            scheduledPerAccount.set(warmupAccount.email, scheduledCount);
+
+            console.log(`   📝 ${warmupAccount.email}: ${scheduledCount} emails scheduled`);
+        }
+
+        this.lastSchedulingTime = Date.now();
+        this.isRunning = false;
+
+        // 🚨 COMPREHENSIVE VOLUME ACKNOWLEDGEMENT AFTER SCHEDULING
+        console.log(`\n🎉 SCHEDULING COMPLETED: ${totalScheduled} total emails scheduled`);
+
+        // Log per-account breakdown
+        if (scheduledPerAccount.size > 0) {
+            console.log('📋 PER-ACCOUNT SCHEDULING BREAKDOWN:');
+            for (const [email, count] of scheduledPerAccount) {
+                console.log(`   ├── ${email}: ${count} emails`);
+            }
+        }
+
+
+
+
+        return totalScheduled;
+    }
+
+    async getAccountVolumeLimit(email, accountType = 'warmup') {
+        try {
+            const limit = await this.getAccountVolumeLimitInternal(email, accountType);
+
+            // Only run debug if there's a count mismatch (optional - can be removed)
+            const sentToday = await this.getSentTodayCount(email, accountType);
+            if (sentToday > limit) {
+                console.log(`🚨 COUNT MISMATCH: ${email} has ${sentToday} sent but limit is ${limit}`);
+                // You can call debug here if needed, but it might break the flow
+            }
+
+            return limit;
+
+        } catch (error) {
+            console.error(`❌ Volume calculation error for ${email}:`, error);
+            return 3; // Safe default
+        }
+    }
+
+    // In your WarmupScheduler - replace the current volume calculation
+    async getAccountVolumeLimitInternal(email, accountType = 'warmup') {
+        try {
+            if (accountType === 'pool') {
+                const pool = await EmailPool.findOne({ where: { email } });
+                const limit = pool?.maxEmailsPerDay || 50;
+                console.log(`📊 POOL LIMIT: ${email} - ${limit}`);
+                return limit;
+            }
+
+            const account = await GoogleUser.findOne({ where: { email } }) ||
+                await MicrosoftUser.findOne({ where: { email } }) ||
+                await SmtpAccount.findOne({ where: { email } });
+
+            if (!account) {
+                console.log(`❌ Account not found: ${email}`);
+                return 3;
+            }
+
+            // 🎯 GET ACTUAL REPLY METRICS FROM REPLY_TRACKING TABLE
+            const replyMetrics = await this.getReplyMetrics(email);
+
+            // 🎯 CALCULATE BASE VOLUME (your existing logic)
+            const startEmailsPerDay = this.ensureNumber(
+                account.startEmailsPerDay || account.start_emails_per_day || 3,
+                3
+            );
+            const increaseEmailsPerDay = this.ensureNumber(
+                account.increaseEmailsPerDay || account.increase_emails_per_day || 3,
+                3
+            );
+            const maxEmailsPerDay = this.ensureNumber(
+                account.maxEmailsPerDay || account.max_emails_per_day || 25,
+                25
+            );
+            const warmupDayCount = this.ensureNumber(
+                account.warmupDayCount || account.warmup_day_count || 0,
+                0
+            );
+
+            let volume = startEmailsPerDay + (increaseEmailsPerDay * warmupDayCount);
+            volume = Math.min(volume, maxEmailsPerDay);
+            volume = Math.min(volume, 25);
+            volume = Math.max(1, volume);
+
+            // 🎯 APPLY REPLY-BASED ADJUSTMENTS
+            const adjustedVolume = this.applyReplyBasedAdjustments(volume, replyMetrics, warmupDayCount);
+
+            console.log(`📈 REPLY-DRIVEN VOLUME for ${email}:`);
+            console.log(`   ├── Base Volume: ${volume} (day ${warmupDayCount})`);
+            console.log(`   ├── Actual Reply Rate: ${(replyMetrics.replyRate * 100).toFixed(1)}%`);
+            console.log(`   ├── Total Replies: ${replyMetrics.totalReplies}`);
+            console.log(`   ├── Adjustment: ${replyMetrics.adjustment > 0 ? '+' : ''}${replyMetrics.adjustment}`);
+            console.log(`   └── Final Volume: ${adjustedVolume}`);
+
+            return adjustedVolume;
+
+        } catch (error) {
+            console.error(`❌ Internal volume calculation error for ${email}:`, error);
+            return 3;
+        }
+    }
+
+    // 🎯 NEW: Get actual reply metrics from database
+    async getReplyMetrics(email, days = 3) {
+        try {
+            const { Op } = require('sequelize');
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+
+            // Count emails sent in last X days
+            const sentEmails = await EmailExchange.count({
+                where: {
+                    warmupAccount: email,
+                    sentAt: { [Op.gte]: startDate },
+                    direction: 'WARMUP_TO_POOL'
+                }
+            });
+
+            // Count replies received in last X days
+            const replies = await ReplyTracking.count({
+                where: {
+                    originalSender: email,
+                    repliedAt: { [Op.gte]: startDate }
+                }
+            });
+
+            const replyRate = sentEmails > 0 ? replies / sentEmails : 0;
+
+            return {
+                totalReplies: replies,
+                totalSent: sentEmails,
+                replyRate: replyRate,
+                adjustment: this.calculateReplyAdjustment(replyRate, replies)
+            };
+
+        } catch (error) {
+            console.error(`❌ Error getting reply metrics for ${email}:`, error);
+            return { totalReplies: 0, totalSent: 0, replyRate: 0, adjustment: 0 };
+        }
+    }
+
+    // 🎯 NEW: Calculate volume adjustment based on replies
+    calculateReplyAdjustment(replyRate, totalReplies) {
+        let adjustment = 0;
+
+        // 🎯 BASED ON REPLY RATE
+        if (replyRate > 0.4) {
+            adjustment += 3; // High engagement - boost volume
+        } else if (replyRate > 0.25) {
+            adjustment += 2; // Good engagement
+        } else if (replyRate > 0.15) {
+            adjustment += 1; // Average engagement
+        } else if (replyRate > 0.05) {
+            adjustment += 0; // Neutral
+        } else {
+            adjustment -= 1; // Low engagement - reduce volume
+        }
+
+        // 🎯 BASED ON TOTAL REPLY COUNT (confidence)
+        if (totalReplies >= 10) {
+            adjustment += 2; // High confidence
+        } else if (totalReplies >= 5) {
+            adjustment += 1; // Medium confidence
+        } else if (totalReplies === 0) {
+            adjustment -= 1; // No data - be conservative
+        }
+
+        return adjustment;
+    }
+
+    // 🎯 NEW: Apply adjustments to volume
+    applyReplyBasedAdjustments(baseVolume, replyMetrics, warmupDayCount) {
+        let adjustedVolume = baseVolume + replyMetrics.adjustment;
+
+        // 🎯 DIFFERENT STRATEGIES BASED ON WARMUP STAGE
+        if (warmupDayCount <= 2) {
+            // Early stage: Be more conservative with adjustments
+            adjustedVolume = Math.max(1, Math.min(8, adjustedVolume));
+        } else if (warmupDayCount <= 7) {
+            // Mid stage: Moderate adjustments
+            adjustedVolume = Math.max(3, Math.min(20, adjustedVolume));
+        } else {
+            // Established: Full adjustments
+            adjustedVolume = Math.max(5, Math.min(25, adjustedVolume));
+        }
+
+        // Ensure we don't go below minimum or above maximum reasonable limits
+        adjustedVolume = Math.max(1, Math.min(25, adjustedVolume));
+
+        return adjustedVolume;
+    }
+
+
     async cleanupStaleJobs() {
         try {
             console.log('🧹 Cleaning up stale jobs from previous server runs...');
@@ -49,27 +365,59 @@ class WarmupScheduler {
 
             for (const [jobKey, jobData] of Object.entries(storedJobs)) {
                 const scheduledTime = new Date(jobData.scheduledTime);
-
-                // 🚨 KEEP ONLY: Future jobs that are within reasonable timeframe
                 const isFutureJob = scheduledTime > now;
-                const isRecentJob = (now - scheduledTime) < (24 * 60 * 60 * 1000); // Within 24 hours
+                const isRecentJob = (now - scheduledTime) < (24 * 60 * 60 * 1000);
 
                 if (isFutureJob && isRecentJob) {
                     keptCount++;
                 } else {
-                    // Remove expired or very old jobs
                     await this.redis.removeScheduledJob(jobKey);
                     cleanedCount++;
-                    console.log(`   🗑️ Removed stale job: ${jobKey}`);
                 }
             }
 
             console.log(`📊 Stale job cleanup: ${cleanedCount} removed, ${keptCount} kept`);
-
         } catch (error) {
             console.error('❌ Error cleaning up stale jobs:', error);
         }
     }
+
+    clearScheduledJobs() {
+        for (const [timeString, timeoutId] of this.scheduledJobs) {
+            clearTimeout(timeoutId);
+        }
+        this.scheduledJobs.clear();
+    }
+
+    async cleanupScheduledJobsForAccount(email) {
+        try {
+            console.log(`🧹 Cleaning up scheduled jobs for: ${email}`);
+            let removedCount = 0;
+
+            const storedJobs = await this.redis.getAllScheduledJobs();
+            for (const [jobKey, jobData] of Object.entries(storedJobs)) {
+                if (jobData.warmupAccount === email) {
+                    await this.redis.removeScheduledJob(jobKey);
+                    removedCount++;
+                }
+            }
+
+            for (const [jobKey, timeoutId] of this.scheduledJobs) {
+                if (jobKey.includes(email)) {
+                    clearTimeout(timeoutId);
+                    this.scheduledJobs.delete(jobKey);
+                    removedCount++;
+                }
+            }
+
+            console.log(`✅ Cleanup complete: Removed ${removedCount} jobs for ${email}`);
+            return removedCount;
+        } catch (error) {
+            console.error(`❌ Error cleaning up jobs for ${email}:`, error);
+            return 0;
+        }
+    }
+
 
     async scheduleWarmup() {
         if (this.isRunning) {
@@ -102,64 +450,7 @@ class WarmupScheduler {
         }
     }
 
-    async scheduleBidirectionalWarmup(channel) {
-        // 🚨 CHECK COOLDOWN PERIOD
-        const timeSinceLastScheduling = Date.now() - this.lastSchedulingTime;
-        if (timeSinceLastScheduling < this.SCHEDULING_COOLDOWN_MS) {
-            console.log(`⏸️ Skipping scheduling - in cooldown period (${Math.round((this.SCHEDULING_COOLDOWN_MS - timeSinceLastScheduling) / 60000)}min remaining)`);
-            this.isRunning = false;
-            return;
-        }
 
-        console.log('📧 GLOBAL SCHEDULING: Finding accounts needing emails...');
-
-        const activeAccounts = await this.getActiveWarmupAccounts();
-        const activePools = await this.getActivePoolAccounts();
-
-        if (activeAccounts.length === 0) {
-            console.log('⚠️ No active warmup accounts found');
-            this.isRunning = false;
-            return;
-        }
-
-        if (activePools.length === 0) {
-            console.log('⚠️ No active pool accounts found');
-            this.isRunning = false;
-            return;
-        }
-
-        console.log(`📊 Found ${activeAccounts.length} warmup accounts and ${activePools.length} pool accounts`);
-
-        this.clearScheduledJobs();
-
-        // 🚨 CRITICAL: Filter accounts with capacity AND no recent incremental jobs
-        const accountsWithCapacity = await this.filterAccountsWithCapacity(activeAccounts, activePools);
-
-        if (accountsWithCapacity.length === 0) {
-            console.log('🚫 No accounts with capacity available for global scheduling');
-            this.isRunning = false;
-            return;
-        }
-
-        // 🚨 NEW: Filter out accounts that recently had incremental scheduling
-        const accountsForGlobalScheduling = await this.filterOutRecentlyIncrementalAccounts(accountsWithCapacity);
-
-        if (accountsForGlobalScheduling.length === 0) {
-            console.log('💤 All capable accounts were recently handled by incremental scheduling');
-            this.isRunning = false;
-            return;
-        }
-
-        console.log(`🎯 Global scheduling: ${accountsForGlobalScheduling.length} accounts (excluding recently incremental ones)`);
-
-        for (const warmupAccount of accountsForGlobalScheduling) {
-            await this.createAndScheduleBidirectionalPlan(warmupAccount, activePools, channel);
-        }
-
-        // 🚨 UPDATE LAST SCHEDULING TIME
-        this.lastSchedulingTime = Date.now();
-        this.isRunning = false;
-    }
 
     // 🚨 NEW: Filter out accounts that were recently scheduled incrementally
     async filterOutRecentlyIncrementalAccounts(accountsWithCapacity) {
@@ -181,28 +472,7 @@ class WarmupScheduler {
         return filteredAccounts;
     }
 
-    async markAccountAsIncrementallyScheduled(email) {
-        try {
-            const key = `incremental:${email}`;
-            const incrementalData = {
-                email: email,
-                scheduledAt: new Date().toISOString(),
-                type: 'incremental',
-                markedAt: Date.now()
-            };
 
-            // Store with 2-hour expiration (7200 seconds)
-            await this.redis.storeScheduledJob(key, incrementalData);
-
-            console.log(`📝 Marked ${email} as incrementally scheduled (2-hour cooldown)`);
-            return true;
-        } catch (error) {
-            console.error(`❌ Error marking incremental scheduling for ${email}:`, error);
-            return false;
-        }
-    }
-
-    // 🚨 NEW: Get recently incrementally scheduled accounts
     async getRecentlyIncrementallyScheduledAccounts() {
         const recentlyScheduled = new Set();
         try {
@@ -210,14 +480,12 @@ class WarmupScheduler {
 
             for (const [jobKey, jobData] of Object.entries(allJobs)) {
                 if (jobKey.startsWith('incremental:') && jobData.email) {
-                    // Check if it's still within 2 hours
                     const markedAt = new Date(jobData.scheduledAt || jobData.markedAt);
                     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
                     if (markedAt > twoHoursAgo) {
                         recentlyScheduled.add(jobData.email);
                     } else {
-                        // Remove expired incremental markers
                         await this.redis.removeScheduledJob(jobKey);
                     }
                 }
@@ -226,16 +494,56 @@ class WarmupScheduler {
             console.error('❌ Error getting incremental accounts:', error);
         }
 
-        console.log(`📝 Recently incremental accounts: ${Array.from(recentlyScheduled)}`);
         return recentlyScheduled;
     }
 
-    // 🚨 NEW: Filter accounts with capacity BEFORE scheduling
+    // Update the markAccountAsIncrementallyScheduled method
+    async markAccountAsIncrementallyScheduled(email) {
+        try {
+            // 🚨 DON'T mark as incremental if it's a first-time warmup
+            const account = await this.getAccountByEmail(email);
+            const isFirstTimeWarmup = (account.warmupDayCount || 0) <= 1;
+
+            if (isFirstTimeWarmup) {
+                console.log(`🎯 First-time warmup ${email} - skipping incremental marking`);
+                return true;
+            }
+
+            const key = `incremental:${email}`;
+            const incrementalData = {
+                email: email,
+                scheduledAt: new Date().toISOString(),
+                type: 'incremental',
+                markedAt: Date.now(),
+                warmupDayCount: account.warmupDayCount || 0 // Store day count for reference
+            };
+
+            await this.redis.storeScheduledJob(key, incrementalData);
+            console.log(`📝 Marked ${email} as incrementally scheduled (day ${account.warmupDayCount || 0})`);
+            return true;
+        } catch (error) {
+            console.error(`❌ Error marking incremental scheduling for ${email}:`, error);
+            return false;
+        }
+    }
+
+    // Add helper method to get account by email
+    async getAccountByEmail(email) {
+        // Check all account types
+        const [google, smtp, microsoft] = await Promise.all([
+            GoogleUser.findOne({ where: { email } }),
+            SmtpAccount.findOne({ where: { email } }),
+            MicrosoftUser.findOne({ where: { email } })
+        ]);
+
+        return google || smtp || microsoft;
+    }
+
     async filterAccountsWithCapacity(warmupAccounts, poolAccounts) {
         const accountsWithCapacity = [];
 
         for (const warmupAccount of warmupAccounts) {
-            const warmupSummary = await VolumeEnforcement.getDailySummary(warmupAccount.email, 'warmup');
+            const warmupSummary = await this.volumeEnforcement.getDailySummary(warmupAccount.email, 'warmup');
 
             if (warmupSummary.canSendMore) {
                 // Check if there are any pools that can send to this warmup account
@@ -255,16 +563,15 @@ class WarmupScheduler {
         return accountsWithCapacity;
     }
 
-    // 🚨 NEW: Get pools that can send to specific warmup account
     async getAvailablePoolsForWarmup(poolAccounts, warmupEmail) {
         const availablePools = [];
 
         for (const pool of poolAccounts) {
-            const poolSummary = await VolumeEnforcement.getDailySummary(pool.email, 'pool');
+            const poolSummary = await this.volumeEnforcement.getDailySummary(pool.email, 'pool');
 
             if (poolSummary.canSendMore) {
                 // Also check if warmup account can receive (hasn't hit inbound limit)
-                const warmupInboundSummary = await VolumeEnforcement.getDailySummary(warmupEmail, 'warmup');
+                const warmupInboundSummary = await this.volumeEnforcement.getDailySummary(warmupEmail, 'warmup');
                 if (warmupInboundSummary.canSendMore) {
                     availablePools.push(pool);
                 }
@@ -278,70 +585,56 @@ class WarmupScheduler {
         console.log(`\n🎯 CREATING BIDIRECTIONAL PLAN FOR: ${warmupAccount.email}`);
 
         try {
-            // 🚨 STEP 1: Get daily summary for WARMUP account
-            const warmupSummary = await VolumeEnforcement.getDailySummary(warmupAccount.email, 'warmup');
-            console.log(`   📊 WARMUP STATUS: ${warmupSummary.sentToday}/${warmupSummary.volumeLimit} sent, ${warmupSummary.remaining} remaining`);
+            // Get current volume status
+            const warmupSummary = await this.volumeEnforcement.getDailySummary(warmupAccount.email, 'warmup');
 
-            // 🚨 STEP 2: Check warmup account capacity (double-check)
             if (!warmupSummary.canSendMore) {
                 console.log(`   🚫 WARMUP BLOCKED: ${warmupAccount.email} has NO capacity`);
                 await this.cleanupScheduledJobsForAccount(warmupAccount.email);
-                return;
+                return 0;
             }
 
-            // 🚨 STEP 3: Get available pools that can send TO warmup account
+            // Get available pools
             const availablePools = await this.getAvailablePoolsForWarmup(poolAccounts, warmupAccount.email);
 
             if (availablePools.length === 0) {
-                console.log(`   ⚠️  NO AVAILABLE POOLS: All pools are at capacity or warmup cannot receive`);
-                return;
+                console.log(`   ⚠️  NO AVAILABLE POOLS`);
+                return 0;
             }
 
             console.log(`   🏊 AVAILABLE POOLS: ${availablePools.length}`);
 
-            // 🚨 STEP 4: Generate BIDIRECTIONAL plan with proper ratio
+            // Generate plan
             const strategy = new UnifiedWarmupStrategy();
             const replyRate = computeReplyRate(warmupAccount);
             const plan = await strategy.generateWarmupPlan(warmupAccount, availablePools, replyRate);
 
             if (plan.error || !plan.sequence || plan.sequence.length === 0) {
                 console.log(`   ⚠️  NO VALID PLAN: ${plan.error || 'Empty sequence'}`);
-                return;
+                return 0;
             }
 
             console.log(`   📧 PLAN GENERATED: ${plan.sequence.length} emails total`);
 
-            // 🚨 STEP 5: Separate and count bidirectional emails
-            const outboundEmails = plan.sequence.filter(job => job.direction === 'WARMUP_TO_POOL');
-            const inboundEmails = plan.sequence.filter(job => job.direction === 'POOL_TO_WARMUP');
+            // 🎯 FIX: Use the already randomized sequence from the strategy
+            const randomizedSequence = plan.sequence;
 
-            console.log(`   🔄 BIDIRECTIONAL BREAKDOWN:`);
+            // Separate emails by direction for logging only
+            const outboundEmails = randomizedSequence.filter(job => job.direction === 'WARMUP_TO_POOL');
+            const inboundEmails = randomizedSequence.filter(job => job.direction === 'POOL_TO_WARMUP');
+
+            console.log(`   🔄 RANDOMIZED BIDIRECTIONAL BREAKDOWN:`);
             console.log(`      ├── Outbound (WARMUP→POOL): ${outboundEmails.length}`);
             console.log(`      └── Inbound (POOL→WARMUP): ${inboundEmails.length}`);
 
-            const actualReplyRate = await this.getActualReplyRate(warmupAccount.email);
+            // Apply volume limits to the randomized sequence
+            const warmupMaxToSchedule = await this.volumeEnforcement.getMaxEmailsToSchedule(warmupAccount.email, 'warmup');
 
-            // 🚨 STEP 6: ENFORCE PROPER RATIOS
-            const { finalOutbound, finalInbound } = this.enforceBidirectionalRatios(
-                outboundEmails,
-                inboundEmails,
-                warmupAccount,
-                actualReplyRate
-            );
-
-            console.log(`   ⚖️  RATIO ENFORCED:`);
-            console.log(`      ├── Outbound: ${finalOutbound.length}`);
-            console.log(`      └── Inbound: ${finalInbound.length}`);
-
-            // 🚨 STEP 7: Get capacity limits for BOTH directions
-            const warmupMaxToSchedule = await VolumeEnforcement.getMaxEmailsToSchedule(warmupAccount.email, 'warmup');
-
-            // For inbound emails, we need to check each pool's capacity
             let totalInboundCapacity = 0;
             const poolCapacities = new Map();
 
             for (const pool of availablePools) {
-                const poolCapacity = await VolumeEnforcement.getMaxEmailsToSchedule(pool.email, 'pool');
+                const poolCapacity = await this.volumeEnforcement.getMaxEmailsToSchedule(pool.email, 'pool');
                 poolCapacities.set(pool.email, poolCapacity);
                 totalInboundCapacity += poolCapacity;
             }
@@ -350,70 +643,109 @@ class WarmupScheduler {
             console.log(`      ├── Warmup can send: ${warmupMaxToSchedule} emails`);
             console.log(`      └── Pools can send: ${totalInboundCapacity} emails total`);
 
-            // 🚨 STEP 8: Apply volume limits to final email counts
-            const volumeLimitedOutbound = finalOutbound.slice(0, warmupMaxToSchedule);
-            const volumeLimitedInbound = finalInbound.slice(0, totalInboundCapacity);
+            // 🎯 FIX: Apply volume limits while preserving randomization
+            const volumeLimitedSequence = this.applyVolumeLimitsToRandomizedSequence(
+                randomizedSequence,
+                warmupMaxToSchedule,
+                poolCapacities
+            );
 
-            console.log(`   📦 VOLUME LIMITED:`);
-            console.log(`      ├── Outbound: ${volumeLimitedOutbound.length} (from ${finalOutbound.length})`);
-            console.log(`      └── Inbound: ${volumeLimitedInbound.length} (from ${finalInbound.length})`);
+            console.log(`   📦 VOLUME LIMITED RANDOMIZED SEQUENCE: ${volumeLimitedSequence.length} emails`);
 
-            // 🚨 STEP 9: Schedule emails ONLY if volume allows
-            let scheduledOutbound = 0;
-            let scheduledInbound = 0;
-
-            // Schedule OUTBOUND emails (WARMUP → POOL)
-            console.log(`   🚀 SCHEDULING OUTBOUND EMAILS...`);
-            for (const emailJob of volumeLimitedOutbound) {
-                const scheduled = await this.scheduleSingleEmailWithEnforcement(emailJob, channel, warmupAccount.email);
-                if (scheduled) scheduledOutbound++;
-            }
-
-            // Schedule INBOUND emails (POOL → WARMUP)
-            console.log(`   📥 SCHEDULING INBOUND EMAILS...`);
+            // 🎯 FIX: Schedule emails in the randomized order
+            let totalScheduled = 0;
             const poolUsage = new Map();
 
-            for (const emailJob of volumeLimitedInbound) {
-                const poolEmail = emailJob.senderEmail;
+            console.log(`   🚀 SCHEDULING RANDOMIZED EMAIL SEQUENCE...`);
+            for (const emailJob of volumeLimitedSequence) {
+                const scheduled = await this.scheduleSingleEmailWithEnforcement(emailJob, channel, warmupAccount.email);
+                if (scheduled) {
+                    totalScheduled++;
 
-                // Check if this pool still has capacity
-                const currentPoolUsage = poolUsage.get(poolEmail) || 0;
-                const poolCapacity = poolCapacities.get(poolEmail) || 0;
-
-                if (currentPoolUsage < poolCapacity) {
-                    // Add delay to inbound emails to ensure outbound goes first
-                    emailJob.scheduleDelay += 5 * 60 * 1000; // Add 5-minute delay for inbound
-
-                    const scheduled = await this.scheduleSingleEmailWithEnforcement(emailJob, channel, warmupAccount.email);
-                    if (scheduled) {
-                        scheduledInbound++;
-                        poolUsage.set(poolEmail, currentPoolUsage + 1);
+                    // Track pool usage for inbound emails
+                    if (emailJob.direction === 'POOL_TO_WARMUP') {
+                        const poolEmail = emailJob.senderEmail;
+                        const currentUsage = poolUsage.get(poolEmail) || 0;
+                        poolUsage.set(poolEmail, currentUsage + 1);
                     }
-                } else {
-                    console.log(`   🚫 POOL CAPACITY REACHED: ${poolEmail} - ${currentPoolUsage}/${poolCapacity}`);
                 }
             }
 
-            console.log(`   ✅ FINAL SCHEDULED:`);
-            console.log(`      ├── Outbound: ${scheduledOutbound} emails`);
-            console.log(`      └── Inbound: ${scheduledInbound} emails`);
-            console.log(`      └── Total: ${scheduledOutbound + scheduledInbound} bidirectional exchanges`);
-            console.log(`      └── Ratio: ${scheduledOutbound}:${scheduledInbound}`);
+            console.log(`   ✅ FINAL SCHEDULED: ${totalScheduled} randomized bidirectional exchanges`);
+            console.log(`   📊 Pool usage:`, Object.fromEntries(poolUsage));
+
+            return totalScheduled;
 
         } catch (error) {
             console.error(`❌ BIDIRECTIONAL SCHEDULING FAILED for ${warmupAccount.email}:`, error.message);
+            return 0;
         }
     }
 
-    // 🚨 FIXED: Remove volume tracking during scheduling
+    // In WarmupScheduler - REPLACE applyVolumeLimitsToRandomizedSequence
+    applyVolumeLimitsToRandomizedSequence(randomizedSequence, warmupMaxToSchedule, poolCapacities) {
+        const limitedSequence = [];
+        let outboundScheduled = 0;
+        const poolUsage = new Map();
+
+        console.log(`   🎯 Applying volume limits to INTERLEAVED sequence...`);
+
+        // 🎯 NEW: Preserve the interleaved pattern while applying limits
+        for (const emailJob of randomizedSequence) {
+            if (emailJob.direction === 'WARMUP_TO_POOL') {
+                // Check warmup outbound limit
+                if (outboundScheduled < warmupMaxToSchedule) {
+                    limitedSequence.push(emailJob);
+                    outboundScheduled++;
+                } else {
+                    console.log(`   🚫 Outbound limit reached: ${outboundScheduled}/${warmupMaxToSchedule}`);
+                }
+            } else if (emailJob.direction === 'POOL_TO_WARMUP') {
+                // Check pool inbound limit
+                const poolEmail = emailJob.senderEmail;
+                const currentUsage = poolUsage.get(poolEmail) || 0;
+                const poolCapacity = poolCapacities.get(poolEmail) || 0;
+
+                if (currentUsage < poolCapacity) {
+                    limitedSequence.push(emailJob);
+                    poolUsage.set(poolEmail, currentUsage + 1);
+                } else {
+                    console.log(`   🚫 Pool ${poolEmail} limit reached: ${currentUsage}/${poolCapacity}`);
+                }
+            }
+        }
+
+        // 🎯 NEW: Log the final interleaved pattern
+        const finalOutbound = limitedSequence.filter(job => job.direction === 'WARMUP_TO_POOL').length;
+        const finalInbound = limitedSequence.filter(job => job.direction === 'POOL_TO_WARMUP').length;
+
+        console.log(`   ✅ Volume-limited INTERLEAVED sequence: ${limitedSequence.length} emails`);
+        console.log(`      ├── Outbound: ${finalOutbound}/${warmupMaxToSchedule}`);
+        console.log(`      └── Inbound: ${finalInbound} from ${poolUsage.size} pools`);
+        console.log(`      📊 Pattern: ${this.getSequencePattern(limitedSequence)}`);
+
+        return limitedSequence;
+    }
+
+    // 🎯 NEW: Helper to visualize the sequence pattern
+    getSequencePattern(sequence) {
+        if (sequence.length === 0) return "Empty";
+
+        const pattern = sequence.map(job =>
+            job.direction === 'WARMUP_TO_POOL' ? 'OUT' : 'IN'
+        ).join(' → ');
+
+        return pattern;
+    }
     async scheduleSingleEmailWithEnforcement(emailJob, channel, warmupEmail) {
         try {
             const targetEmail = emailJob.direction === 'WARMUP_TO_POOL' ? warmupEmail : emailJob.senderEmail;
             const targetType = emailJob.direction === 'WARMUP_TO_POOL' ? 'warmup' : 'pool';
 
-            // 🚨 CHECK CAPACITY BUT DON'T RESERVE YET
-            const currentSummary = await VolumeEnforcement.getDailySummary(targetEmail, targetType);
-            if (!currentSummary.canSendMore) {
+            // 🚨 CRITICAL: Check capacity before scheduling
+            const canSchedule = await this.volumeEnforcement.canAccountSendEmail(targetEmail, targetType);
+
+            if (!canSchedule) {
                 console.log(`   🚫 SCHEDULING BLOCKED: ${targetEmail} has no capacity`);
                 return false;
             }
@@ -428,15 +760,12 @@ class WarmupScheduler {
                 scheduledTime: scheduleTime.toISOString(),
                 warmupAccount: warmupEmail,
                 direction: emailJob.direction,
-                // 🚨 ADD SERVER INSTANCE INFO TO PREVENT DUPLICATES
                 serverInstance: process.env.SERVER_INSTANCE_ID || `server-${this.serverStartTime.getTime()}`,
                 scheduledAfter: this.serverStartTime.toISOString(),
-                // 🚨 ADD VOLUME INFO FOR SAFE RECOVERY
                 volumeInfo: {
                     targetEmail,
                     targetType,
-                    scheduledAtVolume: currentSummary.sentToday,
-                    volumeLimit: currentSummary.volumeLimit
+                    scheduledAt: new Date().toISOString()
                 }
             };
 
@@ -456,7 +785,6 @@ class WarmupScheduler {
         }
     }
 
-    // 🚨 SEPARATE: Execute scheduled job with volume enforcement
     async executeScheduledJob(jobKey, job, channel) {
         try {
             console.log(`\n🎯 EXECUTING: ${job.direction}`);
@@ -464,19 +792,22 @@ class WarmupScheduler {
 
             const { targetEmail, targetType } = job.volumeInfo;
 
-            // 🚨 FINAL VOLUME CHECK BEFORE EXECUTION
-            const canExecute = await VolumeEnforcement.canAccountSendEmail(targetEmail, targetType);
+            // 🚨 FIX: Use this.volumeEnforcement
+            const currentSummary = await this.volumeEnforcement.getDailySummary(targetEmail, targetType);
+            console.log(`   📊 Pre-execution volume: ${targetEmail} - ${currentSummary.sentToday}/${currentSummary.volumeLimit}`);
+
+            const canExecute = await this.volumeEnforcement.canAccountSendEmail(targetEmail, targetType);
 
             if (!canExecute) {
-                console.log(`   💥 EXECUTION BLOCKED: ${targetEmail} hit volume limit`);
+                console.log(`   💥 EXECUTION BLOCKED: ${targetEmail} hit volume limit (${currentSummary.sentToday}/${currentSummary.volumeLimit})`);
                 await this.redis.removeScheduledJob(jobKey);
                 return;
             }
 
-            // 🚨 RESERVE SLOT ONLY NOW (at execution time)
-            await VolumeEnforcement.incrementSentCount(targetEmail, 1, targetType);
+            // 🚨 FIX: Use this.volumeEnforcement
+            const newCount = await this.volumeEnforcement.incrementSentCount(targetEmail, 1, targetType);
+            console.log(`   📈 Volume incremented: ${targetEmail} - ${newCount}/${currentSummary.volumeLimit}`);
 
-            // Send to queue
             await channel.sendToQueue('warmup_jobs', Buffer.from(JSON.stringify(job)), {
                 persistent: true
             });
@@ -486,12 +817,82 @@ class WarmupScheduler {
 
         } catch (error) {
             console.error('❌ EXECUTION ERROR:', error);
-            // 🚨 REVERSE THE COUNT ON ERROR
-            await VolumeEnforcement.reverseScheduledEmail(targetEmail, job.direction);
+            // 🚨 FIX: Use this.volumeEnforcement
+            if (job.volumeInfo) {
+                await this.volumeEnforcement.reverseScheduledEmail(job.volumeInfo.targetEmail, job.direction);
+            }
             await this.redis.removeScheduledJob(jobKey);
         }
     }
 
+    async trackWorkerExecution(email, accountType, success = true) {
+        try {
+            if (success) {
+                // Email was successfully processed by worker
+                console.log(`📊 Worker confirmed execution for ${email}`);
+                // Volume was already incremented when queued, so no need to increment again
+            } else {
+                // Worker failed to process - reverse the count
+                await this.volumeEnforcement.reverseScheduledEmail(email, accountType);
+                console.log(`🔄 Reversed volume count for failed worker job: ${email}`);
+            }
+        } catch (error) {
+            console.error(`❌ Error tracking worker execution:`, error);
+        }
+    }
+
+    async getActiveWarmupAccounts() {
+        console.log('🔍 Retrieving ACTIVE warmup accounts from DATABASE...');
+
+        const [googleAccounts, smtpAccounts, microsoftAccounts] = await Promise.all([
+            GoogleUser.findAll({ where: { warmupStatus: 'active', is_connected: true } }),
+            SmtpAccount.findAll({ where: { warmupStatus: 'active', is_connected: true } }),
+            MicrosoftUser.findAll({ where: { warmupStatus: 'active', is_connected: true } })
+        ]);
+
+        const allAccounts = [...googleAccounts, ...smtpAccounts, ...microsoftAccounts];
+
+        console.log(`📊 DATABASE ACTIVE ACCOUNTS:`);
+        console.log(`   Google: ${googleAccounts.length}`);
+        console.log(`   SMTP: ${smtpAccounts.length}`);
+        console.log(`   Microsoft: ${microsoftAccounts.length}`);
+
+        const verifiedAccounts = [];
+        for (const account of allAccounts) {
+            if (account && account.email) {
+                console.log(`   ✅ ${account.email} (${account.provider || 'smtp'})`);
+                verifiedAccounts.push(account);
+            }
+        }
+
+        console.log(`✅ FINAL VERIFIED ACCOUNTS: ${verifiedAccounts.length}`);
+        return verifiedAccounts;
+    }
+
+    async getActivePoolAccounts() {
+        try {
+            const poolAccounts = await EmailPool.findAll({
+                where: { isActive: true }
+            });
+
+            console.log(`🏊 Active pool accounts: ${poolAccounts.length}`);
+
+            for (const pool of poolAccounts) {
+                try {
+                    // 🚨 FIX: Use this.volumeEnforcement
+                    const poolSummary = await this.volumeEnforcement.getDailySummary(pool.email, 'pool');
+                    console.log(`   ${pool.email} (${pool.providerType}) - ${poolSummary.sentToday}/${poolSummary.volumeLimit} sent today (${poolSummary.remaining} remaining)`);
+                } catch (error) {
+                    console.log(`   ${pool.email} (${pool.providerType}) - Error getting volume status: ${error.message}`);
+                }
+            }
+
+            return poolAccounts;
+        } catch (error) {
+            console.error('❌ Error getting active pool accounts:', error);
+            return [];
+        }
+    }
     // 🚨 SAFE APPROACH: Volume-aware job recovery
     async recoverScheduledJobs(channel) {
         // 🚨 DON'T RECOVER IF WE ALREADY DID IT
@@ -552,7 +953,6 @@ class WarmupScheduler {
         this.recoveryCompleted = true;
     }
 
-    // 🚨 SAFE: Check if job can be recovered without volume conflicts
     async canRecoverJob(jobData) {
         try {
             let targetEmail, targetType;
@@ -564,11 +964,11 @@ class WarmupScheduler {
                 targetEmail = jobData.pairs[0].senderEmail;
                 targetType = 'pool';
             } else {
-                return false; // Invalid job data
+                return false;
             }
 
-            // 🚨 CHECK CURRENT VOLUME STATUS (not future/predicted)
-            const currentSummary = await VolumeEnforcement.getDailySummary(targetEmail, targetType);
+            // 🚨 FIX: Use this.volumeEnforcement
+            const currentSummary = await this.volumeEnforcement.getDailySummary(targetEmail, targetType);
 
             if (!currentSummary.canSendMore) {
                 console.log(`   💥 VOLUME LIMIT: ${targetEmail} at ${currentSummary.sentToday}/${currentSummary.volumeLimit}`);
@@ -576,14 +976,12 @@ class WarmupScheduler {
             }
 
             return true;
-
         } catch (error) {
             console.error(`❌ Error checking job recovery:`, error);
-            return false; // Be safe - don't recover on error
+            return false;
         }
     }
 
-    // 🚨 SAFE: Execute recovered job with final volume check
     async executeRecoveredJob(jobKey, jobData, channel) {
         try {
             console.log(`🎯 EXECUTING RECOVERED JOB: ${this.getJobDescription(jobData)}`);
@@ -597,8 +995,8 @@ class WarmupScheduler {
                 targetType = 'pool';
             }
 
-            // 🚨 FINAL VOLUME CHECK RIGHT BEFORE EXECUTION
-            const canExecute = await VolumeEnforcement.canAccountSendEmail(targetEmail, targetType);
+            // 🚨 FIX: Use this.volumeEnforcement
+            const canExecute = await this.volumeEnforcement.canAccountSendEmail(targetEmail, targetType);
 
             if (!canExecute) {
                 console.log(`   💥 EXECUTION BLOCKED: ${targetEmail} hit volume limit`);
@@ -606,10 +1004,9 @@ class WarmupScheduler {
                 return;
             }
 
-            // 🚨 RESERVE SLOT ONLY WHEN ACTUALLY EXECUTING
-            await VolumeEnforcement.incrementSentCount(targetEmail, 1, targetType);
+            // 🚨 FIX: Use this.volumeEnforcement
+            await this.volumeEnforcement.incrementSentCount(targetEmail, 1, targetType);
 
-            // Send to queue for processing
             await channel.sendToQueue('warmup_jobs', Buffer.from(JSON.stringify(jobData)), {
                 persistent: true
             });
@@ -623,21 +1020,12 @@ class WarmupScheduler {
         }
     }
 
-    // 🚨 FIXED: Bidirectional ratio enforcement - PRESERVE TOTAL COUNT
-    enforceBidirectionalRatios(outboundEmails, inboundEmails, warmupAccount, actualReplyRate = null) {
+    enforceBidirectionalRatios(outboundEmails, inboundEmails, warmupAccount) {
         const warmupDay = warmupAccount.warmupDayCount || 0;
         const totalAvailable = outboundEmails.length + inboundEmails.length;
 
-        console.log(`   📊 CURRENT COUNTS: Outbound: ${outboundEmails.length}, Inbound: ${inboundEmails.length}, Total: ${totalAvailable}`);
-
-        const configuredReplyRate = warmupAccount.replyRate || 0.15;
-        const effectiveReplyRate = actualReplyRate !== null ? actualReplyRate : configuredReplyRate;
-
-        console.log(`   📨 REPLY RATE: Configured: ${(configuredReplyRate * 100).toFixed(1)}%, Effective: ${(effectiveReplyRate * 100).toFixed(1)}%`);
-
         let targetOutboundRatio, targetInboundRatio;
 
-        // Define ratios (same as before)
         if (warmupDay === 0) {
             targetOutboundRatio = 0.7;
             targetInboundRatio = 0.3;
@@ -652,14 +1040,11 @@ class WarmupScheduler {
             targetInboundRatio = 0.6;
         }
 
-        // 🚨 CRITICAL FIX: Calculate target counts while PRESERVING TOTAL
         let targetOutboundCount = Math.round(totalAvailable * targetOutboundRatio);
         let targetInboundCount = Math.round(totalAvailable * targetInboundRatio);
 
-        // 🚨 ENSURE WE USE ALL AVAILABLE EMAILS
         const currentTotal = targetOutboundCount + targetInboundCount;
         if (currentTotal < totalAvailable) {
-            // Distribute remaining emails to maintain ratio
             const remaining = totalAvailable - currentTotal;
             if (targetOutboundRatio >= targetInboundRatio) {
                 targetOutboundCount += remaining;
@@ -668,15 +1053,12 @@ class WarmupScheduler {
             }
         }
 
-        // Ensure we don't exceed available emails
         targetOutboundCount = Math.min(targetOutboundCount, outboundEmails.length);
         targetInboundCount = Math.min(targetInboundCount, inboundEmails.length);
 
-        // Final adjustment to ensure we use maximum possible
         const finalTotal = targetOutboundCount + targetInboundCount;
         if (finalTotal < totalAvailable) {
             const remaining = totalAvailable - finalTotal;
-            // Add remaining to the direction that has more capacity
             if (outboundEmails.length - targetOutboundCount >= remaining) {
                 targetOutboundCount += remaining;
             } else if (inboundEmails.length - targetInboundCount >= remaining) {
@@ -685,15 +1067,31 @@ class WarmupScheduler {
         }
 
         console.log(`   ⚖️  FINAL RATIOS: Day ${warmupDay}`);
-        console.log(`      ├── Outbound: ${targetOutboundCount} emails (${Math.round((targetOutboundCount / totalAvailable) * 100)}%)`);
-        console.log(`      └── Inbound: ${targetInboundCount} emails (${Math.round((targetInboundCount / totalAvailable) * 100)}%)`);
-        console.log(`      📨 Reply Rate Impact: ${(effectiveReplyRate * 100).toFixed(1)}%`);
+        console.log(`      ├── Outbound: ${targetOutboundCount} emails`);
+        console.log(`      └── Inbound: ${targetInboundCount} emails`);
         console.log(`      📊 TOTAL PRESERVED: ${targetOutboundCount + targetInboundCount}/${totalAvailable}`);
 
         const finalOutbound = outboundEmails.slice(0, targetOutboundCount);
         const finalInbound = inboundEmails.slice(0, targetInboundCount);
 
-        return { finalOutbound, finalInbound, replyRateUsed: effectiveReplyRate };
+        return { finalOutbound, finalInbound };
+    }
+
+    async filterOutRecentlyIncrementalAccounts(accountsWithCapacity) {
+        const recentlyScheduled = await this.getRecentlyIncrementallyScheduledAccounts();
+        const filteredAccounts = [];
+
+        for (const account of accountsWithCapacity) {
+            const wasRecentlyIncremental = recentlyScheduled.has(account.email);
+            if (wasRecentlyIncremental) {
+                console.log(`   ⏩ ${account.email} - Skipped (recently incremental)`);
+            } else {
+                filteredAccounts.push(account);
+                console.log(`   ✅ ${account.email} - Available for global scheduling`);
+            }
+        }
+
+        return filteredAccounts;
     }
 
     async getActualReplyRate(warmupEmail, daysToCheck = 3) {
@@ -730,39 +1128,8 @@ class WarmupScheduler {
         }
     }
 
-    // 🚨 Cleanup scheduled jobs for account
-    async cleanupScheduledJobsForAccount(email) {
-        try {
-            console.log(`🧹 Cleaning up scheduled jobs for: ${email}`);
-            let removedCount = 0;
 
-            // Clean up Redis scheduled jobs
-            const storedJobs = await this.redis.getAllScheduledJobs();
-            for (const [jobKey, jobData] of Object.entries(storedJobs)) {
-                if (jobData.warmupAccount === email) {
-                    await this.redis.removeScheduledJob(jobKey);
-                    removedCount++;
-                    console.log(`   🗑️ Removed scheduled job: ${jobKey}`);
-                }
-            }
 
-            // Clean up in-memory scheduled jobs
-            for (const [jobKey, timeoutId] of this.scheduledJobs) {
-                if (jobKey.includes(email)) {
-                    clearTimeout(timeoutId);
-                    this.scheduledJobs.delete(jobKey);
-                    removedCount++;
-                    console.log(`   🗑️ Cancelled in-memory job: ${jobKey}`);
-                }
-            }
-
-            console.log(`✅ Cleanup complete: Removed ${removedCount} jobs for ${email}`);
-            return removedCount;
-        } catch (error) {
-            console.error(`❌ Error cleaning up jobs for ${email}:`, error);
-            return 0;
-        }
-    }
 
     // 🚨 Get active warmup accounts
     async getActiveWarmupAccounts() {
@@ -806,7 +1173,7 @@ class WarmupScheduler {
             // Get volume status for each pool account using getDailySummary
             for (const pool of poolAccounts) {
                 try {
-                    const poolSummary = await VolumeEnforcement.getDailySummary(pool.email, 'pool');
+                    const poolSummary = await this.volumeEnforcement.getDailySummary(pool.email, 'pool');
                     console.log(`   ${pool.email} (${pool.providerType}) - ${poolSummary.sentToday}/${poolSummary.volumeLimit} sent today (${poolSummary.remaining} remaining)`);
                 } catch (error) {
                     console.log(`   ${pool.email} (${pool.providerType}) - Error getting volume status: ${error.message}`);
@@ -884,101 +1251,10 @@ class WarmupScheduler {
         return 'unknown';
     }
 
-    // 🚨 FIXED: Enhanced volume synchronization
-    async syncVolumeWithDatabase() {
-        try {
-            console.log('🔄 Syncing volume counts with database...');
 
-            const activeAccounts = await this.getActiveWarmupAccounts();
-            const activePools = await this.getActivePoolAccounts();
 
-            let syncedCount = 0;
 
-            // Sync warmup accounts
-            for (const account of activeAccounts) {
-                const summary = await VolumeEnforcement.getDailySummary(account.email, 'warmup');
-                console.log(`   📊 ${account.email}: ${summary.sentToday}/${summary.volumeLimit} (${summary.percentage}%)`);
-                syncedCount++;
-            }
 
-            // Sync pool accounts
-            for (const pool of activePools) {
-                const summary = await VolumeEnforcement.getDailySummary(pool.email, 'pool');
-                console.log(`   🏊 ${pool.email}: ${summary.sentToday}/${summary.volumeLimit} (${summary.percentage}%)`);
-                syncedCount++;
-            }
-
-            console.log(`✅ Volume sync completed: ${syncedCount} accounts synchronized`);
-
-        } catch (error) {
-            console.error('❌ Volume sync error:', error);
-        }
-    }
-
-    // 🚨 FIXED: Enhanced job recovery with volume validation
-    async recoverScheduledJobs(channel) {
-        // 🚨 DON'T RECOVER IF WE ALREADY DID IT
-        if (this.recoveryCompleted) {
-            console.log('⏩ Skipping recovery - already completed');
-            return;
-        }
-
-        // 🚨 SYNC VOLUME FIRST
-        await this.syncVolumeWithDatabase();
-
-        const storedJobs = await this.redis.getAllScheduledJobs();
-        const now = new Date();
-        let recoveredCount = 0;
-        let skippedDueToVolume = 0;
-        let removedCount = 0;
-
-        console.log(`🔍 Checking ${Object.keys(storedJobs).length} stored jobs for recovery...`);
-
-        for (const [jobKey, jobData] of Object.entries(storedJobs)) {
-            const scheduledTime = new Date(jobData.scheduledTime);
-
-            // 🚨 ENHANCED: Only recover jobs scheduled AFTER server startup
-            const scheduledAfterStartup = jobData.scheduledAfter ?
-                new Date(jobData.scheduledAfter) > this.serverStartTime :
-                scheduledTime > this.serverStartTime;
-
-            // Only recover future jobs that were scheduled after this server instance started
-            if (scheduledTime > now && scheduledAfterStartup) {
-                const timeUntilExecution = scheduledTime.getTime() - now.getTime();
-
-                if (timeUntilExecution > 0) {
-                    // 🚨 ENHANCED VOLUME CHECK: Validate with current database state
-                    const canRecover = await this.canRecoverJobWithVolumeCheck(jobData);
-
-                    if (!canRecover) {
-                        console.log(`   🚫 SKIPPING RECOVERY - Volume limit reached: ${this.getJobDescription(jobData)}`);
-                        await this.redis.removeScheduledJob(jobKey);
-                        skippedDueToVolume++;
-                        continue;
-                    }
-
-                    // 🚨 DO NOT INCREMENT COUNTS DURING RECOVERY - wait for actual execution
-                    const timeoutId = setTimeout(async () => {
-                        await this.executeRecoveredJob(jobKey, jobData, channel);
-                    }, timeUntilExecution);
-
-                    this.scheduledJobs.set(jobKey, timeoutId);
-                    recoveredCount++;
-                    console.log(`   ✅ Recovered: ${this.getJobDescription(jobData)} (in ${Math.round(timeUntilExecution / 60000)}min)`);
-                }
-            } else {
-                // Remove expired or pre-startup jobs
-                await this.redis.removeScheduledJob(jobKey);
-                removedCount++;
-                console.log(`   🗑️ Removed expired/pre-startup job: ${jobKey}`);
-            }
-        }
-
-        console.log(`📊 Recovery Complete: ${recoveredCount} recovered, ${skippedDueToVolume} skipped (volume limits), ${removedCount} removed`);
-        this.recoveryCompleted = true;
-    }
-
-    // 🚨 NEW: Enhanced volume check for job recovery
     async canRecoverJobWithVolumeCheck(jobData) {
         try {
             let targetEmail, targetType;
@@ -990,11 +1266,11 @@ class WarmupScheduler {
                 targetEmail = jobData.pairs[0].senderEmail;
                 targetType = 'pool';
             } else {
-                return false; // Invalid job data
+                return false;
             }
 
-            // 🚨 CHECK CURRENT VOLUME STATUS FROM DATABASE
-            const currentSummary = await VolumeEnforcement.getDailySummary(targetEmail, targetType);
+            // 🚨 FIX: Use this.volumeEnforcement
+            const currentSummary = await this.volumeEnforcement.getDailySummary(targetEmail, targetType);
 
             console.log(`   📊 Volume check for ${targetEmail}: ${currentSummary.sentToday}/${currentSummary.volumeLimit} (${targetType})`);
 
@@ -1003,20 +1279,10 @@ class WarmupScheduler {
                 return false;
             }
 
-            // 🚨 ADDITIONAL CHECK: Verify job volume info matches current state
-            if (jobData.volumeInfo) {
-                const volumeChanged = jobData.volumeInfo.scheduledAtVolume !== currentSummary.sentToday;
-                if (volumeChanged) {
-                    console.log(`   ⚠️  Volume changed since scheduling: was ${jobData.volumeInfo.scheduledAtVolume}, now ${currentSummary.sentToday}`);
-                    // Still allow recovery if there's capacity, but log the change
-                }
-            }
-
             return true;
-
         } catch (error) {
             console.error(`❌ Error checking job recovery volume:`, error);
-            return false; // Be safe - don't recover on error
+            return false;
         }
     }
 
@@ -1027,7 +1293,7 @@ class WarmupScheduler {
             const targetType = emailJob.direction === 'WARMUP_TO_POOL' ? 'warmup' : 'pool';
 
             // 🚨 ENHANCED CAPACITY CHECK WITH DATABASE
-            const currentSummary = await VolumeEnforcement.getDailySummary(targetEmail, targetType);
+            const currentSummary = await this.volumeEnforcement.getDailySummary(targetEmail, targetType)
 
             console.log(`   📊 Scheduling check for ${targetEmail}: ${currentSummary.sentToday}/${currentSummary.volumeLimit} (${targetType})`);
 
@@ -1085,10 +1351,10 @@ class WarmupScheduler {
             const { targetEmail, targetType } = job.volumeInfo;
 
             // 🚨 ENHANCED FINAL VOLUME CHECK
-            const currentSummary = await VolumeEnforcement.getDailySummary(targetEmail, targetType);
+            const currentSummary = await this.volumeEnforcement.getDailySummary(targetEmail, targetType);
             console.log(`   📊 Pre-execution volume: ${targetEmail} - ${currentSummary.sentToday}/${currentSummary.volumeLimit}`);
 
-            const canExecute = await VolumeEnforcement.canAccountSendEmail(targetEmail, targetType);
+            const canExecute = await this.volumeEnforcement.canAccountSendEmail(targetEmail, targetType);
 
             if (!canExecute) {
                 console.log(`   💥 EXECUTION BLOCKED: ${targetEmail} hit volume limit (${currentSummary.sentToday}/${currentSummary.volumeLimit})`);
@@ -1097,7 +1363,7 @@ class WarmupScheduler {
             }
 
             // 🚨 RESERVE SLOT ONLY NOW (at execution time)
-            const newCount = await VolumeEnforcement.incrementSentCount(targetEmail, 1, targetType);
+            const newCount = await this.volumeEnforcement.incrementSentCount(targetEmail, 1, targetType);
             console.log(`   📈 Volume incremented: ${targetEmail} - ${newCount}/${currentSummary.volumeLimit}`);
 
             // Send to queue
@@ -1112,7 +1378,7 @@ class WarmupScheduler {
             console.error('❌ EXECUTION ERROR:', error);
             // 🚨 REVERSE THE COUNT ON ERROR
             if (job.volumeInfo) {
-                await VolumeEnforcement.reverseScheduledEmail(job.volumeInfo.targetEmail, job.direction);
+                await this.volumeEnforcement.reverseScheduledEmail(job.volumeInfo.targetEmail, job.direction);
             }
             await this.redis.removeScheduledJob(jobKey);
         }
@@ -1123,7 +1389,7 @@ class WarmupScheduler {
         console.log('🚀 Initializing Bidirectional Warmup Scheduler...');
 
         // 🚨 FIRST: Initialize volume enforcement
-        await VolumeEnforcement.initialize();
+        await this.volumeEnforcement.initialize();
 
         // 🚨 SECOND: Sync volume with database
         await this.syncVolumeWithDatabase();

@@ -11,7 +11,7 @@ const EmailPool = require('../models/EmailPool');
 const { getSenderType } = require('../utils/senderConfig');
 const { sequelize } = require('../config/db');
 
-// Enhanced Rate limiting configuration for bidirectional flow
+
 const RATE_LIMIT_CONFIG = {
     minDelayBetweenEmails: 15 * 60 * 1000,
     maxEmailsPerHour: 8,

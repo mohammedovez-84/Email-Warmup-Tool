@@ -1,13 +1,421 @@
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 const tokenManager = require('../../utils/token-manager');
+const crypto = require('crypto');
+const emailQueue = new Map();
 
-const emailQueue = new Map(); // Track retry counts
+// Single message ID generator
+function generateMessageId(senderEmail) {
+  const domain = senderEmail.split('@')[1] || 'emailwarmup.service';
+  const timestamp = Date.now();
+  const randomString = crypto.randomBytes(8).toString('hex');
+  return `<${timestamp}.${randomString}@${domain}>`;
+}
 
+// Helper functions
+function stripHtml(html) {
+  if (!html) return '';
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<p\s*\/?>/gi, '\n\n')
+    .replace(/<div\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\n\s*\n/g, '\n\n')
+    .trim();
+}
+
+function extractNameFromEmail(email) {
+  if (!email) return "User";
+  const localPart = email.split("@")[0];
+  return localPart.split(/[._-]/).map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
+function isStandardEmailProvider(email) {
+  if (!email) return false;
+  const standardProviders = [
+    'gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com',
+    'yahoo.com', 'ymail.com', 'aol.com', 'icloud.com', 'me.com',
+    'protonmail.com', 'proton.me'
+  ];
+  const domain = email.toLowerCase().split('@')[1];
+  return standardProviders.includes(domain);
+}
+
+// Core email sending functions
+async function sendOutlookWithGraphAPI(senderConfig, emailData) {
+  try {
+    console.log('   🔐 Using Microsoft Graph API for Outlook account...');
+
+    const validTokens = await tokenManager.validateAndRefreshOutlookToken(senderConfig);
+    if (!validTokens || !validTokens.access_token) {
+      throw new Error('Graph API authentication failed - please reauthenticate');
+    }
+
+    const messageId = generateMessageId(senderConfig.email);
+
+    const message = {
+      message: {
+        subject: emailData.subject,
+        body: {
+          contentType: "HTML",
+          content: emailData.html
+        },
+        toRecipients: [{
+          emailAddress: {
+            address: emailData.to
+          }
+        }]
+      },
+      saveToSentItems: "true"
+    };
+
+    console.log(`   📤 Sending email via Graph API with Message-ID: ${messageId}`);
+    const response = await axios.post(
+      'https://graph.microsoft.com/v1.0/me/sendMail',
+      message,
+      {
+        headers: {
+          'Authorization': `Bearer ${validTokens.access_token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'EmailWarmupTool/1.0'
+        },
+        timeout: 30000
+      }
+    );
+
+    console.log(`✅ Email sent successfully via Graph API`);
+
+    if (validTokens !== senderConfig) {
+      await tokenManager.updateTokensInDatabase(senderConfig.email, validTokens);
+    }
+
+    return {
+      success: true,
+      messageId: messageId,
+      usedAuth: 'GraphAPI',
+      deliveredInbox: true,
+      skipImapCheck: true,
+      graphApiResponse: response.status
+    };
+
+  } catch (error) {
+    console.error('❌ Graph API failed:', error.response?.data || error.message);
+    const errorMessage = error.response?.data?.error?.message || error.message;
+    const requiresReauth = errorMessage.includes('InvalidAuthenticationToken') ||
+      errorMessage.includes('AuthenticationFailed') ||
+      errorMessage.includes('token') ||
+      error.response?.status === 401;
+
+    if (requiresReauth) {
+      console.log('   🔐 Graph API requires reauthentication');
+      await markAccountForReauth(senderConfig.email);
+    }
+
+    return {
+      success: false,
+      error: `Graph API failed: ${errorMessage}`,
+      requiresReauth: requiresReauth,
+      graphApiError: true
+    };
+  }
+}
+
+async function sendGmailWithSMTP(senderConfig, emailData) {
+  try {
+    console.log('   📧 Using Gmail SMTP with App Password...');
+
+    if (!senderConfig.smtpPass && !senderConfig.appPassword) {
+      throw new Error('Gmail account requires App Password for SMTP');
+    }
+
+    const transporterConfig = {
+      host: 'smtp.gmail.com',
+      port: 587,
+      secure: false,
+      requireTLS: true,
+      auth: {
+        user: senderConfig.email,
+        pass: senderConfig.smtpPass || senderConfig.appPassword
+      },
+      connectionTimeout: 30000,
+      greetingTimeout: 15000,
+      socketTimeout: 30000,
+      tls: { rejectUnauthorized: false },
+      dnsTimeout: 10000,
+      logger: false,
+      debug: false
+    };
+
+    const transporter = nodemailer.createTransport(transporterConfig);
+    await transporter.verify();
+    console.log('   ✅ Gmail SMTP connection verified');
+
+    const messageId = generateMessageId(senderConfig.email);
+    const mailOptions = {
+      from: `"${senderConfig.name || extractNameFromEmail(senderConfig.email)}" <${senderConfig.email}>`,
+      to: emailData.to,
+      subject: emailData.subject,
+      html: emailData.html,
+      text: stripHtml(emailData.html),
+      messageId: messageId,
+      headers: {
+        'X-Mailer': 'EmailWarmupService',
+        'X-Auto-Response-Suppress': 'OOF, AutoReply',
+        'X-Priority': '3',
+        'Importance': 'Normal',
+        'Precedence': 'bulk',
+        'Date': new Date().toUTCString()
+      }
+    };
+
+    if (emailData.inReplyTo) {
+      mailOptions.inReplyTo = emailData.inReplyTo;
+      mailOptions.references = emailData.references || [emailData.inReplyTo];
+    }
+
+    console.log('   📤 Sending email via Gmail SMTP...');
+    const startTime = Date.now();
+    const result = await transporter.sendMail(mailOptions);
+    const deliveryTime = Date.now() - startTime;
+
+    console.log(`✅ Gmail email sent successfully: ${result.messageId}`);
+    console.log(`   📧 Response: ${result.response}`);
+    console.log(`   ⏱️  Delivery time: ${deliveryTime}ms`);
+
+    return {
+      success: true,
+      messageId: result.messageId || messageId,
+      response: result.response,
+      deliveryTime: deliveryTime,
+      usedAuth: 'GmailAppPassword',
+      subject: emailData.subject
+    };
+
+  } catch (error) {
+    console.error('❌ Gmail SMTP failed:', error.message);
+    return {
+      success: false,
+      error: `Gmail SMTP failed: ${error.message}`,
+      requiresAppPassword: error.message.includes('Authentication failed')
+    };
+  }
+}
+
+async function sendWithCustomSMTP(senderConfig, emailData) {
+  try {
+    console.log('   🔧 Using custom SMTP configuration...');
+
+    if (!senderConfig.smtpHost || !senderConfig.smtpPort) {
+      throw new Error('Custom SMTP requires host and port configuration');
+    }
+    if (!senderConfig.smtpPass && !senderConfig.smtpPassword) {
+      throw new Error('Custom SMTP requires password');
+    }
+
+    const transporterConfig = {
+      host: senderConfig.smtpHost,
+      port: senderConfig.smtpPort,
+      secure: senderConfig.smtpSecure || false,
+      auth: {
+        user: senderConfig.smtpUser || senderConfig.email,
+        pass: senderConfig.smtpPass || senderConfig.smtpPassword
+      },
+      connectionTimeout: 30000,
+      greetingTimeout: 15000,
+      socketTimeout: 30000,
+      tls: { rejectUnauthorized: false },
+      dnsTimeout: 10000,
+      logger: false,
+      debug: false
+    };
+
+    if (senderConfig.smtpHost === 'smtp.office365.com') {
+      transporterConfig.requireTLS = true;
+    }
+
+    const transporter = nodemailer.createTransport(transporterConfig);
+    await transporter.verify();
+    console.log('   ✅ Custom SMTP connection verified');
+
+    const messageId = generateMessageId(senderConfig.email);
+    const mailOptions = {
+      from: `"${senderConfig.name || extractNameFromEmail(senderConfig.email)}" <${senderConfig.email}>`,
+      to: emailData.to,
+      subject: emailData.subject,
+      html: emailData.html,
+      text: stripHtml(emailData.html),
+      messageId: messageId,
+      headers: {
+        'X-Mailer': 'EmailWarmupService',
+        'X-Auto-Response-Suppress': 'OOF, AutoReply',
+        'X-Priority': '3',
+        'Importance': 'Normal',
+        'Precedence': 'bulk',
+        'Date': new Date().toUTCString()
+      }
+    };
+
+    if (emailData.inReplyTo) {
+      mailOptions.inReplyTo = emailData.inReplyTo;
+      mailOptions.references = emailData.references || [emailData.inReplyTo];
+    }
+
+    console.log('   📤 Sending email via custom SMTP...');
+    const startTime = Date.now();
+    const result = await transporter.sendMail(mailOptions);
+    const deliveryTime = Date.now() - startTime;
+
+    console.log(`✅ Custom SMTP email sent successfully: ${result.messageId}`);
+    console.log(`   📧 Response: ${result.response}`);
+    console.log(`   ⏱️  Delivery time: ${deliveryTime}ms`);
+
+    return {
+      success: true,
+      messageId: result.messageId || messageId,
+      response: result.response,
+      deliveryTime: deliveryTime,
+      usedAuth: 'CustomSMTP',
+      subject: emailData.subject
+    };
+
+  } catch (error) {
+    console.error('❌ Custom SMTP failed:', error.message);
+
+    const isCustomDomain = !isStandardEmailProvider(senderConfig.email);
+    if (isCustomDomain) {
+      console.log('   🔄 Attempting domain discovery for custom domain...');
+      return await handleCustomDomainWithRetry(senderConfig, emailData);
+    }
+
+    return {
+      success: false,
+      error: `Custom SMTP failed: ${error.message}`,
+      requiresManualConfig: true
+    };
+  }
+}
+
+async function handleCustomDomainWithRetry(senderConfig, emailData) {
+  const domain = senderConfig.email.split('@')[1];
+  console.log(`   🔧 Testing configurations for domain: ${domain}`);
+
+  const configsToTry = [
+    { host: `mail.${domain}`, port: 587, secure: false, requireTLS: true, description: `mail.${domain}:587 (STARTTLS)` },
+    { host: `mail.${domain}`, port: 465, secure: true, description: `mail.${domain}:465 (SSL)` },
+    { host: domain, port: 587, secure: false, requireTLS: true, description: `${domain}:587 (STARTTLS)` },
+    { host: domain, port: 465, secure: true, description: `${domain}:465 (SSL)` },
+    { host: `smtp.${domain}`, port: 587, secure: false, requireTLS: true, description: `smtp.${domain}:587 (STARTTLS)` },
+    { host: `smtp.${domain}`, port: 465, secure: true, description: `smtp.${domain}:465 (SSL)` },
+    { host: `mail.${domain}`, port: 25, secure: false, description: `mail.${domain}:25 (Standard)` }
+  ];
+
+  for (const config of configsToTry) {
+    console.log(`   🔄 Trying: ${config.description}`);
+    try {
+      const testConfig = {
+        ...config,
+        auth: {
+          user: senderConfig.smtpUser || senderConfig.email,
+          pass: senderConfig.smtpPass || senderConfig.smtpPassword
+        },
+        connectionTimeout: 15000,
+        greetingTimeout: 10000,
+        socketTimeout: 15000,
+        tls: { rejectUnauthorized: false }
+      };
+
+      const transporter = nodemailer.createTransport(testConfig);
+      await transporter.verify();
+      console.log(`   ✅ Connection successful: ${config.description}`);
+
+      const messageId = generateMessageId(senderConfig.email);
+      const mailOptions = {
+        from: `"${senderConfig.name || extractNameFromEmail(senderConfig.email)}" <${senderConfig.email}>`,
+        to: emailData.to,
+        subject: emailData.subject,
+        html: emailData.html,
+        text: stripHtml(emailData.html),
+        messageId: messageId
+      };
+
+      const result = await transporter.sendMail(mailOptions);
+      console.log(`✅ Email sent via ${config.description}`);
+
+      return {
+        success: true,
+        messageId: result.messageId,
+        response: result.response,
+        usedConfig: config.description
+      };
+
+    } catch (error) {
+      console.log(`   ❌ Failed: ${config.description} - ${error.message}`);
+      continue;
+    }
+  }
+
+  console.error(`   💡 All SMTP configurations failed for ${domain}`);
+  return {
+    success: false,
+    error: `All SMTP configurations failed for ${domain}. Check hosting SMTP settings.`,
+    requiresManualConfig: true
+  };
+}
+
+// Main email sending function
+async function sendEmail(senderConfig, emailData) {
+  try {
+    const isOutlookPersonal = senderConfig.email.endsWith('@outlook.com') ||
+      senderConfig.email.endsWith('@hotmail.com') ||
+      senderConfig.email.endsWith('@live.com');
+
+    const isMicrosoftOrganizational = senderConfig.providerType === 'MICROSOFT_ORGANIZATIONAL' ||
+      senderConfig.type === 'microsoft_organizational';
+
+    if (isOutlookPersonal || isMicrosoftOrganizational) {
+      console.log('   🔐 FORCING Graph API for Microsoft account');
+      senderConfig.useGraphApi = true;
+      senderConfig.forceSMTP = false;
+
+      const graphResult = await sendOutlookWithGraphAPI(senderConfig, emailData);
+      if (!graphResult.success && graphResult.requiresReauth) {
+        console.log(`   🔐 Graph API requires reauthentication for ${senderConfig.email}`);
+        await markAccountForReauth(senderConfig.email);
+      }
+      return graphResult;
+    }
+
+    const isGmail = senderConfig.email.endsWith('@gmail.com') ||
+      senderConfig.email.endsWith('@googlemail.com') ||
+      senderConfig.providerType === 'GMAIL';
+
+    if (isGmail) {
+      console.log('   📧 Using Gmail SMTP with App Password');
+      return await sendGmailWithSMTP(senderConfig, emailData);
+    }
+
+    console.log('   🔧 Using custom SMTP configuration');
+    return await sendWithCustomSMTP(senderConfig, emailData);
+
+  } catch (error) {
+    console.error('❌ Email sending failed:', error.message);
+    return {
+      success: false,
+      error: error.message,
+      errorCode: error.code,
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+// Retry mechanism
 async function sendEmailWithRetry(senderConfig, emailData, maxRetries = 3) {
   const emailKey = `${senderConfig.email}:${emailData.to}:${emailData.subject}`;
 
-  // Initialize retry count
   if (!emailQueue.has(emailKey)) {
     emailQueue.set(emailKey, { retries: 0, lastAttempt: Date.now() });
   }
@@ -16,23 +424,18 @@ async function sendEmailWithRetry(senderConfig, emailData, maxRetries = 3) {
 
   try {
     console.log(`📧 Attempt ${queueItem.retries + 1}/${maxRetries} for ${senderConfig.email}`);
-
     const result = await sendEmail(senderConfig, emailData);
 
     if (result.success) {
-      // Success - remove from queue
       emailQueue.delete(emailKey);
       return result;
     } else {
-      // Failure - increment retry count
       queueItem.retries++;
       queueItem.lastAttempt = Date.now();
 
       if (queueItem.retries >= maxRetries) {
         console.log(`❌ MAX RETRIES REACHED for ${senderConfig.email} → ${emailData.to}`);
-        console.log(`   🗑️ Removing from queue after ${maxRetries} failed attempts`);
         emailQueue.delete(emailKey);
-
         return {
           success: false,
           error: `Failed after ${maxRetries} attempts: ${result.error}`,
@@ -51,15 +454,12 @@ async function sendEmailWithRetry(senderConfig, emailData, maxRetries = 3) {
       }
     }
   } catch (error) {
-    // Unhandled exception - increment retry count
     queueItem.retries++;
     queueItem.lastAttempt = Date.now();
 
     if (queueItem.retries >= maxRetries) {
       console.log(`❌ MAX RETRIES REACHED due to exception for ${senderConfig.email}`);
-      console.log(`   🗑️ Removing from queue after ${maxRetries} failed attempts`);
       emailQueue.delete(emailKey);
-
       return {
         success: false,
         error: `Failed after ${maxRetries} attempts with exception: ${error.message}`,
@@ -79,506 +479,32 @@ async function sendEmailWithRetry(senderConfig, emailData, maxRetries = 3) {
   }
 }
 
-async function sendEmail(senderConfig, emailData) {
+// Account management
+async function markAccountForReauth(email) {
   try {
-    const isOutlookPersonal = senderConfig.email.endsWith('@outlook.com') ||
-      senderConfig.email.endsWith('@hotmail.com') ||
-      senderConfig.email.endsWith('@live.com');
+    console.log(`🔐 Marking account for reauthentication: ${email}`);
+    const MicrosoftUser = require('../../models/MicrosoftUser');
+    const EmailPool = require('../../models/EmailPool');
 
-    // 🚨 CRITICAL: FORCE GRAPH API FOR OUTLOOK PERSONAL ACCOUNTS
-    if (isOutlookPersonal) {
-      console.log('   🔐 FORCING Graph API for Outlook personal account');
-
-      // 🚨 ENSURE GRAPH API IS USED
-      senderConfig.useGraphApi = true;
-      senderConfig.forceSMTP = false;
-
-      return await sendOutlookWithGraphAPI(senderConfig, emailData);
-    }
-
-    // Check if we should use Graph API for other Outlook accounts
-    if (senderConfig.useGraphApi && senderConfig.accessToken) {
-      console.log('   🔐 Using Microsoft Graph API for Outlook account');
-      return await sendOutlookWithGraphAPI(senderConfig, emailData);
-    }
-
-    // 🔥 CRITICAL FIX: Check for Microsoft organizational accounts FIRST
-    if (senderConfig.type === 'microsoft_organizational' ||
-      senderConfig.providerType === 'MICROSOFT_ORGANIZATIONAL') {
-      console.log(`   🔧 FORCING Office 365 for Microsoft organizational account: ${senderConfig.email}`);
-      console.log(`   🔧 Using configured SMTP: ${senderConfig.smtpHost}:${senderConfig.smtpPort}`);
-      return await sendOutlookWithOAuth2(senderConfig, emailData);
-    }
-
-
-    // 🔥 Only do domain discovery for actual custom SMTP accounts
-    const isCustomDomain = !isStandardEmailProvider(senderConfig.email);
-    const hasCustomSmtpConfig = !senderConfig.smtpHost || !senderConfig.smtpPort;
-
-    if (isCustomDomain && hasCustomSmtpConfig) {
-      const domain = senderConfig.email.split('@')[1];
-      console.log(`   🔧 Handling custom domain with discovery: ${domain}`);
-      return await handleCustomDomainWithRetry(senderConfig, emailData);
-    }
-
-    // Use existing SMTP configuration for all other accounts
-    const isOutlookOAuth2 = (senderConfig.smtpHost === 'smtp.office365.com' ||
-      senderConfig.smtpHost === 'smtp-mail.outlook.com') &&
-      senderConfig.accessToken &&
-      senderConfig.useOAuth2;
-
-    if (isOutlookOAuth2) {
-      console.log(`   🔑 Using OAuth2 for Outlook account: ${senderConfig.email}`);
-      return await sendOutlookWithOAuth2(senderConfig, emailData);
-    }
-
-    // Default SMTP flow
-    let transporterConfig = await buildTransporterConfig(senderConfig);
-    const transporter = nodemailer.createTransport(transporterConfig);
-
-
-    // Verify connection
-    console.log('   🔄 Verifying SMTP connection...');
-    await transporter.verify();
-    console.log('   ✅ SMTP connection verified');
-
-    const mailOptions = buildMailOptions(senderConfig, emailData);
-
-    console.log('   📤 Sending email...');
-    const startTime = Date.now();
-    const result = await transporter.sendMail(mailOptions);
-    const endTime = Date.now();
-
-    console.log(`✅ Email sent successfully: ${result.messageId}`);
-    console.log(`   📧 Response: ${result.response}`);
-    console.log(`   ⏱️  Delivery time: ${endTime - startTime}ms`);
-
-    return {
-      success: true,
-      messageId: result.messageId,
-      response: result.response,
-      deliveryTime: endTime - startTime
-    };
-
-  } catch (error) {
-    console.error('❌ Email sending failed:', error.message);
-
-    return {
-      success: false,
-      error: error.message,
-      errorCode: error.code,
-      timestamp: new Date().toISOString()
-    };
-  }
-}
-
-async function sendOutlookWithGraphAPI(senderConfig, emailData) {
-  try {
-    console.log('   🔐 Using Microsoft Graph API for Outlook account...');
-
-    // 🚨 CRITICAL FIX: Get fresh account data with proper validation
-    const freshAccount = await tokenManager.getFreshAccountData(senderConfig.email);
-
-    if (!freshAccount.access_token) {
-      throw new Error('No access token available for Graph API');
-    }
-
-    // 🚨 VALIDATE TOKEN FORMAT FOR PERSONAL ACCOUNTS
-    const isOutlookPersonal = senderConfig.email.endsWith('@outlook.com') ||
-      senderConfig.email.endsWith('@hotmail.com') ||
-      senderConfig.email.endsWith('@live.com');
-
-    if (isOutlookPersonal) {
-      console.log(`   🔐 Outlook personal account detected: ${senderConfig.email}`);
-
-      // 🚨 CHECK IF TOKEN IS MALFORMED (no dots = invalid)
-      if (!freshAccount.access_token.includes('.')) {
-        console.log(`   ❌ MALFORMED TOKEN: Access token has no dots - needs refresh`);
-
-        // Attempt to refresh the token
-        const refreshed = await tokenManager.refreshOutlookToken(senderConfig);
-        if (refreshed && refreshed.access_token) {
-          freshAccount.access_token = refreshed.access_token;
-          console.log(`   ✅ Token refreshed successfully`);
-        } else {
-          throw new Error('Invalid token format for Outlook personal account - needs re-authentication');
-        }
-      } else {
-        console.log(`   ✅ Token format appears valid`);
-      }
-    }
-
-    const message = {
-      message: {
-        subject: emailData.subject,
-        body: {
-          contentType: "HTML",
-          content: emailData.html
-        },
-        toRecipients: [
-          {
-            emailAddress: {
-              address: emailData.to
-            }
-          }
-        ]
-      },
-      saveToSentItems: "true"
-    };
-
-    console.log('   📤 Sending email via Graph API...');
-    const startTime = Date.now();
-
-    // 🚨 ADD BETTER ERROR HANDLING FOR GRAPH API CALLS
-    const response = await axios.post(
-      'https://graph.microsoft.com/v1.0/me/sendMail',
-      message,
-      {
-        headers: {
-          'Authorization': `Bearer ${freshAccount.access_token}`,
-          'Content-Type': 'application/json',
-          'User-Agent': 'EmailWarmupTool/1.0'
-        },
-        timeout: 30000,
-        validateStatus: function (status) {
-          return status < 500; // Resolve only if status code < 500
-        }
-      }
+    let updated = await MicrosoftUser.update(
+      { needs_reauth: true, reauth_requested_at: new Date() },
+      { where: { email } }
     );
-    const endTime = Date.now();
 
-    // 🚨 CHECK RESPONSE STATUS
-    if (response.status >= 400) {
-      const errorData = response.data;
-      console.error(`❌ Graph API returned error: ${response.status}`, errorData);
-
-      if (response.status === 401) {
-        throw new Error(`Authentication failed: ${errorData.error?.message || 'Invalid token'}`);
-      } else if (response.status === 403) {
-        throw new Error(`Permission denied: ${errorData.error?.message || 'Insufficient permissions'}`);
-      } else {
-        throw new Error(`Graph API error: ${errorData.error?.message || response.statusText}`);
-      }
+    if (updated[0] === 0) {
+      await EmailPool.update(
+        { needsReauth: true, reauthRequestedAt: new Date() },
+        { where: { email } }
+      );
     }
 
-    console.log(`✅ Email sent successfully via Graph API`);
-    console.log(`   ⏱️  Delivery time: ${endTime - startTime}ms`);
-
-    // 🚨 GENERATE PROPER MESSAGE ID FOR TRACKING
-    const graphMessageId = `graph-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    return {
-      success: true,
-      messageId: graphMessageId,
-      usedAuth: 'GraphAPI',
-      deliveryTime: endTime - startTime,
-      deliveredInbox: true,
-      skipImapCheck: true,
-      graphApiResponse: response.status
-    };
-
+    console.log(`✅ Account marked for reauthentication: ${email}`);
   } catch (error) {
-    console.error('❌ Graph API failed:', error.response?.data || error.message);
-
-    // 🚨 BETTER ERROR CLASSIFICATION
-    const errorMessage = error.response?.data?.error?.message || error.message;
-    const errorCode = error.response?.data?.error?.code;
-
-    console.log(`   🔍 Error details:`, {
-      code: errorCode,
-      message: errorMessage,
-      status: error.response?.status
-    });
-
-    // 🚨 DETERMINE IF REAUTH IS NEEDED
-    const requiresReauth = errorMessage.includes('InvalidAuthenticationToken') ||
-      errorMessage.includes('AuthenticationFailed') ||
-      errorMessage.includes('token') ||
-      errorCode === 'InvalidAuthenticationToken' ||
-      error.response?.status === 401;
-
-    // 🚨 PERSONAL ACCOUNTS: NEVER FALL BACK TO SMTP
-    const isPersonalAccount = senderConfig.email.endsWith('@outlook.com') ||
-      senderConfig.email.endsWith('@hotmail.com') ||
-      senderConfig.email.endsWith('@live.com');
-
-    if (isPersonalAccount) {
-      console.log('   💡 Outlook personal account requires working Graph API - SMTP will not work');
-      return {
-        success: false,
-        error: `Graph API failed: ${errorMessage}`,
-        requiresReauth: requiresReauth,
-        graphApiError: true,
-        personalAccount: true
-      };
-    }
-
-    // 🚨 ORGANIZATIONAL ACCOUNTS: CAN FALL BACK TO SMTP
-    if (!isPersonalAccount && senderConfig.providerType !== 'OUTLOOK_PERSONAL') {
-      console.log('   🔄 Falling back to SMTP for organizational account...');
-      return await sendOutlookWithOAuth2(senderConfig, emailData);
-    } else {
-      return {
-        success: false,
-        error: `Graph API failed: ${errorMessage}`,
-        requiresReauth: requiresReauth,
-        graphApiError: true
-      };
-    }
+    console.error(`❌ Error marking account for reauth: ${error.message}`);
   }
 }
 
-async function sendOutlookWithOAuth2(senderConfig, emailData) {
-  try {
-    console.log('   🔐 Using OAuth2 with token validation...');
-
-    // Get fresh account data first
-    const freshAccount = await tokenManager.getFreshAccountData(senderConfig.email);
-
-    if (!freshAccount.isActive) {
-      throw new Error('Account is inactive');
-    }
-
-    // Update senderConfig with fresh data - handle field name differences
-    senderConfig.access_token = freshAccount.access_token;
-    senderConfig.refresh_token = freshAccount.refresh_token;
-    senderConfig.token_expires_at = freshAccount.token_expires_at || freshAccount.expires_at;
-
-    console.log('   🔍 Current token state:', {
-      hasAccessToken: !!senderConfig.access_token,
-      hasRefreshToken: !!senderConfig.refresh_token,
-      tokenExpiresAt: senderConfig.token_expires_at ? new Date(Number(senderConfig.token_expires_at)).toISOString() : 'NOT SET',
-      source: freshAccount.source
-    });
-
-    // Check if token needs refresh
-    if (tokenManager.isTokenExpired(senderConfig)) {
-      console.log('   ⚠️  Token expired or about to expire, refreshing...');
-
-      const newTokens = await tokenManager.refreshOutlookToken(senderConfig);
-
-      // Update database with correct table mapping
-      await tokenManager.updateTokensInDatabase(senderConfig.email, newTokens);
-
-      // Update senderConfig
-      senderConfig.access_token = newTokens.access_token;
-      senderConfig.refresh_token = newTokens.refresh_token;
-      senderConfig.token_expires_at = newTokens.token_expires_at;
-
-      console.log('   ✅ Using refreshed token');
-    }
-
-    // Continue with email sending...
-    // ... rest of your existing code
-
-  } catch (error) {
-    console.error('❌ OAuth2 failed:', error.message);
-    return {
-      success: false,
-      error: error.message,
-      requiresReauth: error.message.includes('No refresh token') ||
-        error.message.includes('inactive') ||
-        error.message.includes('not found')
-    };
-  }
-}
-function isStandardEmailProvider(email) {
-  if (!email) return false;
-
-  const standardProviders = [
-    'gmail.com', 'googlemail.com',
-    'outlook.com', 'hotmail.com', 'live.com',
-    'yahoo.com', 'ymail.com',
-    'aol.com', 'icloud.com', 'me.com',
-    'protonmail.com', 'proton.me'
-  ];
-
-  const domain = email.toLowerCase().split('@')[1];
-  return standardProviders.includes(domain);
-}
-
-async function handleCustomDomainWithRetry(senderConfig, emailData) {
-  const domain = senderConfig.email.split('@')[1];
-  console.log(`   🔧 Testing configurations for domain: ${domain}`);
-
-  const configsToTry = [
-    // Standard mail subdomain
-    {
-      host: `mail.${domain}`,
-      port: 587,
-      secure: false,
-      requireTLS: true,
-      description: `mail.${domain}:587 (STARTTLS)`
-    },
-    {
-      host: `mail.${domain}`,
-      port: 465,
-      secure: true,
-      description: `mail.${domain}:465 (SSL)`
-    },
-    // Direct domain
-    {
-      host: domain,
-      port: 587,
-      secure: false,
-      requireTLS: true,
-      description: `${domain}:587 (STARTTLS)`
-    },
-    {
-      host: domain,
-      port: 465,
-      secure: true,
-      description: `${domain}:465 (SSL)`
-    },
-    // SMTP subdomain
-    {
-      host: `smtp.${domain}`,
-      port: 587,
-      secure: false,
-      requireTLS: true,
-      description: `smtp.${domain}:587 (STARTTLS)`
-    },
-    {
-      host: `smtp.${domain}`,
-      port: 465,
-      secure: true,
-      description: `smtp.${domain}:465 (SSL)`
-    },
-    // Port 25 fallback
-    {
-      host: `mail.${domain}`,
-      port: 25,
-      secure: false,
-      description: `mail.${domain}:25 (Standard)`
-    }
-  ];
-
-  for (const config of configsToTry) {
-    console.log(`   🔄 Trying: ${config.description}`);
-
-    try {
-      const testConfig = {
-        ...config,
-        auth: {
-          user: senderConfig.smtpUser || senderConfig.email,
-          pass: senderConfig.smtpPass
-        },
-        connectionTimeout: 15000,
-        greetingTimeout: 10000,
-        socketTimeout: 15000,
-        tls: {
-          rejectUnauthorized: false
-        }
-      };
-
-      const transporter = nodemailer.createTransport(testConfig);
-      await transporter.verify();
-      console.log(`   ✅ Connection successful: ${config.description}`);
-
-      const mailOptions = buildMailOptions(senderConfig, emailData);
-      const result = await transporter.sendMail(mailOptions);
-
-      console.log(`✅ Email sent via ${config.description}`);
-      return {
-        success: true,
-        messageId: result.messageId,
-        response: result.response,
-        usedConfig: config.description
-      };
-
-    } catch (error) {
-      console.log(`   ❌ Failed: ${config.description} - ${error.message}`);
-      continue;
-    }
-  }
-
-  // If all configurations failed
-  console.error(`   💡 All SMTP configurations failed for ${domain}`);
-  console.error('   🔧 Please check your domain SMTP settings with your hosting provider');
-
-  return {
-    success: false,
-    error: `All SMTP configurations failed for ${domain}. Check hosting SMTP settings.`,
-    requiresManualConfig: true
-  };
-}
-
-function buildTransporterConfig(senderConfig) {
-  let config = {
-    host: senderConfig.smtpHost,
-    port: senderConfig.smtpPort,
-    secure: senderConfig.smtpSecure || false,
-    auth: {
-      user: senderConfig.smtpUser,
-      pass: senderConfig.smtpPass
-    },
-    connectionTimeout: 30000,
-    greetingTimeout: 15000,
-    socketTimeout: 30000,
-    tls: {
-      rejectUnauthorized: false
-    }
-  };
-
-  // Handle different service types
-  if (senderConfig.smtpHost === 'smtp.gmail.com') {
-    config.service = 'gmail';
-  }
-
-  if (senderConfig.smtpHost === 'smtp.office365.com') {
-    config.requireTLS = true;
-  }
-
-  return config;
-}
-
-function buildMailOptions(senderConfig, emailData) {
-  const mailOptions = {
-    from: `"${senderConfig.name}" <${senderConfig.email}>`,
-    to: emailData.to,
-    subject: emailData.subject,
-    html: emailData.html,
-    messageId: `<${generateMessageId()}>`,
-    headers: {
-      'X-Mailer': 'EmailWarmupService',
-      'X-Auto-Response-Suppress': 'OOF, AutoReply',
-      'X-Priority': '3',
-      'Importance': 'Normal',
-      'Date': new Date().toUTCString()
-    }
-  };
-
-  // Add text version
-  if (emailData.html) {
-    mailOptions.text = stripHtml(emailData.html);
-  }
-
-  return mailOptions;
-}
-
-function generateMessageId() {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substr(2, 12);
-  const domain = 'emailwarmup.service';
-  return `${timestamp}.${random}@${domain}`;
-}
-
-function stripHtml(html) {
-  if (!html) return '';
-  return html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<p\s*\/?>/gi, '\n\n')
-    .replace(/<div\s*\/?>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\n\s*\n/g, '\n\n')
-    .trim();
-}
-
-// Queue management functions
+// Queue management
 function getQueueStatus() {
   return {
     totalItems: emailQueue.size,
@@ -600,5 +526,6 @@ module.exports = {
   sendEmailWithRetry,
   sendEmail,
   getQueueStatus,
-  clearQueue
-}; 
+  clearQueue,
+  markAccountForReauth
+};
