@@ -3,15 +3,21 @@ const GoogleUser = require('../../models/GoogleUser');
 const MicrosoftUser = require('../../models/MicrosoftUser');
 const SmtpAccount = require('../../models/smtpAccounts');
 const EmailPool = require('../../models/EmailPool');
+const { sequelize } = require('../../config/db');
 
 class VolumeInitializer {
     constructor() {
         this.initialized = false;
+        this.maxRetries = 5;
+        this.retryDelay = 3000; // 3 seconds
     }
 
     async initializeAllAccounts() {
         try {
             console.log('🚀 INITIALIZING VOLUME ENFORCEMENT FOR ALL ACCOUNTS...');
+
+            // 🚨 CRITICAL: Wait for tables to be created first
+            await this.waitForTables();
 
             // Initialize Google accounts
             const googleAccounts = await GoogleUser.findAll({
@@ -49,12 +55,45 @@ class VolumeInitializer {
                 await this.initializePoolAccount(account);
             }
 
-
             this.initialized = true;
+            console.log('✅ VOLUME INITIALIZATION COMPLETED SUCCESSFULLY');
 
         } catch (error) {
             console.error('❌ VOLUME INITIALIZATION ERROR:', error);
+            throw error; // Re-throw to handle in calling code
         }
+    }
+
+    // 🚨 NEW: Wait for tables to be created
+    async waitForTables() {
+        console.log('⏳ Waiting for database tables to be ready...');
+
+        for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+            try {
+                // Test if tables exist by running a simple query
+                await GoogleUser.findOne({ limit: 1 });
+                await MicrosoftUser.findOne({ limit: 1 });
+                await SmtpAccount.findOne({ limit: 1 });
+                await EmailPool.findOne({ limit: 1 });
+
+                console.log('✅ Database tables are ready');
+                return true;
+
+            } catch (error) {
+                if (attempt < this.maxRetries) {
+                    console.log(`⏳ Tables not ready yet, retrying in ${this.retryDelay / 1000}s... (${attempt}/${this.maxRetries})`);
+                    await this.delay(this.retryDelay);
+                } else {
+                    console.error('❌ Tables never became ready after maximum retries');
+                    throw new Error(`Database tables not ready after ${this.maxRetries} attempts: ${error.message}`);
+                }
+            }
+        }
+    }
+
+    // 🚨 NEW: Utility delay function
+    delay(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     async initializeAccount(account, type) {
@@ -129,7 +168,6 @@ class VolumeInitializer {
 
             if (needsUpdate) {
                 await EmailPool.update(updates, { where: { id: account.id } });
-
             }
 
         } catch (error) {
@@ -185,6 +223,7 @@ class VolumeInitializer {
             console.error('❌ ERROR RESETTING DAILY COUNTS:', error);
         }
     }
+
 }
 
 const volumeInitializer = new VolumeInitializer();

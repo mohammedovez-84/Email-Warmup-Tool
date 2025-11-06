@@ -1,7 +1,4 @@
-
-
-
-
+// config/db.js
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
@@ -12,7 +9,6 @@ const sequelize = new Sequelize(
     {
         host: process.env.DB_HOST,
         port: process.env.DB_PORT || 3306,
-        password: process.env.DB_PASS,
         dialect: 'mysql',
         logging: false,
         define: {
@@ -24,7 +20,6 @@ const sequelize = new Sequelize(
 
 module.exports = {
     sequelize,
-    query: sequelize.query.bind(sequelize), // Optional shorthand
+    query: sequelize.query.bind(sequelize),
     QueryTypes: Sequelize.QueryTypes
 };
-
