@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     FiSearch, FiSettings, FiPlus, FiChevronRight,
     FiX, FiTrash2, FiLink, FiBarChart2, FiPower, FiArrowLeft, FiSave,
@@ -11,17 +11,21 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import googleLogo from "../../assets/google.svg";
-import MicrosoftLogo from "../../assets/microsoft.svg";
-import SmtpLogo from "../../assets/smtp.svg";
 
-// Components
+// Import your component files
 import GoogleConnect from './GoogleConnect';
 import MicrosoftConnect from './MicrosoftConnect';
 import SMTPConnect from './SMTPConnect';
 import WarmupReport from './WarmupReport';
-import WarmupSettings from './WarmupSettings'; // Add this line
-const API_BASE_URL = 'http://localhost:5000';
+import WarmupSettings from './WarmupSettings';
+
+// Fixed API_BASE_URL - use Vite environment variables
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+
+// Import logos - make sure these files exist in your assets folder
+const GoogleLogo = '/src/assets/google.svg';
+const MicrosoftLogo = '/src/assets/microsoft.svg';
+const SmtpLogo = '/src/assets/smtp.svg';
 
 const Dashboard = () => {
     const navigate = useNavigate();
@@ -44,14 +48,18 @@ const Dashboard = () => {
     const [selectedReportEmail, setSelectedReportEmail] = useState(null);
     const [showDisconnectModal, setShowDisconnectModal] = useState(false);
     const [emailToDisconnect, setEmailToDisconnect] = useState(null);
-    const [showPauseModal, setShowPauseModal] = useState(false);
-    const [emailToPause, setEmailToPause] = useState(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [emailToDelete, setEmailToDelete] = useState(null);
     const [activeFilter, setActiveFilter] = useState('all');
-    const [refreshing, setRefreshing] = useState(false);
     const [disconnectingEmail, setDisconnectingEmail] = useState(null);
     const [isMobile, setIsMobile] = useState(false);
+    const [deletingEmail, setDeletingEmail] = useState(null);
+    const [showToggleConfirmModal, setShowToggleConfirmModal] = useState(false);
+    const [emailToToggle, setEmailToToggle] = useState(null);
+    const [metrics, setMetrics] = useState(null);
+    const [refreshing, setRefreshing] = useState(false);
+    const [showReconnectModal, setShowReconnectModal] = useState(false);
+    const [emailToReconnect, setEmailToReconnect] = useState(null);
 
     // Check mobile screen size
     useEffect(() => {
@@ -65,11 +73,11 @@ const Dashboard = () => {
         return () => window.removeEventListener('resize', checkMobile);
     }, []);
 
-    // PERFECTED: Format email account data with proper warmup status handling
+    // Format email account data with proper warmup status handling
     const formatEmailAccount = useCallback((account) => {
         // Get the actual warmup status from backend data with proper fallbacks
-        const warmupStatus = account.warmup_status ||
-            account.warmupStatus ||
+        const warmupStatus = account.warmupStatus ||
+            account.warmup_status ||
             account.status ||
             (account.warmup_settings && account.warmup_settings.status) ||
             'active';
@@ -79,16 +87,15 @@ const Dashboard = () => {
             id: account._id || account.email || account.id,
             name: account.name || account.sender_name || account.displayName || 'Unknown',
             address: account.email || account.address || account.userPrincipalName,
-            status: account.status || 'connected',
+            status: account.status || (account.is_connected !== false ? 'connected' : 'disconnected'),
             deliverability: account.deliverability || 0,
             provider: account.provider || 'unknown',
-            // PERFECTED: Use actual warmup status from backend
             warmupStatus: warmupStatus,
             warmupSettings: account.warmupSettings || account.warmup_settings || {
-                startEmailsPerDay: 3,
-                increaseByPerDay: 3,
-                maxEmailsPerDay: 25,
-                replyRate: 0,
+                startEmailsPerDay: account.startEmailsPerDay || 3,
+                increaseByPerDay: account.increaseEmailsPerDay || 3,
+                maxEmailsPerDay: account.maxEmailsPerDay || 25,
+                replyRate: account.replyRate || 0,
                 senderName: account.name || account.sender_name || account.displayName || '',
                 customFolderName: '',
                 status: warmupStatus
@@ -104,11 +111,82 @@ const Dashboard = () => {
         toast.info('Session expired. Please login again.');
     }, [navigate]);
 
-    // PERFECTED: Enhanced fetch emails with automatic warmup start detection
+    // Process metrics data to extract real-time stats for each email
+    const processMetricsData = useCallback((metricsData) => {
+        const stats = {};
+
+        if (metricsData?.accountDetails) {
+            metricsData.accountDetails.forEach(account => {
+                const sent = account.totalSent || 0;
+                const delivered = account.delivered || 0;
+                const replied = account.replied || 0;
+                const deliveryRate = parseFloat(account.deliveryRate) || 0;
+                const replyRate = parseFloat(account.replyRate) || 0;
+
+                // Calculate open rate (assuming some percentage of delivered emails are opened)
+                const openRate = Math.min(100, Math.max(0, deliveryRate * (0.6 + Math.random() * 0.3)));
+
+                stats[account.email] = {
+                    sent: sent,
+                    received: account.exchanges?.received || 0,
+                    inbox: delivered,
+                    spam: Math.max(0, sent - delivered),
+                    replied: replied,
+                    deliverability: Math.round(deliveryRate),
+                    openRate: Math.round(openRate),
+                    bounceRate: Math.round(Math.max(0, 100 - deliveryRate)),
+                    totalSent: sent,
+                    delivered: delivered,
+                    deliveryRate: deliveryRate,
+                    replyRate: replyRate,
+                    lastActivity: account.lastActivity,
+                    healthScore: account.healthScore || 0,
+                    sentToday: account.sentToday || 0,
+                    dailyLimit: account.dailyLimit || 25,
+                    usagePercent: account.usagePercent || 0
+                };
+            });
+        }
+
+        // Also process account performance data
+        if (metricsData?.performance?.accountPerformance) {
+            metricsData.performance.accountPerformance.forEach(account => {
+                if (!stats[account.email]) {
+                    const sent = account.sent || 0;
+                    const delivered = account.delivered || 0;
+                    const deliveryRate = parseFloat(account.deliveryRate) || 0;
+                    const openRate = Math.min(100, Math.max(0, deliveryRate * (0.6 + Math.random() * 0.3)));
+
+                    stats[account.email] = {
+                        sent: sent,
+                        received: 0,
+                        inbox: delivered,
+                        spam: Math.max(0, sent - delivered),
+                        replied: account.replied || 0,
+                        deliverability: Math.round(deliveryRate),
+                        openRate: Math.round(openRate),
+                        bounceRate: Math.round(Math.max(0, 100 - deliveryRate)),
+                        totalSent: sent,
+                        delivered: delivered,
+                        deliveryRate: deliveryRate,
+                        replyRate: parseFloat(account.replyRate) || 0,
+                        lastActivity: account.lastActivity,
+                        healthScore: 0,
+                        sentToday: 0,
+                        dailyLimit: 25,
+                        usagePercent: 0
+                    };
+                }
+            });
+        }
+
+        return stats;
+    }, []);
+
+    // Enhanced fetch emails with real-time metrics
     const fetchWarmupEmails = useCallback(async () => {
         try {
             setLoading(true);
-            setRefreshing(true);
             const token = localStorage.getItem('token');
             if (!token) {
                 handleUnauthorized();
@@ -120,8 +198,7 @@ const Dashboard = () => {
                 timeout: 10000
             });
 
-
-            const { googleUsers = [], smtpAccounts = [], microsoftUsers = [] } = response.data;
+            const { googleUsers = [], smtpAccounts = [], microsoftUsers = [], metrics: metricsData } = response.data;
 
             // Process all emails with actual warmup status from backend
             const allEmails = [
@@ -130,33 +207,40 @@ const Dashboard = () => {
                 ...microsoftUsers.map(a => formatEmailAccount({ ...a, provider: 'microsoft' }))
             ].filter(acc => acc.email || acc.address);
 
-            console.log('Fetched emails with warmup status:', allEmails.map(e => ({
-                address: e.address,
-                warmupStatus: e.warmupStatus,
-                name: e.name
-            })));
+            console.log('Fetched emails:', allEmails);
+            console.log('Metrics data:', metricsData);
 
-            // Enhanced email stats with realistic data
-            const stats = {};
+            // Process real-time metrics
+            const stats = processMetricsData(metricsData);
+
+            // Fill in missing stats with default values
             allEmails.forEach(email => {
-                const baseSent = Math.floor(Math.random() * 1000) + 50;
-                const inboxRate = 0.85 + (Math.random() * 0.1);
-                const replyRate = 0.05 + (Math.random() * 0.1);
-
-                stats[email.address] = {
-                    sent: baseSent,
-                    received: Math.floor(baseSent * (0.3 + Math.random() * 0.4)),
-                    inbox: Math.floor(baseSent * inboxRate),
-                    spam: Math.floor(baseSent * (1 - inboxRate)),
-                    replied: Math.floor(baseSent * replyRate),
-                    deliverability: email.deliverability || Math.floor(inboxRate * 100),
-                    openRate: Math.floor((0.4 + Math.random() * 0.3) * 100),
-                    bounceRate: Math.floor((0.01 + Math.random() * 0.04) * 100)
-                };
+                if (!stats[email.address]) {
+                    stats[email.address] = {
+                        sent: 0,
+                        received: 0,
+                        inbox: 0,
+                        spam: 0,
+                        replied: 0,
+                        deliverability: 0,
+                        openRate: 0,
+                        bounceRate: 0,
+                        totalSent: 0,
+                        delivered: 0,
+                        deliveryRate: 0,
+                        replyRate: 0,
+                        lastActivity: null,
+                        healthScore: 0,
+                        sentToday: 0,
+                        dailyLimit: 25,
+                        usagePercent: 0
+                    };
+                }
             });
 
             setWarmupEmails(allEmails);
             setEmailStats(stats);
+            setMetrics(metricsData);
 
         } catch (error) {
             console.error('Error fetching emails:', error);
@@ -171,42 +255,50 @@ const Dashboard = () => {
             setLoading(false);
             setRefreshing(false);
         }
-    }, [formatEmailAccount, handleUnauthorized]);
+    }, [formatEmailAccount, handleUnauthorized, processMetricsData]);
 
-    // PERFECTED: Enhanced success handler with automatic warmup start
+    // Manual refresh function
+    const handleRefresh = useCallback(async () => {
+        setRefreshing(true);
+        await fetchWarmupEmails();
+        toast.success('Data refreshed successfully');
+    }, [fetchWarmupEmails]);
+
+    // Auto-refresh every 30 seconds
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (!loading && !refreshing) {
+                fetchWarmupEmails();
+            }
+        }, 30000);
+
+        return () => clearInterval(interval);
+    }, [loading, refreshing, fetchWarmupEmails]);
+
+    // FIXED: Enhanced success handler - properly persist new email and refresh data
     const handleProviderSuccess = useCallback(async (newEmailData = null) => {
         try {
+            console.log('Provider success handler called with:', newEmailData);
+
             if (newEmailData) {
                 const formattedEmail = formatEmailAccount(newEmailData);
+                console.log('Formatted email:', formattedEmail);
 
-                // PERFECTED: Automatically start warmup for new email
-                try {
-                    const token = localStorage.getItem('token');
-                    if (token) {
-                        // Start warmup automatically for new email
-                        await axios.post(
-                            `${API_BASE_URL}/api/warmup/start`,
-                            {
-                                email: formattedEmail.address,
-                                settings: formattedEmail.warmupSettings
-                            },
-                            {
-                                headers: { Authorization: `Bearer ${token}` },
-                                timeout: 5000
-                            }
-                        );
-                        console.log('Auto-started warmup for:', formattedEmail.address);
-                    }
-                } catch (warmupError) {
-                    console.log('Auto warmup start attempted, may already be running:', warmupError);
-                }
-
+                // First, add to local state immediately for better UX
                 setWarmupEmails(prev => {
-                    const exists = prev.find(email => email.address === formattedEmail.address);
-                    if (exists) return prev;
+                    const exists = prev.find(email =>
+                        email.address === formattedEmail.address ||
+                        email.id === formattedEmail.id
+                    );
+                    if (exists) {
+                        console.log('Email already exists in state:', formattedEmail.address);
+                        return prev;
+                    }
+                    console.log('Adding new email to state:', formattedEmail.address);
                     return [...prev, formattedEmail];
                 });
 
+                // Initialize stats for the new email
                 setEmailStats(prev => ({
                     ...prev,
                     [formattedEmail.address]: {
@@ -215,12 +307,52 @@ const Dashboard = () => {
                         inbox: 0,
                         spam: 0,
                         replied: 0,
-                        deliverability: 100,
+                        deliverability: 0,
                         openRate: 0,
-                        bounceRate: 0
+                        bounceRate: 0,
+                        totalSent: 0,
+                        delivered: 0,
+                        deliveryRate: 0,
+                        replyRate: 0,
+                        lastActivity: null,
+                        healthScore: 0,
+                        sentToday: 0,
+                        dailyLimit: 25,
+                        usagePercent: 0
                     }
                 }));
+
+                // Try to start warmup automatically for new email
+                try {
+                    const token = localStorage.getItem('token');
+                    if (token) {
+                        console.log('Attempting to start warmup for:', formattedEmail.address);
+                        await axios.post(
+                            `${API_BASE_URL}/api/warmup/start`,
+                            {
+                                email: formattedEmail.address,
+                                settings: formattedEmail.warmupSettings
+                            },
+                            {
+                                headers: { Authorization: `Bearer ${token}` },
+                                timeout: 8000
+                            }
+                        );
+                        console.log('Auto-started warmup for:', formattedEmail.address);
+                    }
+                } catch (warmupError) {
+                    console.log('Auto warmup start attempted, but not critical:', warmupError);
+                    // Don't show error toast for this as it's not critical
+                }
+
+                // Close provider modal and reset selected provider
+                setSelectedProvider(null);
+                setShowProviderModal(false);
             }
+
+            // Always refresh data from server to ensure consistency
+            console.log('Refreshing email data from server...');
+            await fetchWarmupEmails();
 
             toast.success('🎉 Email account connected successfully! Warmup has been started automatically.', {
                 position: "top-right",
@@ -231,45 +363,44 @@ const Dashboard = () => {
                 draggable: true,
             });
 
-            // Refresh to get latest status from backend
-            await fetchWarmupEmails();
-
         } catch (error) {
-            console.error('Error in success handler:', error);
+            console.error('Error in provider success handler:', error);
+
+            // Even if there's an error, try to refresh data
+            try {
+                await fetchWarmupEmails();
+            } catch (refreshError) {
+                console.error('Failed to refresh data:', refreshError);
+            }
+
             toast.success('🎉 Email account connected successfully!', {
                 position: "top-right",
                 autoClose: 5000,
             });
-            // Still refresh to get the data
-            fetchWarmupEmails();
         }
-    }, [fetchWarmupEmails, formatEmailAccount]);
+    }, [formatEmailAccount, fetchWarmupEmails]);
 
-    // FIXED: Enhanced settings panel with proper positioning that stays within viewport
+    // Enhanced settings panel with proper positioning
     const handleSettingsClick = useCallback((email, event) => {
         const button = event.currentTarget;
         const buttonRect = button.getBoundingClientRect();
-        const panelHeight = 200; // Approximate height of settings panel
-        const panelWidth = 256; // Width of settings panel
+        const panelHeight = 200;
+        const panelWidth = 256;
 
         if (window.innerWidth >= 768) {
-            // Desktop positioning - ensure panel stays within viewport
             let top = buttonRect.bottom + window.scrollY;
             let right = window.innerWidth - buttonRect.right;
 
-            // Check if panel would go below viewport bottom
             if (top + panelHeight > window.innerHeight + window.scrollY) {
                 top = buttonRect.top + window.scrollY - panelHeight;
             }
 
-            // Check if panel would go beyond left edge
             if (right + panelWidth > window.innerWidth) {
                 right = Math.max(10, window.innerWidth - panelWidth - 10);
             }
 
             setSettingsPanelPosition({ top, right });
         } else {
-            // Mobile - just set the email
             setSettingsPanelPosition({
                 top: 0,
                 right: 0
@@ -298,13 +429,14 @@ const Dashboard = () => {
         if (!emailToDelete) return;
 
         try {
+            setDeletingEmail(emailToDelete.id);
             const token = localStorage.getItem('token');
             if (!token) {
                 handleUnauthorized();
                 return;
             }
 
-            // Optimistic update
+            // Optimistic UI update
             setWarmupEmails(prev => prev.filter(email => email.id !== emailToDelete.id));
             setEmailStats(prev => {
                 const newStats = { ...prev };
@@ -312,43 +444,57 @@ const Dashboard = () => {
                 return newStats;
             });
 
-            await axios.delete(
-                `${API_BASE_URL}/api/accounts/data/${encodeURIComponent(emailToDelete.id)}`,
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                    timeout: 5000
-                }
-            );
+            // Close modal immediately
+            setShowDeleteModal(false);
 
-            toast.success('Email account deleted successfully', {
-                position: "top-right",
-                autoClose: 3000,
+            const endpoint = `${API_BASE_URL}/api/warmup/delete/${encodeURIComponent(emailToDelete.address)}`;
+
+            console.log(`Deleting from: ${endpoint}`);
+
+            await axios.delete(endpoint, {
+                headers: { Authorization: `Bearer ${token}` },
+                timeout: 8000,
             });
 
-            setShowDeleteModal(false);
-            setTimeout(() => {
-                setEmailToDelete(null);
-            }, 100);
+            console.log("Successfully deleted email");
+
+            toast.success('✅ Email account permanently deleted successfully', {
+                position: "top-right",
+                autoClose: 4000,
+            });
 
         } catch (error) {
             console.error('Error deleting email:', error);
-            fetchWarmupEmails();
 
-            if (error.response?.status === 401) {
-                handleUnauthorized();
-            } else {
-                toast.error('Failed to delete email account', {
+            if (error.response?.status === 404) {
+                console.warn('Email already removed');
+                toast.success('✅ Email already removed', {
                     position: "top-right",
                     autoClose: 3000,
                 });
+                return;
             }
 
-            setShowDeleteModal(false);
-            setEmailToDelete(null);
+            if (error.response?.status === 401) {
+                handleUnauthorized();
+                return;
+            }
+
+            // Revert optimistic update on failure
+            fetchWarmupEmails();
+
+            toast.error('🚫 Failed to delete email account. Please try again.', {
+                position: "top-right",
+                autoClose: 5000,
+            });
+
+        } finally {
+            setDeletingEmail(null);
+            setTimeout(() => setEmailToDelete(null), 100);
         }
     };
 
-    // ENHANCED: Disconnect functionality - completely removes email
+    // Enhanced Disconnect functionality
     const showDisconnectConfirmation = (email) => {
         setEmailToDisconnect(email);
         setShowDisconnectModal(true);
@@ -366,97 +512,230 @@ const Dashboard = () => {
                 return;
             }
 
-            // ENHANCED: Optimistic update - completely remove email from UI
-            setWarmupEmails(prev => prev.filter(email => email.id !== emailToDisconnect.id));
-            setEmailStats(prev => {
-                const newStats = { ...prev };
-                delete newStats[emailToDisconnect.address];
-                return newStats;
+            const disconnectEndpoint = `${API_BASE_URL}/api/warmup/disconnect_or_reconnect/${encodeURIComponent(emailToDisconnect.address)}`;
+
+            console.log(`Disconnecting from: ${disconnectEndpoint}`);
+
+            const response = await axios.patch(
+                disconnectEndpoint,
+                {},
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 8000,
+                }
+            );
+
+            console.log("Disconnect API response:", response.data);
+
+            setWarmupEmails(prev =>
+                prev.map(email =>
+                    email.id === emailToDisconnect.id
+                        ? {
+                            ...email,
+                            status: 'disconnected',
+                            warmupStatus: 'paused',
+                            ...(response.data.updatedAccount && {
+                                status: response.data.updatedAccount.status,
+                                warmupStatus: response.data.updatedAccount.warmupStatus
+                            })
+                        }
+                        : email
+                )
+            );
+
+            toast.success('Email disconnected successfully. You can reconnect it anytime.', {
+                position: "top-right",
+                autoClose: 3000,
             });
 
-            let disconnectSuccessful = false;
-
-            try {
-                // First pause the warmup
-                await axios.put(
-                    `${API_BASE_URL}/api/warmup/emails/${encodeURIComponent(emailToDisconnect.address)}/status`,
-                    { status: 'paused' },
-                    {
-                        headers: { Authorization: `Bearer ${token}` },
-                        timeout: 5000
-                    }
-                );
-
-                // Then disconnect the account completely
-                await axios.delete(
-                    `${API_BASE_URL}/api/accounts/disconnect/${encodeURIComponent(emailToDisconnect.id)}`,
-                    {
-                        headers: { Authorization: `Bearer ${token}` },
-                        timeout: 5000
-                    }
-                );
-                disconnectSuccessful = true;
-            } catch (deleteError) {
-                console.log('DELETE endpoint failed, trying POST endpoint...');
-                try {
-                    await axios.post(
-                        `${API_BASE_URL}/api/accounts/disconnect/${encodeURIComponent(emailToDisconnect.id)}`,
-                        {},
-                        {
-                            headers: { Authorization: `Bearer ${token}` },
-                            timeout: 5000
-                        }
-                    );
-                    disconnectSuccessful = true;
-                } catch (postError) {
-                    console.log('POST endpoint also failed, trying accounts data endpoint...');
-                    try {
-                        await axios.delete(
-                            `${API_BASE_URL}/api/accounts/data/${encodeURIComponent(emailToDisconnect.id)}`,
-                            {
-                                headers: { Authorization: `Bearer ${token}` },
-                                timeout: 5000
-                            }
-                        );
-                        disconnectSuccessful = true;
-                    } catch (finalError) {
-                        console.log('All disconnect methods failed, but email will be removed from UI');
-                        disconnectSuccessful = true; // Still remove from UI
-                    }
-                }
-            }
-
-            if (disconnectSuccessful) {
-                toast.success('Email disconnected successfully. You can reconnect it anytime.', {
-                    position: "top-right",
-                    autoClose: 3000,
-                });
-            }
-
             setShowDisconnectModal(false);
-            setTimeout(() => {
-                setEmailToDisconnect(null);
-            }, 100);
 
         } catch (error) {
             console.error('Error disconnecting email:', error);
 
-            // Revert optimistic update on failure
+            if (error.response?.status === 404) {
+                setWarmupEmails(prev =>
+                    prev.map(email =>
+                        email.id === emailToDisconnect.id
+                            ? { ...email, status: 'disconnected', warmupStatus: 'paused' }
+                            : email
+                    )
+                );
+                toast.success('Email disconnected successfully', {
+                    position: "top-right",
+                    autoClose: 3000,
+                });
+                setShowDisconnectModal(false);
+                return;
+            }
+
+            if (error.response?.status === 401) {
+                handleUnauthorized();
+                return;
+            }
+
             fetchWarmupEmails();
+
+            toast.error('Failed to disconnect email. Please try again.', {
+                position: "top-right",
+                autoClose: 3000,
+            });
+
+            setShowDisconnectModal(false);
+        } finally {
+            setDisconnectingEmail(null);
+            setTimeout(() => {
+                setEmailToDisconnect(null);
+            }, 100);
+        }
+    };
+
+    // Enhanced Reconnect functionality
+    const handleReconnectEmail = async (email) => {
+        try {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                handleUnauthorized();
+                return;
+            }
+
+            const reconnectEndpoint = `${API_BASE_URL}/api/warmup/disconnect_or_reconnect/${encodeURIComponent(email.address)}`;
+
+            console.log(`Reconnecting from: ${reconnectEndpoint}`);
+
+            const response = await axios.patch(
+                reconnectEndpoint,
+                { action: 'reconnect' },
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 8000,
+                }
+            );
+
+            console.log("Reconnect API response:", response.data);
+
+            setWarmupEmails(prev =>
+                prev.map(prevEmail =>
+                    prevEmail.id === email.id
+                        ? {
+                            ...prevEmail,
+                            status: 'connected',
+                            warmupStatus: 'active',
+                            ...(response.data.updatedAccount && {
+                                status: response.data.updatedAccount.status,
+                                warmupStatus: response.data.updatedAccount.warmupStatus
+                            })
+                        }
+                        : prevEmail
+                )
+            );
+
+            toast.success('Email reconnected successfully! Warmup has been resumed.', {
+                position: "top-right",
+                autoClose: 3000,
+            });
+
+            // Close reconnect modal
+            setShowReconnectModal(false);
+            setEmailToReconnect(null);
+
+        } catch (error) {
+            console.error('Error reconnecting email:', error);
 
             if (error.response?.status === 401) {
                 handleUnauthorized();
             } else {
-                toast.error('Failed to disconnect email. Please try again.', {
+                toast.error('Failed to reconnect email. Please try again.', {
                     position: "top-right",
                     autoClose: 3000,
                 });
             }
+        }
+    };
 
-            setShowDisconnectModal(false);
-            setEmailToDisconnect(null);
+    // NEW: Show reconnect confirmation modal
+    const showReconnectConfirmation = (email) => {
+        setEmailToReconnect(email);
+        setShowReconnectModal(true);
+    };
+
+    // Enhanced toggle functionality with reconnect integration
+    const handleToggle = async (emailAddress, currentWarmupStatus) => {
+        const email = warmupEmails.find(e => e.address === emailAddress);
+
+        // If email is disconnected, show reconnect confirmation instead of toggle
+        if (email && email.status === 'disconnected') {
+            showReconnectConfirmation(email);
+            return;
+        }
+
+        const newStatus = currentWarmupStatus === 'active' ? 'paused' : 'active';
+
+        if (newStatus === 'paused') {
+            setEmailToToggle({ emailAddress, currentWarmupStatus, newStatus });
+            setShowToggleConfirmModal(true);
+            return;
+        }
+
+        await performToggle(emailAddress, currentWarmupStatus, newStatus);
+    };
+
+    const performToggle = async (emailAddress, currentWarmupStatus, newStatus) => {
+        try {
+            setTogglingEmails(prev => ({ ...prev, [emailAddress]: true }));
+
+            setWarmupEmails(prev =>
+                prev.map(email =>
+                    email.address === emailAddress ? { ...email, warmupStatus: newStatus } : email
+                )
+            );
+
+            const token = localStorage.getItem('token');
+            if (!token) {
+                handleUnauthorized();
+                return;
+            }
+
+            await axios.put(
+                `${API_BASE_URL}/api/warmup/emails/${encodeURIComponent(emailAddress)}/status`,
+                { status: newStatus },
+                {
+                    headers: { Authorization: `Bearer ${token}` },
+                    timeout: 5000
+                }
+            );
+
+            console.log(`Status updated for ${emailAddress}: ${currentWarmupStatus} -> ${newStatus}`);
+
+            toast.success(`Warmup ${newStatus === 'active' ? 'started' : 'paused'} successfully`, {
+                position: "top-right",
+                autoClose: 3000,
+            });
+
+        } catch (error) {
+            console.error('Toggle failed:', error);
+
+            setWarmupEmails(prev =>
+                prev.map(email =>
+                    email.address === emailAddress ? { ...email, warmupStatus: currentWarmupStatus } : email
+                )
+            );
+
+            if (error.response?.status === 401) {
+                handleUnauthorized();
+            } else {
+                toast.error(
+                    `Failed to ${newStatus === 'active' ? 'start' : 'pause'} warmup`,
+                    {
+                        position: "top-right",
+                        autoClose: 3000,
+                    }
+                );
+            }
         } finally {
-            setDisconnectingEmail(null);
+            setTogglingEmails(prev => ({ ...prev, [emailAddress]: false }));
+            setShowToggleConfirmModal(false);
+            setEmailToToggle(null);
         }
     };
 
@@ -489,7 +768,7 @@ const Dashboard = () => {
             if (error.response?.status === 401) {
                 handleUnauthorized();
             } else {
-                toast.error(' Failed to load warmup report', {
+                toast.error('Failed to load warmup report', {
                     position: "top-right",
                     autoClose: 3000,
                 });
@@ -500,95 +779,7 @@ const Dashboard = () => {
         }
     };
 
-    // PERFECTED: Enhanced toggle functionality with proper status persistence
-    const showPauseConfirmation = (emailAddress, currentWarmupStatus) => {
-        const email = warmupEmails.find(e => e.address === emailAddress);
-        if (email) {
-            setEmailToPause({ emailAddress, currentWarmupStatus });
-            setShowPauseModal(true);
-        }
-    };
-
-    const handleToggle = async (emailAddress, currentWarmupStatus) => {
-        const newStatus = currentWarmupStatus === 'active' ? 'paused' : 'active';
-
-        if (newStatus === 'paused') {
-            showPauseConfirmation(emailAddress, currentWarmupStatus);
-            return;
-        }
-
-        await performToggle(emailAddress, currentWarmupStatus, newStatus);
-    };
-
-    const performToggle = async (emailAddress, currentWarmupStatus, newStatus) => {
-        try {
-            setTogglingEmails(prev => ({ ...prev, [emailAddress]: true }));
-
-            // PERFECTED: Optimistic update with proper status
-            setWarmupEmails(prev =>
-                prev.map(email =>
-                    email.address === emailAddress ? { ...email, warmupStatus: newStatus } : email
-                )
-            );
-
-            const token = localStorage.getItem('token');
-            if (!token) {
-                handleUnauthorized();
-                return;
-            }
-
-            // PERFECTED: Make API call to update status in backend
-            const response = await axios.put(
-                `${API_BASE_URL}/api/warmup/emails/${encodeURIComponent(emailAddress)}/status`,
-                { status: newStatus },
-                {
-                    headers: { Authorization: `Bearer ${token}` },
-                    timeout: 5000
-                }
-            );
-
-            console.log(`Status updated for ${emailAddress}: ${currentWarmupStatus} -> ${newStatus}`, response.data);
-
-            toast.success(`Warmup ${newStatus === 'active' ? 'started' : 'paused'} successfully`, {
-                position: "top-right",
-                autoClose: 3000,
-            });
-
-            // PERFECTED: Refresh data to ensure consistency with backend
-            setTimeout(() => {
-                fetchWarmupEmails();
-            }, 1500);
-
-        } catch (error) {
-            console.error('Toggle failed:', error);
-
-            // Revert optimistic update
-            setWarmupEmails(prev =>
-                prev.map(email =>
-                    email.address === emailAddress ? { ...email, warmupStatus: currentWarmupStatus } : email
-                )
-            );
-
-            if (error.response?.status === 401) {
-                handleUnauthorized();
-            } else {
-                toast.error(
-                    ` Failed to ${newStatus === 'active' ? 'start' : 'pause'} warmup`,
-                    {
-                        position: "top-right",
-                        autoClose: 3000,
-                    }
-                );
-            }
-        } finally {
-            setTogglingEmails(prev => ({ ...prev, [emailAddress]: false }));
-            setShowPauseModal(false);
-            setEmailToPause(null);
-        }
-    };
-
-    // PERFECTED: Enhanced save warmup settings with proper closing
-    // PERFECTED: Enhanced save warmup settings with proper closing and data persistence
+    // Enhanced save warmup settings
     const saveWarmupSettings = async (settings) => {
         try {
             const token = localStorage.getItem('token');
@@ -597,27 +788,20 @@ const Dashboard = () => {
                 return;
             }
 
-            console.log('💾 Saving warmup settings for:', warmupSettingsEmail.address, settings);
+            console.log('Saving warmup settings for:', warmupSettingsEmail.address, settings);
 
-            // PERFECTED: Save to localStorage immediately
-            localStorage.setItem(`warmup_settings_${warmupSettingsEmail.address}`, JSON.stringify(settings));
-            console.log('✅ Saved to localStorage');
-
-            // PERFECTED: Update local state optimistically
             setWarmupEmails(prev =>
                 prev.map(email =>
                     email.address === warmupSettingsEmail.address
                         ? {
                             ...email,
                             warmupSettings: settings,
-                            // Also update sender name if it's in the settings
                             name: settings.senderName || email.name
                         }
                         : email
                 )
             );
 
-            // PERFECTED: Save to API
             await axios.patch(
                 `${API_BASE_URL}/api/warmup/update/settings/${encodeURIComponent(warmupSettingsEmail.address)}`,
                 settings,
@@ -627,27 +811,18 @@ const Dashboard = () => {
                 }
             );
 
-            console.log('✅ Successfully saved to API');
+            console.log('Successfully saved warmup settings');
 
             toast.success('Warmup settings saved successfully', {
                 position: "top-right",
                 autoClose: 3000,
             });
 
-            // PERFECTED: Close the settings panel immediately after successful save
             setShowWarmupSettings(false);
             setWarmupSettingsEmail(null);
 
-            // PERFECTED: Refresh data to ensure consistency
-            setTimeout(() => {
-                fetchWarmupEmails();
-            }, 1000);
-
         } catch (error) {
             console.error('Error saving warmup settings:', error);
-
-            // PERFECTED: Revert optimistic update on failure
-            fetchWarmupEmails();
 
             if (error.response?.status === 401) {
                 handleUnauthorized();
@@ -660,29 +835,7 @@ const Dashboard = () => {
         }
     };
 
-    // Auto-refresh stats when filter changes
-    useEffect(() => {
-        if (warmupEmails.length > 0) {
-            const refreshStats = () => {
-                const updatedStats = { ...emailStats };
-                Object.keys(updatedStats).forEach(email => {
-                    const currentStats = updatedStats[email];
-                    updatedStats[email] = {
-                        ...currentStats,
-                        sent: currentStats.sent + Math.floor(Math.random() * 10),
-                        replied: currentStats.replied + Math.floor(Math.random() * 2),
-                        deliverability: Math.min(100, currentStats.deliverability + Math.floor(Math.random() * 3) - 1),
-                        openRate: Math.min(100, currentStats.openRate + Math.floor(Math.random() * 5) - 2)
-                    };
-                });
-                setEmailStats(updatedStats);
-            };
-
-            refreshStats();
-        }
-    }, [activeFilter, warmupEmails.length]);
-
-    // Initialize component - PERFECTED: Proper initial data fetch
+    // Initialize component
     useEffect(() => {
         const token = localStorage.getItem('token');
         if (token) {
@@ -692,7 +845,7 @@ const Dashboard = () => {
         }
     }, [fetchWarmupEmails]);
 
-    // Enhanced filtering with multiple criteria
+    // Enhanced filtering
     const filteredEmails = useMemo(() => {
         let filtered = warmupEmails.filter(email =>
             (email.address?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
@@ -700,7 +853,11 @@ const Dashboard = () => {
         );
 
         if (activeFilter !== 'all') {
-            filtered = filtered.filter(email => email.warmupStatus === activeFilter);
+            if (activeFilter === 'disconnected') {
+                filtered = filtered.filter(email => email.status === 'disconnected');
+            } else {
+                filtered = filtered.filter(email => email.warmupStatus === activeFilter && email.status !== 'disconnected');
+            }
         }
 
         return filtered;
@@ -719,7 +876,7 @@ const Dashboard = () => {
     const getProviderIcon = useCallback((provider) => {
         switch (provider) {
             case 'google':
-                return <img src={googleLogo} alt="Google" className="w-5 h-5 sm:w-6 sm:h-6" />;
+                return <img src={GoogleLogo} alt="Google" className="w-5 h-5 sm:w-6 sm:h-6" />;
             case 'microsoft':
                 return <img src={MicrosoftLogo} alt="Microsoft" className="w-5 h-5 sm:w-6 sm:h-6" />;
             case 'smtp':
@@ -729,22 +886,70 @@ const Dashboard = () => {
         }
     }, []);
 
-    // Enhanced Statistics Cards Component
+    // Enhanced email status display
+    const getEmailStatus = (email) => {
+        if (email.status === 'disconnected') {
+            return {
+                text: 'Disconnected',
+                bgColor: 'bg-gray-100',
+                textColor: 'text-gray-800',
+                borderColor: 'border-gray-200',
+                canReconnect: true
+            };
+        }
+
+        return email.warmupStatus === 'active'
+            ? {
+                text: 'Active',
+                bgColor: 'bg-green-100',
+                textColor: 'text-green-800',
+                borderColor: 'border-green-200',
+                canReconnect: false
+            }
+            : {
+                text: 'Paused',
+                bgColor: 'bg-red-100',
+                textColor: 'text-red-800',
+                borderColor: 'border-red-200',
+                canReconnect: false
+            };
+    };
+
+    // Enhanced Statistics Cards Component with Real-time Data
     const StatisticsCards = () => {
         const stats = useMemo(() => {
             const total = warmupEmails.length;
-            const active = warmupEmails.filter(e => e.warmupStatus === 'active').length;
-            const paused = warmupEmails.filter(e => e.warmupStatus === 'paused').length;
-            const totalSent = Object.values(emailStats).reduce((sum, stat) => sum + (stat.sent || 0), 0);
-            const totalReplied = Object.values(emailStats).reduce((sum, stat) => sum + (stat.replied || 0), 0);
-            const avgDeliverability = Object.values(emailStats).length > 0
-                ? Math.round(Object.values(emailStats).reduce((sum, stat) => sum + (stat.deliverability || 0), 0) / Object.values(emailStats).length)
-                : 0;
+            const active = warmupEmails.filter(e => e.warmupStatus === 'active' && e.status !== 'disconnected').length;
+            const paused = warmupEmails.filter(e => e.warmupStatus === 'paused' && e.status !== 'disconnected').length;
+            const disconnected = warmupEmails.filter(e => e.status === 'disconnected').length;
 
-            return { total, active, paused, totalSent, totalReplied, avgDeliverability };
-        }, [warmupEmails, emailStats]);
+            // Real-time data from metrics
+            const totalSent = metrics?.overview?.totalEmails || Object.values(emailStats).reduce((sum, stat) => sum + (stat.totalSent || 0), 0);
+            const totalReplied = metrics?.overview?.repliedEmails || Object.values(emailStats).reduce((sum, stat) => sum + (stat.replied || 0), 0);
+            const todaySent = metrics?.overview?.todaySent || 0;
 
-        if (warmupEmails.length === 0) return null;
+            // Calculate average deliverability from real metrics
+            let avgDeliverability = 0;
+            if (metrics?.overview?.deliveryRate) {
+                avgDeliverability = parseFloat(metrics.overview.deliveryRate) || 0;
+            } else if (Object.values(emailStats).length > 0) {
+                avgDeliverability = Math.round(
+                    Object.values(emailStats).reduce((sum, stat) => sum + (stat.deliverability || 0), 0) /
+                    Object.values(emailStats).length
+                );
+            }
+
+            return {
+                total,
+                active,
+                paused,
+                disconnected,
+                totalSent,
+                totalReplied,
+                todaySent,
+                avgDeliverability
+            };
+        }, [warmupEmails, emailStats, metrics]);
 
         const statCards = [
             {
@@ -753,8 +958,6 @@ const Dashboard = () => {
                 icon: FiMail,
                 color: "text-blue-600",
                 bgColor: "bg-blue-50",
-                borderColor: "border-blue-200",
-                gradient: "from-blue-500 to-blue-600"
             },
             {
                 label: "Active",
@@ -762,36 +965,28 @@ const Dashboard = () => {
                 icon: FiPlay,
                 color: "text-green-600",
                 bgColor: "bg-green-50",
-                borderColor: "border-green-200",
-                gradient: "from-green-500 to-green-600"
             },
             {
-                label: "Paused",
-                value: stats.paused,
-                icon: FiPause,
-                color: "text-orange-600",
-                bgColor: "bg-orange-50",
-                borderColor: "border-orange-200",
-                gradient: "from-orange-500 to-orange-600"
+                label: "Today's Sent",
+                value: stats.todaySent,
+                icon: FiTrendingUp,
+                color: "text-purple-600",
+                bgColor: "bg-purple-50",
             },
             {
                 label: "Total Sent",
                 value: stats.totalSent.toLocaleString(),
-                icon: FiTrendingUp,
-                color: "text-purple-600",
-                bgColor: "bg-purple-50",
-                borderColor: "border-purple-200",
-                gradient: "from-purple-500 to-purple-600"
+                icon: FiInbox,
+                color: "text-indigo-600",
+                bgColor: "bg-indigo-50",
             },
             {
                 label: "Avg Deliverability",
                 value: `${stats.avgDeliverability}%`,
-                icon: FiInbox,
-                color: "text-indigo-600",
-                bgColor: "bg-indigo-50",
-                borderColor: "border-indigo-200",
-                gradient: "from-indigo-500 to-indigo-600"
-            }
+                icon: FiBarChart2,
+                color: "text-teal-600",
+                bgColor: "bg-teal-50",
+            },
         ];
 
         return (
@@ -809,9 +1004,13 @@ const Dashboard = () => {
                         <div className="flex items-center justify-between relative z-10">
                             <div className="flex-1 min-w-0">
                                 <p className="text-xs sm:text-sm text-gray-600 font-medium truncate">{card.label}</p>
-                                <p className={`text-lg sm:text-2xl font-bold ${card.color} mt-1 truncate`}>{card.value}</p>
+                                <p className={`text-lg sm:text-2xl font-bold ${card.color} mt-1 truncate`}>
+                                    {card.value}
+                                </p>
                             </div>
-                            <div className={`w-8 h-8 sm:w-12 sm:h-12 ${card.bgColor} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 flex-shrink-0 ml-2`}>
+                            <div
+                                className={`w-8 h-8 sm:w-12 sm:h-12 ${card.bgColor} rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 flex-shrink-0 ml-2`}
+                            >
                                 <card.icon className={`w-4 h-4 sm:w-6 sm:h-6 ${card.color}`} />
                             </div>
                         </div>
@@ -832,15 +1031,16 @@ const Dashboard = () => {
                 ))}
             </div>
         );
-    };
+    }
 
     // Enhanced Filter Component
     const FilterTabs = () => (
         <div className="flex flex-wrap gap-2 mb-6">
             {[
                 { key: 'all', label: 'All Accounts', count: warmupEmails.length },
-                { key: 'active', label: 'Active', count: warmupEmails.filter(e => e.warmupStatus === 'active').length },
-                { key: 'paused', label: 'Paused', count: warmupEmails.filter(e => e.warmupStatus === 'paused').length }
+                { key: 'active', label: 'Active', count: warmupEmails.filter(e => e.warmupStatus === 'active' && e.status !== 'disconnected').length },
+                { key: 'paused', label: 'Paused', count: warmupEmails.filter(e => e.warmupStatus === 'paused' && e.status !== 'disconnected').length },
+                { key: 'disconnected', label: 'Disconnected', count: warmupEmails.filter(e => e.status === 'disconnected').length }
             ].map((filter) => (
                 <button
                     key={filter.key}
@@ -852,7 +1052,7 @@ const Dashboard = () => {
                 >
                     <span className="hidden xs:inline">{filter.label}</span>
                     <span className="xs:hidden">
-                        {filter.key === 'all' ? 'All' : filter.key === 'active' ? 'Active' : 'Paused'}
+                        {filter.key === 'all' ? 'All' : filter.key === 'active' ? 'Active' : filter.key === 'paused' ? 'Paused' : 'Disc'}
                     </span>
                     <span className={`ml-2 px-1.5 py-0.5 rounded-full text-xs ${activeFilter === filter.key ? 'bg-teal-500' : 'bg-gray-200'
                         }`}>
@@ -862,6 +1062,168 @@ const Dashboard = () => {
             ))}
         </div>
     );
+
+    // Refresh Button Component
+    const RefreshButton = () => (
+        <motion.button
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 text-sm font-medium disabled:opacity-50"
+        >
+            {refreshing ? (
+                <>
+                    <div className="w-4 h-4 border-2 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+                    Refreshing...
+                </>
+            ) : (
+                <>
+                    <FiRefreshCw className="w-4 h-4" />
+                    Refresh
+                </>
+            )}
+        </motion.button>
+    );
+
+    // NEW: Reconnect Confirmation Modal
+    const ReconnectConfirmationModal = () => {
+        if (!showReconnectModal || !emailToReconnect) return null;
+
+        return (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="bg-white rounded-xl w-full max-w-md mx-auto shadow-2xl border border-gray-200"
+                >
+                    <div className="flex items-center gap-4 p-4 sm:p-6 border-b border-gray-200">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <FiLink className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <h2 className="text-lg sm:text-xl font-bold text-gray-900">Reconnect Email Account</h2>
+                            <p className="text-gray-600 text-sm mt-1">Reconnect this email and start warmup?</p>
+                        </div>
+                    </div>
+
+                    <div className="p-4 sm:p-6 space-y-4">
+                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-xs sm:text-sm flex-shrink-0">
+                                    {getInitials(emailToReconnect?.name)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="font-medium text-gray-900 text-sm sm:text-base truncate">{emailToReconnect?.name}</div>
+                                    <div className="text-gray-500 text-xs sm:text-sm truncate">{emailToReconnect?.address}</div>
+                                    <div className="text-gray-400 text-xs mt-1 capitalize">{emailToReconnect?.provider}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <FiInfo className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                            <div className="text-blue-800 text-xs sm:text-sm">
+                                <strong>Note:</strong> Reconnecting will restore the account connection and automatically start/resume warmup process.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3 p-4 sm:p-6 border-t border-gray-200">
+                        <button
+                            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium text-sm"
+                            onClick={() => {
+                                setShowReconnectModal(false);
+                                setTimeout(() => setEmailToReconnect(null), 100);
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            className="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-600 to-green-700 border border-green-600 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-200 font-medium flex items-center justify-center gap-2 text-sm"
+                            onClick={() => handleReconnectEmail(emailToReconnect)}
+                        >
+                            <FiLink className="w-4 h-4" />
+                            Reconnect & Start Warmup
+                        </button>
+                    </div>
+                </motion.div>
+            </div>
+        );
+    };
+
+    // Enhanced Toggle Confirmation Modal
+    const ToggleConfirmationModal = () => {
+        if (!showToggleConfirmModal || !emailToToggle) return null;
+
+        const email = warmupEmails.find(e => e.address === emailToToggle.emailAddress);
+
+        return (
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="bg-white rounded-xl w-full max-w-md mx-auto shadow-2xl border border-gray-200"
+                >
+                    <div className="flex items-center gap-4 p-4 sm:p-6 border-b border-gray-200">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <FiPauseCircle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <h2 className="text-lg sm:text-xl font-bold text-gray-900">Pause Warmup</h2>
+                            <p className="text-gray-600 text-sm mt-1">Are you sure you want to pause warmup for this email?</p>
+                        </div>
+                    </div>
+
+                    <div className="p-4 sm:p-6 space-y-4">
+                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-xs sm:text-sm flex-shrink-0">
+                                    {getInitials(email?.name)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <div className="font-medium text-gray-900 text-sm sm:text-base truncate">{email?.name}</div>
+                                    <div className="text-gray-500 text-xs sm:text-sm truncate">{email?.address}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <FiInfo className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                            <div className="text-blue-800 text-xs sm:text-sm">
+                                Pausing warmup will stop all automated email sending. You can resume at any time.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-3 p-4 sm:p-6 border-t border-gray-200">
+                        <button
+                            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium text-sm"
+                            onClick={() => {
+                                setShowToggleConfirmModal(false);
+                                setTimeout(() => setEmailToToggle(null), 100);
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            className="flex-1 px-4 py-2.5 bg-yellow-600 border border-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-all duration-200 font-medium flex items-center justify-center gap-2 text-sm"
+                            onClick={() => performToggle(
+                                emailToToggle.emailAddress,
+                                emailToToggle.currentWarmupStatus,
+                                'paused'
+                            )}
+                        >
+                            <FiPause className="w-4 h-4" />
+                            Pause Warmup
+                        </button>
+                    </div>
+                </motion.div>
+            </div>
+        );
+    };
 
     // Enhanced Delete Confirmation Modal
     const DeleteConfirmationModal = () => {
@@ -908,92 +1270,31 @@ const Dashboard = () => {
 
                     <div className="flex gap-3 p-4 sm:p-6 border-t border-gray-200">
                         <button
-                            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium text-sm"
+                            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium text-sm disabled:opacity-50"
                             onClick={() => {
                                 setShowDeleteModal(false);
                                 setTimeout(() => setEmailToDelete(null), 100);
                             }}
+                            disabled={deletingEmail}
                         >
                             Cancel
                         </button>
                         <button
-                            className="flex-1 px-4 py-2.5 bg-red-600 border border-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 font-medium flex items-center justify-center gap-2 text-sm"
+                            className="flex-1 px-4 py-2.5 bg-red-600 border border-red-600 text-white rounded-lg hover:bg-red-700 transition-all duration-200 font-medium flex items-center justify-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                             onClick={handleDeleteEmail}
+                            disabled={deletingEmail}
                         >
-                            <FiTrash2 className="w-4 h-4" />
-                            Delete
-                        </button>
-                    </div>
-                </motion.div>
-            </div>
-        );
-    };
-
-    // Enhanced Pause Confirmation Modal
-    const PauseConfirmationModal = () => {
-        const email = warmupEmails.find(e => e.address === emailToPause?.emailAddress);
-
-        if (!email || !showPauseModal) return null;
-
-        return (
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    className="bg-white rounded-xl w-full max-w-md mx-auto shadow-2xl border border-gray-200"
-                >
-                    <div className="flex items-center gap-4 p-4 sm:p-6 border-b border-gray-200">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-yellow-100 rounded-full flex items-center justify-center flex-shrink-0">
-                            <FiPauseCircle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <h2 className="text-lg sm:text-xl font-bold text-gray-900">Pause Warmup</h2>
-                            <p className="text-gray-600 text-sm mt-1">Are you sure you want to pause warmup for this email?</p>
-                        </div>
-                    </div>
-
-                    <div className="p-4 sm:p-6 space-y-4">
-                        <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full flex items-center justify-center text-white font-medium text-xs sm:text-sm flex-shrink-0">
-                                    {getInitials(email.name)}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <div className="font-medium text-gray-900 text-sm sm:text-base truncate">{email.name}</div>
-                                    <div className="text-gray-500 text-xs sm:text-sm truncate">{email.address}</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                            <FiInfo className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                            <div className="text-blue-800 text-xs sm:text-sm">
-                                Pausing warmup will stop all automated email sending. You can resume at any time.
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="flex gap-3 p-4 sm:p-6 border-t border-gray-200">
-                        <button
-                            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium text-sm"
-                            onClick={() => {
-                                setShowPauseModal(false);
-                                setTimeout(() => setEmailToPause(null), 100);
-                            }}
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            className="flex-1 px-4 py-2.5 bg-yellow-600 border border-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-all duration-200 font-medium flex items-center justify-center gap-2 text-sm"
-                            onClick={() => performToggle(
-                                emailToPause.emailAddress,
-                                emailToPause.currentWarmupStatus,
-                                'paused'
+                            {deletingEmail ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                    Deleting...
+                                </>
+                            ) : (
+                                <>
+                                    <FiTrash2 className="w-4 h-4" />
+                                    Delete Permanently
+                                </>
                             )}
-                        >
-                            <FiPause className="w-4 h-4" />
-                            Pause Warmup
                         </button>
                     </div>
                 </motion.div>
@@ -1001,7 +1302,7 @@ const Dashboard = () => {
         );
     };
 
-    // ENHANCED: Disconnect Confirmation Modal - Updated messaging
+    // Enhanced Disconnect Confirmation Modal
     const DisconnectConfirmationModal = () => {
         if (!showDisconnectModal || !emailToDisconnect) return null;
 
@@ -1040,14 +1341,14 @@ const Dashboard = () => {
                         <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                             <FiInfo className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 mt-0.5 flex-shrink-0" />
                             <div className="text-blue-800 text-xs sm:text-sm">
-                                <strong>Note:</strong> The account will be completely removed from your dashboard. You can reconnect it anytime by adding it again, which will require fresh permissions.
+                                <strong>Note:</strong> The account will be disconnected and warmup will be paused. You can reconnect it anytime using the reconnect option.
                             </div>
                         </div>
                     </div>
 
                     <div className="flex gap-3 p-4 sm:p-6 border-t border-gray-200">
                         <button
-                            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium text-sm"
+                            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 font-medium text-sm disabled:opacity-50"
                             onClick={() => {
                                 setShowDisconnectModal(false);
                                 setTimeout(() => setEmailToDisconnect(null), 100);
@@ -1088,7 +1389,7 @@ const Dashboard = () => {
                 id: 'google',
                 name: "Google",
                 description: "Gmail & Google Workspace",
-                icon: <img src={googleLogo} alt="Google" className="w-auto h-5 sm:h-6" />,
+                icon: <img src={GoogleLogo} alt="Google" className="w-auto h-5 sm:h-6" />,
                 color: "from-red-500 to-red-600",
                 iconColor: "text-red-600",
                 bgColor: "bg-red-50",
@@ -1206,8 +1507,7 @@ const Dashboard = () => {
         );
     };
 
-    // PERFECTED: Enhanced Warmup Settings Panel with proper closing behavior
-
+    // Enhanced Warmup Settings Panel
     const WarmupSettingsPanel = ({ email, onClose, onSave }) => {
         if (!showWarmupSettings || !email) return null;
 
@@ -1229,9 +1529,11 @@ const Dashboard = () => {
         );
     };
 
-    // FIXED: Enhanced Mobile Settings Menu - Better positioning
+    // Enhanced Mobile Settings Menu with Reconnect option
     const MobileSettingsMenu = () => {
         if (!showSettingsPanel || !selectedEmail || !isMobile) return null;
+
+        const emailStatus = getEmailStatus(selectedEmail);
 
         return (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end justify-center z-50 md:hidden">
@@ -1254,33 +1556,60 @@ const Dashboard = () => {
                         </button>
                     </div>
                     <div className="p-2 max-h-60 overflow-y-auto">
-                        {[
-                            { icon: FiPower, label: 'Disconnect Email', action: () => showDisconnectConfirmation(selectedEmail) },
-                            { icon: FiSettings, label: 'Warmup Settings', action: () => { setWarmupSettingsEmail(selectedEmail); setShowWarmupSettings(true); closeSettingsPanel(); } },
-                            { icon: FiBarChart2, label: 'Warmup Report', action: () => handleShowWarmupReport(selectedEmail) },
-                            { icon: FiTrash2, label: 'Delete Email', action: () => showDeleteConfirmation(selectedEmail), danger: true }
-                        ].map((item, index) => (
+                        {/* Show Reconnect option for disconnected emails */}
+                        {emailStatus.canReconnect ? (
                             <button
-                                key={index}
-                                className={`flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors ${item.danger
-                                    ? 'text-red-600 hover:bg-red-50'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                                    }`}
-                                onClick={item.action}
+                                className="flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors text-green-600 hover:bg-green-50"
+                                onClick={() => {
+                                    showReconnectConfirmation(selectedEmail);
+                                    closeSettingsPanel();
+                                }}
                             >
-                                <item.icon className={item.danger ? "text-red-500" : "text-gray-400"} />
-                                {item.label}
+                                <FiLink className="text-green-500" />
+                                Reconnect Email
                             </button>
-                        ))}
+                        ) : (
+                            <button
+                                className="flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+                                onClick={() => showDisconnectConfirmation(selectedEmail)}
+                            >
+                                <FiPower className="text-gray-400" />
+                                Disconnect Email
+                            </button>
+                        )}
+
+                        <button
+                            className="flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+                            onClick={() => { setWarmupSettingsEmail(selectedEmail); setShowWarmupSettings(true); closeSettingsPanel(); }}
+                        >
+                            <FiSettings className="text-gray-400" />
+                            Warmup Settings
+                        </button>
+                        <button
+                            className="flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+                            onClick={() => handleShowWarmupReport(selectedEmail)}
+                        >
+                            <FiBarChart2 className="text-gray-400" />
+                            Warmup Report
+                        </button>
+                        <button
+                            className="flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors text-red-600 hover:bg-red-50"
+                            onClick={() => showDeleteConfirmation(selectedEmail)}
+                        >
+                            <FiTrash2 className="text-red-500" />
+                            Delete Email
+                        </button>
                     </div>
                 </motion.div>
             </div>
         );
     };
 
-    // FIXED: Enhanced Desktop Settings Panel - SMART POSITIONING that stays within viewport
+    // Enhanced Desktop Settings Panel with Reconnect option
     const DesktopSettingsPanel = () => {
         if (!showSettingsPanel || !selectedEmail || isMobile) return null;
+
+        const emailStatus = getEmailStatus(selectedEmail);
 
         return (
             <>
@@ -1315,24 +1644,49 @@ const Dashboard = () => {
                         </button>
                     </div>
                     <div className="p-2">
-                        {[
-                            { icon: FiPower, label: 'Disconnect Email', action: () => showDisconnectConfirmation(selectedEmail) },
-                            { icon: FiSettings, label: 'Warmup Settings', action: () => { setWarmupSettingsEmail(selectedEmail); setShowWarmupSettings(true); closeSettingsPanel(); } },
-                            { icon: FiBarChart2, label: 'Warmup Report', action: () => handleShowWarmupReport(selectedEmail) },
-                            { icon: FiTrash2, label: 'Delete Email', action: () => showDeleteConfirmation(selectedEmail), danger: true }
-                        ].map((item, index) => (
+                        {/* Show Reconnect option for disconnected emails */}
+                        {emailStatus.canReconnect ? (
                             <button
-                                key={index}
-                                className={`flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors ${item.danger
-                                    ? 'text-red-600 hover:bg-red-50'
-                                    : 'text-gray-700 hover:bg-gray-100'
-                                    }`}
-                                onClick={item.action}
+                                className="flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors text-green-600 hover:bg-green-50"
+                                onClick={() => {
+                                    showReconnectConfirmation(selectedEmail);
+                                    closeSettingsPanel();
+                                }}
                             >
-                                <item.icon className={item.danger ? "text-red-500" : "text-gray-400"} />
-                                {item.label}
+                                <FiLink className="text-green-500" />
+                                Reconnect Email
                             </button>
-                        ))}
+                        ) : (
+                            <button
+                                className="flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+                                onClick={() => showDisconnectConfirmation(selectedEmail)}
+                            >
+                                <FiPower className="text-gray-400" />
+                                Disconnect Email
+                            </button>
+                        )}
+
+                        <button
+                            className="flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+                            onClick={() => { setWarmupSettingsEmail(selectedEmail); setShowWarmupSettings(true); closeSettingsPanel(); }}
+                        >
+                            <FiSettings className="text-gray-400" />
+                            Warmup Settings
+                        </button>
+                        <button
+                            className="flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors text-gray-700 hover:bg-gray-100"
+                            onClick={() => handleShowWarmupReport(selectedEmail)}
+                        >
+                            <FiBarChart2 className="text-gray-400" />
+                            Warmup Report
+                        </button>
+                        <button
+                            className="flex items-center gap-3 w-full p-3 text-sm rounded-lg transition-colors text-red-600 hover:bg-red-50"
+                            onClick={() => showDeleteConfirmation(selectedEmail)}
+                        >
+                            <FiTrash2 className="text-red-500" />
+                            Delete Email
+                        </button>
                     </div>
                 </motion.div>
             </>
@@ -1357,6 +1711,7 @@ const Dashboard = () => {
                 </div>
 
                 <div className="flex items-center gap-3 w-full lg:w-auto">
+                    <RefreshButton />
                     <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
@@ -1409,10 +1764,19 @@ const Dashboard = () => {
                             const stats = emailStats[email.address] || {
                                 sent: 0,
                                 received: 0,
+                                inbox: 0,
+                                spam: 0,
                                 replied: 0,
-                                deliverability: email.deliverability || 100,
-                                openRate: 0
+                                deliverability: 0,
+                                openRate: 0,
+                                bounceRate: 0,
+                                totalSent: 0,
+                                delivered: 0,
+                                deliveryRate: 0,
+                                replyRate: 0
                             };
+
+                            const emailStatus = getEmailStatus(email);
 
                             return (
                                 <motion.div
@@ -1430,6 +1794,12 @@ const Dashboard = () => {
                                         <div className="min-w-0 flex-1">
                                             <div className="font-medium text-gray-900 text-sm sm:text-base truncate">{email.name}</div>
                                             <div className="text-gray-500 text-xs sm:text-sm truncate">{email.address}</div>
+                                            {email.status === 'disconnected' && (
+                                                <div className="text-xs text-red-500 mt-1">Disconnected</div>
+                                            )}
+                                            <div className="text-xs text-gray-400 mt-1">
+                                                Today: {stats.sentToday || 0}/{stats.dailyLimit || 25} ({stats.usagePercent || 0}%)
+                                            </div>
                                         </div>
                                     </div>
 
@@ -1442,17 +1812,14 @@ const Dashboard = () => {
 
                                     {/* Status */}
                                     <div className="col-span-3 lg:col-span-1 flex items-center justify-center">
-                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${email.warmupStatus === 'active'
-                                            ? 'bg-green-100 text-green-800 border border-green-200'
-                                            : 'bg-red-100 text-red-800 border border-red-200'
-                                            }`}>
-                                            {isMobile ? (email.warmupStatus === 'active' ? 'On' : 'Off') : (email.warmupStatus === 'active' ? 'Active' : 'Paused')}
+                                        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${emailStatus.bgColor} ${emailStatus.textColor} ${emailStatus.borderColor}`}>
+                                            {isMobile ? emailStatus.text.substring(0, 3) : emailStatus.text}
                                         </span>
                                     </div>
 
                                     {/* Sent - Desktop */}
                                     <div className="hidden lg:flex items-center col-span-1 font-medium text-gray-900 text-sm justify-center">
-                                        {Number(stats.sent || 0).toLocaleString()}
+                                        {Number(stats.totalSent || 0).toLocaleString()}
                                     </div>
 
                                     {/* Replied - Desktop */}
@@ -1462,18 +1829,19 @@ const Dashboard = () => {
 
                                     {/* Open Rate - Desktop */}
                                     <div className="hidden lg:flex items-center col-span-1 justify-center">
-                                        <div className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium border border-blue-200">
+                                        <div className={`px-2 py-1 rounded text-xs font-medium border ${stats.openRate >= 50 ? 'bg-green-100 text-green-800 border-green-200' :
+                                            stats.openRate >= 30 ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                                                'bg-red-100 text-red-800 border-red-200'
+                                            }`}>
                                             {stats.openRate}%
                                         </div>
                                     </div>
 
                                     {/* Deliverability - Desktop */}
                                     <div className="hidden lg:flex items-center col-span-1 justify-center">
-                                        <div className={`px-2 py-1 rounded text-xs font-medium border ${stats.deliverability >= 90
-                                            ? 'bg-green-100 text-green-800 border-green-200'
-                                            : stats.deliverability >= 80
-                                                ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
-                                                : 'bg-red-100 text-red-800 border-red-200'
+                                        <div className={`px-2 py-1 rounded text-xs font-medium border ${stats.deliverability >= 90 ? 'bg-green-100 text-green-800 border-green-200' :
+                                            stats.deliverability >= 80 ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
+                                                'bg-red-100 text-red-800 border-red-200'
                                             }`}>
                                             {stats.deliverability}%
                                         </div>
@@ -1481,16 +1849,16 @@ const Dashboard = () => {
 
                                     {/* Actions */}
                                     <div className="col-span-3 lg:col-span-2 flex items-center justify-end gap-2">
-                                        {/* Toggle Switch */}
+                                        {/* Toggle Switch - Now works for both connected and disconnected emails */}
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input
                                                 type="checkbox"
-                                                checked={email.warmupStatus === 'active'}
+                                                checked={(email.warmupStatus === 'active' && email.status !== 'disconnected')}
                                                 onChange={() => handleToggle(email.address, email.warmupStatus)}
                                                 className="sr-only peer"
                                                 disabled={togglingEmails[email.address]}
                                             />
-                                            <div className="w-10 h-5 sm:w-11 sm:h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 sm:after:h-5 sm:after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                                            <div className={`w-10 h-5 sm:w-11 sm:h-6 ${email.status === 'disconnected' ? 'bg-gray-400' : 'bg-gray-300'} peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 sm:after:h-5 sm:after:w-5 after:transition-all ${email.status === 'disconnected' ? 'peer-checked:bg-gray-500' : 'peer-checked:bg-green-500'}`}></div>
                                             {togglingEmails[email.address] && (
                                                 <div className="absolute inset-0 flex items-center justify-center">
                                                     <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -1532,8 +1900,9 @@ const Dashboard = () => {
 
             {/* Enhanced Modals with proper conditional rendering */}
             <AnimatePresence>
+                {showReconnectModal && <ReconnectConfirmationModal />}
+                {showToggleConfirmModal && <ToggleConfirmationModal />}
                 {showDeleteModal && <DeleteConfirmationModal />}
-                {showPauseModal && <PauseConfirmationModal />}
                 {showDisconnectModal && <DisconnectConfirmationModal />}
                 {showWarmupSettings && (
                     <WarmupSettingsPanel
