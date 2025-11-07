@@ -100,10 +100,7 @@ class TokenManager {
         }
     }
 
-    /**
-     * 🚨 NEW: Normalize account fields to handle both naming conventions
-     */
-    // In utils/token-manager.js - UPDATE THE normalizeAccountFields function
+
 
     normalizeAccountFields(account) {
         const normalized = { ...account };

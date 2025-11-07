@@ -50,7 +50,7 @@ async function sendOutlookWithGraphAPI(senderConfig, emailData) {
   try {
     console.log('   🔐 Using Microsoft Graph API for Outlook account...');
 
-    const validTokens = await tokenManager.validateAndRefreshOutlookToken(senderConfig);
+    const validTokens = await tokenManager.refreshOutlookToken(senderConfig);
     if (!validTokens || !validTokens.access_token) {
       throw new Error('Graph API authentication failed - please reauthenticate');
     }
@@ -125,83 +125,96 @@ async function sendOutlookWithGraphAPI(senderConfig, emailData) {
 }
 
 async function sendGmailWithSMTP(senderConfig, emailData) {
-  try {
-    console.log('   📧 Using Gmail SMTP with App Password...');
+  const maxRetries = 3;
 
-    if (!senderConfig.smtpPass && !senderConfig.appPassword) {
-      throw new Error('Gmail account requires App Password for SMTP');
-    }
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`   📧 Using Gmail SMTP (attempt ${attempt}/${maxRetries})...`);
 
-    const transporterConfig = {
-      host: 'smtp.gmail.com',
-      port: 587,
-      secure: false,
-      requireTLS: true,
-      auth: {
-        user: senderConfig.email,
-        pass: senderConfig.smtpPass || senderConfig.appPassword
-      },
-      connectionTimeout: 30000,
-      greetingTimeout: 15000,
-      socketTimeout: 30000,
-      tls: { rejectUnauthorized: false },
-      dnsTimeout: 10000,
-      logger: false,
-      debug: false
-    };
+      const isPersonalGmail = senderConfig.email.endsWith('@gmail.com') ||
+        senderConfig.email.endsWith('@googlemail.com');
 
-    const transporter = nodemailer.createTransport(transporterConfig);
-    await transporter.verify();
-    console.log('   ✅ Gmail SMTP connection verified');
+      console.log(`   🔍 Account type: ${isPersonalGmail ? 'Personal Gmail' : 'Organizational Gmail'}`);
 
-    const messageId = generateMessageId(senderConfig.email);
-    const mailOptions = {
-      from: `"${senderConfig.name || extractNameFromEmail(senderConfig.email)}" <${senderConfig.email}>`,
-      to: emailData.to,
-      subject: emailData.subject,
-      html: emailData.html,
-      text: stripHtml(emailData.html),
-      messageId: messageId,
-      headers: {
-        'X-Mailer': 'EmailWarmupService',
-        'X-Auto-Response-Suppress': 'OOF, AutoReply',
-        'X-Priority': '3',
-        'Importance': 'Normal',
-        'Precedence': 'bulk',
-        'Date': new Date().toUTCString()
+      // Enhanced transporter configuration with better timeout handling
+      const transporterConfig = {
+        host: 'smtp.gmail.com',
+        port: 587,
+        secure: false,
+        requireTLS: true,
+        auth: {
+          user: senderConfig.email,
+          pass: senderConfig.appPassword || senderConfig.smtpPass || senderConfig.password
+        },
+        connectionTimeout: 30000,
+        greetingTimeout: 20000,
+        socketTimeout: 30000,
+        dnsTimeout: 10000,
+        tls: {
+          rejectUnauthorized: false,
+          ciphers: 'SSLv3'
+        },
+        logger: false,
+        debug: false
+      };
+
+      // Try alternative ports if 587 fails
+      if (attempt > 1) {
+        transporterConfig.port = 465;
+        transporterConfig.secure = true;
+        console.log(`   🔄 Trying alternative port 465 (SSL)...`);
       }
-    };
 
-    if (emailData.inReplyTo) {
-      mailOptions.inReplyTo = emailData.inReplyTo;
-      mailOptions.references = emailData.references || [emailData.inReplyTo];
+      const transporter = nodemailer.createTransport(transporterConfig);
+
+      console.log('   🔐 Verifying Gmail SMTP connection...');
+      await transporter.verify();
+      console.log('   ✅ Gmail SMTP connection verified');
+
+      // 🚨 CRITICAL FIX: Generate message ID BEFORE sending
+      const messageId = generateMessageId(senderConfig.email);
+
+      const mailOptions = {
+        from: `"${senderConfig.name || extractNameFromEmail(senderConfig.email)}" <${senderConfig.email}>`,
+        to: emailData.to,
+        subject: emailData.subject,
+        html: emailData.html,
+        text: stripHtml(emailData.html),
+        messageId: messageId, // 🚨 This must be set
+        headers: {
+          'X-Mailer': 'EmailWarmupService',
+          'Message-ID': messageId, // 🚨 Double ensure Message-ID is set
+          'Date': new Date().toUTCString()
+        }
+      };
+
+      console.log(`   📤 Sending email via Gmail SMTP with Message-ID: ${messageId}`);
+      const result = await transporter.sendMail(mailOptions);
+
+      console.log(`✅ Gmail email sent successfully: ${result.messageId}`);
+
+      return {
+        success: true,
+        messageId: result.messageId || messageId,
+        usedAuth: isPersonalGmail ? 'GmailAppPassword' : 'GmailOrganizational',
+        accountType: isPersonalGmail ? 'personal' : 'organizational'
+      };
+
+    } catch (error) {
+      console.error(`❌ Gmail SMTP attempt ${attempt} failed:`, error.message);
+
+      if (attempt === maxRetries) {
+        return {
+          success: false,
+          error: `Gmail SMTP failed after ${maxRetries} attempts: ${error.message}`,
+          requiresAppPassword: error.message.includes('Authentication'),
+          networkIssue: error.message.includes('ETIMEDOUT') || error.message.includes('ECONNREFUSED')
+        };
+      }
+
+      // Wait before retry
+      await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
     }
-
-    console.log('   📤 Sending email via Gmail SMTP...');
-    const startTime = Date.now();
-    const result = await transporter.sendMail(mailOptions);
-    const deliveryTime = Date.now() - startTime;
-
-    console.log(`✅ Gmail email sent successfully: ${result.messageId}`);
-    console.log(`   📧 Response: ${result.response}`);
-    console.log(`   ⏱️  Delivery time: ${deliveryTime}ms`);
-
-    return {
-      success: true,
-      messageId: result.messageId || messageId,
-      response: result.response,
-      deliveryTime: deliveryTime,
-      usedAuth: 'GmailAppPassword',
-      subject: emailData.subject
-    };
-
-  } catch (error) {
-    console.error('❌ Gmail SMTP failed:', error.message);
-    return {
-      success: false,
-      error: `Gmail SMTP failed: ${error.message}`,
-      requiresAppPassword: error.message.includes('Authentication failed')
-    };
   }
 }
 
@@ -366,7 +379,7 @@ async function handleCustomDomainWithRetry(senderConfig, emailData) {
   };
 }
 
-// Main email sending function
+// In the main sendEmail function, update the Gmail detection:
 async function sendEmail(senderConfig, emailData) {
   try {
     const isOutlookPersonal = senderConfig.email.endsWith('@outlook.com') ||
@@ -375,6 +388,13 @@ async function sendEmail(senderConfig, emailData) {
 
     const isMicrosoftOrganizational = senderConfig.providerType === 'MICROSOFT_ORGANIZATIONAL' ||
       senderConfig.type === 'microsoft_organizational';
+
+    // Enhanced Gmail detection
+    const isPersonalGmail = senderConfig.email.endsWith('@gmail.com') ||
+      senderConfig.email.endsWith('@googlemail.com');
+
+    const isOrganizationalGmail = senderConfig.providerType === 'GMAIL' &&
+      !isPersonalGmail;
 
     if (isOutlookPersonal || isMicrosoftOrganizational) {
       console.log('   🔐 FORCING Graph API for Microsoft account');
@@ -389,12 +409,8 @@ async function sendEmail(senderConfig, emailData) {
       return graphResult;
     }
 
-    const isGmail = senderConfig.email.endsWith('@gmail.com') ||
-      senderConfig.email.endsWith('@googlemail.com') ||
-      senderConfig.providerType === 'GMAIL';
-
-    if (isGmail) {
-      console.log('   📧 Using Gmail SMTP with App Password');
+    if (isPersonalGmail || isOrganizationalGmail) {
+      console.log(`   📧 Using ${isPersonalGmail ? 'Personal' : 'Organizational'} Gmail SMTP`);
       return await sendGmailWithSMTP(senderConfig, emailData);
     }
 

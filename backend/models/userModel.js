@@ -16,7 +16,7 @@ const User = sequelize.define('User', {
     title: { type: DataTypes.STRING },
 
     email: { type: DataTypes.STRING, allowNull: false, unique: true },
-    password: { type: DataTypes.STRING, allowNull: false },
+    password: { type: DataTypes.STRING, allowNull: true },
 
     role: {
         type: DataTypes.ENUM('user', 'superadmin'),
@@ -44,6 +44,9 @@ const User = sequelize.define('User', {
 
     failed_login_attempts: { type: DataTypes.INTEGER, defaultValue: 0 },
     account_locked_until: { type: DataTypes.DATE },
+
+
+    isGoogleAccount: { type: DataTypes.BOOLEAN, defaultValue: false },
 
     last_login: { type: DataTypes.DATE }
 }, {
