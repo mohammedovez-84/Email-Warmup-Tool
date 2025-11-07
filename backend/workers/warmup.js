@@ -2052,7 +2052,7 @@ class WarmupWorker {
                     access_token: tokens.access_token,
                     refresh_token: tokens.refresh_token,
                     token_expires_at: tokens.token_expires_at,
-                    expires_at: tokens.token_expiry // Map to expires_at field
+                    expires_at: tokens.token_expiry
                 },
                 { where: { email } }
             );
