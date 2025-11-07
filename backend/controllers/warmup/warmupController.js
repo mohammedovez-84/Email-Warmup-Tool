@@ -961,6 +961,8 @@ exports.disconnectReconnectMail = async (req, res) => {
   }
 };
 
+
+
 exports.deleteMail = async (req, res) => {
   const { email } = req.params;
 
@@ -1000,6 +1002,18 @@ exports.deleteMail = async (req, res) => {
     // Get metrics before deletion for reporting
     const metrics = await getAccountMetrics(email);
 
+    // 🚨 FIXED: Delete EmailExchange records using correct field names
+    const deletedExchanges = await EmailExchange.destroy({
+      where: {
+        [Op.or]: [
+          { warmupAccount: email },  // Delete where email is warmup account
+          { poolAccount: email }     // Delete where email is pool account
+        ]
+      }
+    });
+
+    console.log(`🗑️ Deleted ${deletedExchanges} email exchange records for ${email}`);
+
     // Delete metrics
     try {
       const deletedMetricsCount = await EmailMetric.destroy({
@@ -1022,7 +1036,8 @@ exports.deleteMail = async (req, res) => {
         email: deletedAccount.email,
         accountType,
         name: deletedAccount.name || deletedAccount.sender_name,
-        deletedMetrics: metrics.summary.totalExchanges,
+        deletedExchanges: deletedExchanges,
+        deletedMetrics: metrics.summary?.totalExchanges || 0,
         performanceSummary: metrics,
         deletedAt: new Date().toISOString()
       }
