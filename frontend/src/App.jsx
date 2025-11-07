@@ -8,6 +8,7 @@ import { lazy, Suspense } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
+import Onboarding from './components/Onboarding';
 import SuperAdminRoute from './components/SuperAdminRoute';
 import LoadingSpinner from './components/LoadingSpinner';
 import MainLayout from './layouts/MainLayout';
@@ -47,6 +48,7 @@ function App() {
                             <Route path="/login" element={<Login />} />
                             <Route path="/signup" element={<Signup />} />
                             <Route path="/verify-email" element={<VerifyEmail />} />
+                            <Route path="/onboarding" element={<Onboarding />} />
                             <Route path="/forgot-password" element={<ForgotPassword />} />
                             <Route path="/reset-password" element={<ResetPassword />} />
                             <Route path="/two-factor-login" element={<TwoFactorLogin />} />
