@@ -117,32 +117,11 @@ export default function Login() {
   };
 
   const handleGoogleLogin = () => {
-    // Simply redirect the current window to the backend's Google OAuth endpoint
-    window.location.href = `${process.env.REACT_APP_API_URL}/auth/google`;
+    // Redirect to Google OAuth with redirect URL to onboarding
+    const redirectUrl = `${window.location.origin}/onboarding`;
+    const googleAuthUrl = `${process.env.REACT_APP_API_URL}/auth/google?redirect=${encodeURIComponent(redirectUrl)}`;
 
-    // Open Google OAuth in a popup window
-    const width = 500;
-    const height = 600;
-    const left = (window.innerWidth - width) / 2;
-    const top = (window.innerHeight - height) / 2;
-
-    const googleAuthUrl = `${process.env.REACT_APP_API_URL}/auth/google`;
-
-
-    const popup = window.open(
-      googleAuthUrl,
-      'Google Login',
-      `width=${width},height=${height},top=${top},left=${left}`
-    );
-
-    // Check for popup closure and handle the response
-    const checkPopup = setInterval(() => {
-      if (!popup || popup.closed) {
-        clearInterval(checkPopup);
-        // You might want to check if authentication was successful here
-        // by making an API call to verify the user's status
-      }
-    }, 1000);
+    window.location.href = googleAuthUrl;
   };
 
   return (
@@ -163,7 +142,7 @@ export default function Login() {
                 }
               },
               color: {
-                value: theme === 'dark' ? "#3b82f6" : "#2563eb"
+                value: "#3b82f6"
               },
               shape: {
                 type: "circle",
@@ -198,7 +177,7 @@ export default function Login() {
               line_linked: {
                 enable: true,
                 distance: 150,
-                color: theme === 'dark' ? "#f63bf3ff" : "#2563eb",
+                color: "#2563eb",
                 opacity: 0.4,
                 width: 1
               },
@@ -284,7 +263,7 @@ export default function Login() {
       <AuroraBackground>
         {/* Main card container */}
         <motion.div
-          className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-4xl overflow-hidden flex flex-col md:flex-row min-h-[600px] relative z-10 border border-gray-200 "
+          className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-4xl overflow-hidden flex flex-col md:flex-row min-h-[600px] relative z-10 border border-gray-200 dark:border-gray-700 shadow-2xl"
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
@@ -398,21 +377,21 @@ export default function Login() {
             <div className="flex justify-between items-center mb-8">
               <Link
                 to="/signup"
-                className="text-xs font-medium text-teal-600 dark:text-teal-400 hover:text-sky-800 dark:hover:text-sky-300"
+                className="text-xs font-medium text-teal-600 dark:text-teal-400 hover:text-sky-800 dark:hover:text-sky-300 transition-colors duration-200"
               >
                 <motion.div
                   whileHover={{ x: -3 }}
                   transition={{ type: 'spring', stiffness: 500 }}
                   className="flex items-center"
                 >
-                  <ChevronLeft size={18} className="mr-1 group-hover:-translate-x-1 transition-transform" />
+                  <ChevronLeft size={18} className="mr-1 transition-transform" />
                   Back to Signup
                 </motion.div>
               </Link>
 
               <div className="md:hidden flex items-center">
                 <AnimatedGradientBorder borderRadius="0.5rem" className="w-8 h-8">
-                  <div className="w-full h-full rounded-lg flex items-center justify-center bg-gradient-to-r from-teil-600 to-indigo-600">
+                  <div className="w-full h-full rounded-lg flex items-center justify-center bg-gradient-to-r from-teal-600 to-indigo-600">
                     <Sparkles className="text-white" size={16} />
                   </div>
                 </AnimatedGradientBorder>
@@ -463,9 +442,7 @@ export default function Login() {
                           type="email"
                           name="email"
                           placeholder="your@email.com"
-                          className="w-full pl-10 pr-4 py-3 bg-transparent rounded-lg
-                 focus:ring-2 focus:ring-[#0B1E3F] focus:border-transparent
-                 transition-all duration-200 hover:border-[#008080]/50"
+                          className="w-full pl-10 pr-4 py-3 bg-transparent rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 border-0 focus:ring-2 focus:ring-[#0B1E3F] focus:border-transparent transition-all duration-200"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           required
@@ -487,7 +464,7 @@ export default function Login() {
                       </label>
                       <Link
                         to="/forgot-password"
-                        className="text-xs font-medium text-teal-600 dark:text-teal-400 hover:text-sky-800 dark:hover:text-sky-300"
+                        className="text-xs font-medium text-teal-600 dark:text-teal-400 hover:text-sky-800 dark:hover:text-sky-300 transition-colors duration-200"
                       >
                         Forgot password?
                       </Link>
@@ -502,7 +479,7 @@ export default function Login() {
                           type={showPassword ? "text" : "password"}
                           name="password"
                           placeholder="••••••••"
-                          className="w-full pl-10 pr-12 py-3 bg-transparent rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-600"
+                          className="w-full pl-10 pr-12 py-3 bg-transparent rounded-lg text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 border-0 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
@@ -510,7 +487,7 @@ export default function Login() {
                         />
                         <button
                           type="button"
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors duration-200"
                           onClick={() => setShowPassword(!showPassword)}
                           aria-label={showPassword ? "Hide password" : "Show password"}
                         >
@@ -558,7 +535,7 @@ export default function Login() {
                 <div className="mt-auto pt-4">
                   <motion.button
                     type="submit"
-                    className="w-full bg-gradient-to-r from-[#0B1E3F] to-[#008080] text-white py-3.5 px-4 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 relative overflow-hidden group"
+                    className="w-full bg-gradient-to-r from-[#0B1E3F] to-[#008080] text-white py-3.5 px-4 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2 relative overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed"
                     whileHover={{ scale: 1.01 }}
                     whileTap={{ scale: 0.99 }}
                     disabled={isLoading}
@@ -621,7 +598,7 @@ export default function Login() {
                   <motion.button
                     type="button"
                     onClick={handleGoogleLogin}
-                    className="w-full bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-3 px-4 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-3 border border-gray-300 dark:border-gray-600"
+                    className="w-full bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-3 px-4 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-3 border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
                     whileHover={{ scale: 1.01 }}
                     whileTap={{ scale: 0.99 }}
                   >
@@ -636,11 +613,11 @@ export default function Login() {
                       />
                       <path
                         fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 极客 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
                       />
                       <path
                         fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-极客 3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                       />
                     </svg>
                     <span>Sign in with Google</span>
