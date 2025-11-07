@@ -858,6 +858,8 @@ function getImapConfig(account) {
                     }
                 };
 
+
+
             case 'smtp':
                 const finalImapHost = account.imap_host || account.smtp_host;
                 const finalImapUser = account.imap_user || account.smtp_user || email;

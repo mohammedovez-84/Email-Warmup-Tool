@@ -441,13 +441,13 @@ class VolumeEnforcement {
                 canSendMore: remaining > 0
             };
 
-            console.log(`📈 DAILY SUMMARY: ${email}`);
-            console.log(`   ├── Sent: ${sentToday}/${volumeLimit}`);
-            console.log(`   ├── Pending: ${pending}`);
-            console.log(`   ├── Total: ${totalUsed}/${volumeLimit}`);
-            console.log(`   ├── Remaining: ${remaining}`);
-            console.log(`   ├── Percentage: ${summary.percentage}%`);
-            console.log(`   └── Can Send More: ${summary.canSendMore}`);
+            // console.log(`📈 DAILY SUMMARY: ${email}`);
+            // console.log(`   ├── Sent: ${sentToday}/${volumeLimit}`);
+            // console.log(`   ├── Pending: ${pending}`);
+            // console.log(`   ├── Total: ${totalUsed}/${volumeLimit}`);
+            // console.log(`   ├── Remaining: ${remaining}`);
+            // console.log(`   ├── Percentage: ${summary.percentage}%`);
+            // console.log(`   └── Can Send More: ${summary.canSendMore}`);
 
             return summary;
 
@@ -479,11 +479,11 @@ class VolumeEnforcement {
             const totalUsed = sentToday + pending;
             const remaining = Math.max(0, volumeLimit - totalUsed);
 
-            console.log(`📊 SCHEDULING LIMIT: ${accountEmail}`);
-            console.log(`   ├── Limit: ${volumeLimit}`);
-            console.log(`   ├── Sent: ${sentToday}`);
-            console.log(`   ├── Pending: ${pending}`);
-            console.log(`   └── Can Schedule: ${remaining} emails`);
+            // console.log(`📊 SCHEDULING LIMIT: ${accountEmail}`);
+            // console.log(`   ├── Limit: ${volumeLimit}`);
+            // console.log(`   ├── Sent: ${sentToday}`);
+            // console.log(`   ├── Pending: ${pending}`);
+            // console.log(`   └── Can Schedule: ${remaining} emails`);
 
             return remaining;
 

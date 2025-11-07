@@ -26,6 +26,7 @@ require('./models/associations')();
 const warmupScheduler = require('./services/schedule/Scheduler');
 const dailyResetService = require('./services/volume/dailyReset');
 const analyticsRoutes = require("./routes/analytics/analytics")
+const googleAuthRoutes = require("./routes/auth/google-auth")
 // const analyticsRoutes = require("./routes/analytics/analytics")
 const dnsRoutes = require("./routes/dns/auth-checker")
 
@@ -45,11 +46,13 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // Routes
+
 app.use('/auth/microsoft2', microsoftAuthRoutes);
 app.use('/api/auth', authRoutes);
 // app.use("/api/ms-oauth_admin",)
 app.use("/api/analytics", analyticsRoutes)
 app.use("/api/dns", dnsRoutes)
+app.use("/api/auth", googleAuthRoutes)
 app.use('/api', googleRoutes);
 app.use('/auth', microsoftRoutes);
 app.use('/api', smtpImapRoutes);
@@ -58,6 +61,7 @@ app.use('/api/warmup', warmupRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/health', healthRoutes);
+
 // app.use("/analytics", analyticsRoutes)
 
 

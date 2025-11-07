@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
-const MicrosoftUser = require('../../models/MicrosoftUser'); // 🚨 CHANGE THIS
-const { getAuthUrl, getTokenFromCode } = require('../../controllers/auth/microsoftOAuth');
+const EmailPool = require('../../models/EmailPool');
+const { getTokenFromCode } = require('../../controllers/auth/microsoftOAuth');
 
 const REDIRECT_URI = process.env.MS_REDIRECT_URL2;
 
@@ -41,14 +41,14 @@ router.get('/callback', async (req, res) => {
     const token = await getTokenFromCode(REDIRECT_URI, code);
     console.log('Token received successfully');
 
-    // Calculate proper expiry
-    const tokenExpiry = new Date(Date.now() + (token.expires_in * 1000)).toISOString();
+    // Calculate proper expiry (convert to BIGINT timestamp)
+    const tokenExpiry = Date.now() + (token.expires_in * 1000);
 
     console.log('🔐 Token details:', {
       access_token: token.access_token ? `PRESENT (${token.access_token.length} chars)` : 'MISSING',
       refresh_token: token.refresh_token ? `PRESENT (${token.refresh_token.length} chars)` : 'MISSING',
       expires_in: token.expires_in,
-      token_expiry: tokenExpiry
+      token_expiry: new Date(tokenExpiry).toISOString()
     });
 
     // Get user profile from Microsoft Graph
@@ -65,8 +65,8 @@ router.get('/callback', async (req, res) => {
 
     const email = profile.mail || profile.userPrincipalName;
 
-    // 🚨 CRITICAL: Determine account type correctly
-    let provider = 'microsoft';
+    // Determine account type and map to EmailPool providerType
+    let providerType = 'OUTLOOK_PERSONAL';
     let isOrganizational = false;
 
     // Check if it's an organizational account
@@ -74,35 +74,32 @@ router.get('/callback', async (req, res) => {
       (email.includes('@') && !email.endsWith('@outlook.com') &&
         !email.endsWith('@hotmail.com') && !email.endsWith('@live.com'))) {
       isOrganizational = true;
-      provider = 'microsoft_organizational';
-    } else {
-      provider = 'outlook_personal';
+      providerType = 'MICROSOFT_ORGANIZATIONAL';
     }
 
-    console.log(`Detected account type: ${provider} for email: ${email}`);
+    console.log(`Detected account type: ${providerType} for email: ${email}`);
 
-    // 🚨 CRITICAL: Save to MicrosoftUser table (NOT EmailPool)
-    const [microsoftUser, created] = await MicrosoftUser.upsert({
+    // 🚨 CRITICAL: Save to EmailPool table with correct field names
+    const [emailPoolAccount, created] = await EmailPool.upsert({
       email: email,
-      provider: provider,
-      is_organizational: isOrganizational,
-      // OAuth tokens
+      providerType: providerType,
+      // OAuth tokens - using correct field names from EmailPool model
       access_token: token.access_token,
       refresh_token: token.refresh_token,
-      token_expiry: tokenExpiry, // Use the correct field name for MicrosoftUser model
-      // Account status
-      is_connected: true,
-      warmupStatus: 'inactive', // Default to inactive until user enables warmup
+      token_expires_at: tokenExpiry, // Using BIGINT timestamp
+      // Account status - using EmailPool fields
+      isActive: true,
       // User info from profile
       display_name: profile.displayName || email.split('@')[0],
-      user_id: profile.id
+      // Note: user_id field doesn't exist in EmailPool model, so we'll store it in a compatible way
+      // If you need to store user_id, you might need to add it to the EmailPool model
     }, {
       returning: true
     });
 
-    console.log(`✅ Microsoft account ${created ? 'created' : 'updated'}: ${email}`);
-    console.log(`📁 Saved to: MicrosoftUser table`);
-    console.log(`🔐 Token saved with expiry: ${tokenExpiry}`);
+    console.log(`✅ EmailPool account ${created ? 'created' : 'updated'}: ${email}`);
+    console.log(`📁 Saved to: EmailPool table`);
+    console.log(`🔐 Token saved with expiry: ${new Date(tokenExpiry).toISOString()}`);
 
     res.redirect('http://localhost:5173/superadmin/dashboard');
 
