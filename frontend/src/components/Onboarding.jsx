@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Check, ArrowRight, ArrowLeft, Mail, Shield, Zap,
-    BarChart3, Users, Rocket, Star, Sparkles
+    BarChart3, Users, Rocket, Star, Sparkles, User, Lock, Eye, EyeOff
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { useAuth } from '../context/AuthContext';
 import { AuroraBackground } from './ui/aurora-background';
 import { Meteors } from './ui/meteors';
 import { AnimatedGradientBorder } from './ui/animated-gradient-border';
@@ -27,6 +29,18 @@ const onboardingSteps = [
     },
     {
         id: 2,
+        title: "Create Your Account",
+        subtitle: "Set up your login credentials",
+        description: "Enter your details to create your secure account and get started.",
+        icon: User,
+        features: [
+            "Secure account creation",
+            "256-bit encryption",
+            "Instant access"
+        ]
+    },
+    {
+        id: 3,
         title: "Connect Your Email Account",
         subtitle: "Secure and encrypted connection",
         description: "Connect your email provider to start the warmup process. We support all major email providers.",
@@ -38,7 +52,7 @@ const onboardingSteps = [
         ]
     },
     {
-        id: 3,
+        id: 4,
         title: "Configure Warmup Settings",
         subtitle: "AI-powered optimization",
         description: "Our AI will analyze your sending patterns and create the perfect warmup schedule for you.",
@@ -50,7 +64,7 @@ const onboardingSteps = [
         ]
     },
     {
-        id: 4,
+        id: 5,
         title: "Monitor Your Progress",
         subtitle: "Real-time analytics dashboard",
         description: "Track your email deliverability improvements with our comprehensive analytics dashboard.",
@@ -70,10 +84,88 @@ const welcomeWords = [
     { text: "🎉", className: "text-blue-600" },
 ];
 
+// Fixed Google SVG icon component
+const GoogleIcon = () => (
+    <svg className="w-5 h-5" viewBox="0 0 24 24">
+        <path
+            fill="#4285F4"
+            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+        />
+        <path
+            fill="#34A853"
+            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+        />
+        <path
+            fill="#FBBC05"
+            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+        />
+        <path
+            fill="#EA4335"
+            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+        />
+    </svg>
+);
+
 export default function Onboarding() {
+    const { login } = useAuth();
     const [currentStep, setCurrentStep] = useState(0);
     const [completed, setCompleted] = useState(false);
+    const [formData, setFormData] = useState({
+        firstName: '',
+        lastName: '',
+        email: '',
+        password: ''
+    });
+    const [showPassword, setShowPassword] = useState(false);
+    const [isGoogleLoading, setIsGoogleLoading] = useState(false);
     const navigate = useNavigate();
+
+    // Check for Google OAuth callback on component mount
+    useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('token');
+        const userData = urlParams.get('user');
+        const isNewUser = urlParams.get('isNewUser') === 'true';
+
+        if (token && userData) {
+            try {
+                const user = JSON.parse(decodeURIComponent(userData));
+
+                // Store auth data
+                login(token, user);
+                localStorage.setItem('authToken', token);
+                localStorage.setItem('user', JSON.stringify(user));
+
+                toast.success('Google login successful!', {
+                    position: 'top-center',
+                    duration: 2000,
+                    icon: <Rocket className="text-blue-500" />
+                });
+
+                // Redirect to dashboard
+                if (user.role === 'superadmin') {
+                    navigate('/superadmin/dashboard', { replace: true });
+                } else {
+                    navigate('/dashboard', { replace: true });
+                }
+            } catch (error) {
+                console.error('Error processing Google OAuth callback:', error);
+                toast.error('Authentication failed', {
+                    position: 'top-center',
+                    duration: 2000,
+                    icon: <Check className="text-red-500" />
+                });
+            }
+        }
+    }, [login, navigate]);
+
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }));
+    };
 
     const nextStep = () => {
         if (currentStep < onboardingSteps.length - 1) {
@@ -95,6 +187,25 @@ export default function Onboarding() {
 
     const skipOnboarding = () => {
         navigate('/dashboard');
+    };
+
+    const handleGoogleLogin = () => {
+        setIsGoogleLoading(true);
+
+        // Use direct backend URL
+        const backendUrl = 'http://localhost:5000'; // Replace with your actual backend URL
+        const redirectUri = `${window.location.origin}/onboarding`;
+        const googleAuthUrl = `${backendUrl}/api/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}&signup=true`;
+
+        console.log('Redirecting to Google OAuth:', googleAuthUrl);
+        window.location.href = googleAuthUrl;
+    };
+
+    const handleFormSubmit = (e) => {
+        e.preventDefault();
+        // Handle form submission logic here
+        console.log('Form data:', formData);
+        nextStep();
     };
 
     if (completed) {
@@ -286,23 +397,184 @@ export default function Onboarding() {
                                         {step.description}
                                     </p>
 
-                                    {/* Features List */}
-                                    <div className="space-y-3 mb-8 max-w-sm mx-auto">
-                                        {step.features.map((feature, index) => (
-                                            <motion.div
-                                                key={feature}
-                                                initial={{ opacity: 0, x: -20 }}
-                                                animate={{ opacity: 1, x: 0 }}
-                                                transition={{ delay: index * 0.1 }}
-                                                className="flex items-center gap-3 text-left"
-                                            >
-                                                <div className="w-6 h-6 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center flex-shrink-0">
-                                                    <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
+                                    {/* Form for Step 2 (Account Creation) */}
+                                    {currentStep === 1 && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: 20 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: 0.2 }}
+                                            className="max-w-md mx-auto w-full space-y-4"
+                                        >
+                                            <form onSubmit={handleFormSubmit}>
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 text-left">
+                                                            First Name
+                                                        </label>
+                                                        <AnimatedGradientBorder borderRadius="0.75rem">
+                                                            <div className="relative">
+                                                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                                                                    <User className="w-5 h-5" />
+                                                                </div>
+                                                                <input
+                                                                    type="text"
+                                                                    name="firstName"
+                                                                    value={formData.firstName}
+                                                                    onChange={handleInputChange}
+                                                                    className="w-full bg-transparent rounded-lg py-3 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white placeholder-gray-400"
+                                                                    placeholder="Enter first name"
+                                                                    required
+                                                                />
+                                                            </div>
+                                                        </AnimatedGradientBorder>
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 text-left">
+                                                            Last Name
+                                                        </label>
+                                                        <AnimatedGradientBorder borderRadius="0.75rem">
+                                                            <div className="relative">
+                                                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                                                                    <User className="w-5 h-5" />
+                                                                </div>
+                                                                <input
+                                                                    type="text"
+                                                                    name="lastName"
+                                                                    value={formData.lastName}
+                                                                    onChange={handleInputChange}
+                                                                    className="w-full bg-transparent rounded-lg py-3 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white placeholder-gray-400"
+                                                                    placeholder="Enter last name"
+                                                                    required
+                                                                />
+                                                            </div>
+                                                        </AnimatedGradientBorder>
+                                                    </div>
                                                 </div>
-                                                <span className="text-gray-700 dark:text-gray-300">{feature}</span>
-                                            </motion.div>
-                                        ))}
-                                    </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 text-left">
+                                                        Email Address
+                                                    </label>
+                                                    <AnimatedGradientBorder borderRadius="0.75rem">
+                                                        <div className="relative">
+                                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                                                                <Mail className="w-5 h-5" />
+                                                            </div>
+                                                            <input
+                                                                type="email"
+                                                                name="email"
+                                                                value={formData.email}
+                                                                onChange={handleInputChange}
+                                                                className="w-full bg-transparent rounded-lg py-3 pl-10 pr-4 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white placeholder-gray-400"
+                                                                placeholder="Enter email address"
+                                                                required
+                                                            />
+                                                        </div>
+                                                    </AnimatedGradientBorder>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 text-left">
+                                                        Create a Password
+                                                    </label>
+                                                    <AnimatedGradientBorder borderRadius="0.75rem">
+                                                        <div className="relative">
+                                                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
+                                                                <Lock className="w-5 h-5" />
+                                                            </div>
+                                                            <input
+                                                                type={showPassword ? "text" : "password"}
+                                                                name="password"
+                                                                value={formData.password}
+                                                                onChange={handleInputChange}
+                                                                className="w-full bg-transparent rounded-lg py-3 pl-10 pr-12 focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:text-white placeholder-gray-400"
+                                                                placeholder="Create a password"
+                                                                required
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                                                                onClick={() => setShowPassword(!showPassword)}
+                                                            >
+                                                                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                                            </button>
+                                                        </div>
+                                                    </AnimatedGradientBorder>
+                                                </div>
+
+                                                {/* Regular form submit button */}
+                                                <motion.button
+                                                    type="submit"
+                                                    className="w-full mt-6 bg-gradient-to-r from-[#0B1E3F] to-[#008080] text-white py-3.5 px-4 rounded-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center gap-2"
+                                                    whileHover={{ scale: 1.02 }}
+                                                    whileTap={{ scale: 0.98 }}
+                                                >
+                                                    <span>Create Account</span>
+                                                    <ArrowRight className="w-4 h-4" />
+                                                </motion.button>
+                                            </form>
+
+                                            {/* Google Login Button */}
+                                            <div className="pt-4">
+                                                <div className="relative my-4">
+                                                    <div className="absolute inset-0 flex items-center">
+                                                        <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
+                                                    </div>
+                                                    <div className="relative flex justify-center text-sm">
+                                                        <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                                                            Or continue with
+                                                        </span>
+                                                    </div>
+                                                </div>
+
+                                                <motion.button
+                                                    type="button"
+                                                    onClick={handleGoogleLogin}
+                                                    disabled={isGoogleLoading}
+                                                    className="w-full bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 py-3 px-4 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-3 border border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    whileHover={{ scale: isGoogleLoading ? 1 : 1.02 }}
+                                                    whileTap={{ scale: isGoogleLoading ? 1 : 0.98 }}
+                                                >
+                                                    {isGoogleLoading ? (
+                                                        <svg
+                                                            className="animate-spin h-5 w-5 text-gray-400"
+                                                            xmlns="http://www.w3.org/2000/svg"
+                                                            fill="none"
+                                                            viewBox="0 0 24 24"
+                                                        >
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path
+                                                                className="opacity-75"
+                                                                fill="currentColor"
+                                                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                            ></path>
+                                                        </svg>
+                                                    ) : (
+                                                        <GoogleIcon />
+                                                    )}
+                                                    <span>{isGoogleLoading ? 'Connecting...' : 'Continue with Google'}</span>
+                                                </motion.button>
+                                            </div>
+                                        </motion.div>
+                                    )}
+
+                                    {/* Features List for other steps */}
+                                    {currentStep !== 1 && (
+                                        <div className="space-y-3 mb-8 max-w-sm mx-auto">
+                                            {step.features.map((feature, index) => (
+                                                <motion.div
+                                                    key={feature}
+                                                    initial={{ opacity: 0, x: -20 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ delay: index * 0.1 }}
+                                                    className="flex items-center gap-3 text-left"
+                                                >
+                                                    <div className="w-6 h-6 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center flex-shrink-0">
+                                                        <Check className="w-3 h-3 text-green-600 dark:text-green-400" />
+                                                    </div>
+                                                    <span className="text-gray-700 dark:text-gray-300">{feature}</span>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    )}
                                 </motion.div>
                             </AnimatePresence>
                         </div>
@@ -322,15 +594,17 @@ export default function Onboarding() {
                                 Previous
                             </motion.button>
 
-                            <motion.button
-                                onClick={nextStep}
-                                className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-[#0B1E3F] to-[#008080] text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300"
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                            >
-                                {currentStep === onboardingSteps.length - 1 ? 'Get Started' : 'Next Step'}
-                                <ArrowRight className="w-4 h-4" />
-                            </motion.button>
+                            {currentStep !== 1 && (
+                                <motion.button
+                                    onClick={nextStep}
+                                    className="flex items-center gap-2 px-8 py-3 bg-gradient-to-r from-[#0B1E3F] to-[#008080] text-white rounded-lg font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                >
+                                    {currentStep === onboardingSteps.length - 1 ? 'Get Started' : 'Next Step'}
+                                    <ArrowRight className="w-4 h-4" />
+                                </motion.button>
+                            )}
                         </div>
                     </div>
                 </motion.div>

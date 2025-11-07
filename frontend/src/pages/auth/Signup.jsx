@@ -13,7 +13,7 @@ import { TextGenerateEffect } from '../../components/ui/text-generate-effect';
 import { AnimatedGradientBorder } from '../../components/ui/animated-gradient-border';
 import { Meteors } from '../../components/ui/meteors';
 import { TypewriterEffect } from '../../components/ui/typewriter-effect';
-import bounceImg from '../../assets/endbounce.jpg';
+import bounceImg from '../../assets/bounce.png';
 
 const welcomeWords = [
   { text: "Create" },

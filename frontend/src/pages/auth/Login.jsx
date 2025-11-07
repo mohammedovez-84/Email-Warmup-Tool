@@ -1,11 +1,10 @@
-import { useState } from 'react';
-import axios from 'axios';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
-import { loginUser, verify2FA, sendLoginOTP } from '../../services/authService';
+import { loginUser } from '../../services/authService';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Mail, Lock, ArrowRight, Sparkles, Shield, Eye, EyeOff,
-  ChevronLeft, X, Fingerprint, Rocket, Satellite, Atom, Stars
+  ChevronLeft, X, Fingerprint, Rocket, Atom, Stars
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../../context/AuthContext';
@@ -32,6 +31,28 @@ const floatingShapes = [
   { id: 4, bottom: '30%', right: '12%', size: 'w-12 h-12', color: 'from-yellow-400/20 to-orange-400/20' },
 ];
 
+// Completely fixed Google SVG icon
+const GoogleIcon = () => (
+  <svg className="w-5 h-5" viewBox="0 0 24 24">
+    <path
+      fill="#4285F4"
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+    />
+    <path
+      fill="#34A853"
+      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+    />
+    <path
+      fill="#EA4335"
+      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+    />
+  </svg>
+);
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -46,11 +67,55 @@ export default function Login() {
   const [isHoveringLogo, setIsHoveringLogo] = useState(false);
   const [isHoveringButton, setIsHoveringButton] = useState(false);
   const [particlesInitialized, setParticlesInitialized] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   const particlesInit = async (engine) => {
     await loadFull(engine);
     setParticlesInitialized(true);
   };
+
+  // Check for Google OAuth callback on component mount
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const userData = urlParams.get('user');
+    const isNewUser = urlParams.get('isNewUser') === 'true';
+
+    if (token && userData) {
+      try {
+        const user = JSON.parse(decodeURIComponent(userData));
+
+        // Store auth data
+        login(token, user);
+        localStorage.setItem('authToken', token);
+        localStorage.setItem('user', JSON.stringify(user));
+
+        toast.success('Google login successful!', {
+          position: 'top-center',
+          duration: 2000,
+          icon: <Rocket className="text-blue-500" />
+        });
+
+        // Redirect based on whether user is new or existing
+        if (isNewUser) {
+          navigate('/onboarding', { replace: true });
+        } else {
+          if (user.role === 'superadmin') {
+            navigate('/superadmin/dashboard', { replace: true });
+          } else {
+            navigate('/dashboard', { replace: true });
+          }
+        }
+      } catch (error) {
+        console.error('Error processing Google OAuth callback:', error);
+        toast.error('Authentication failed', {
+          position: 'top-center',
+          duration: 2000,
+          icon: <X className="text-red-500" />
+        });
+      }
+    }
+  }, [login, navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -95,8 +160,10 @@ export default function Login() {
         icon: <Rocket className="text-blue-500" />
       });
 
-      // Navigate based on role
-      if (user.role === 'superadmin') {
+      // Navigate based on role and first login
+      if (user.isFirstLogin) {
+        navigate('/onboarding', { replace: true });
+      } else if (user.role === 'superadmin') {
         navigate('/superadmin/dashboard', { replace: true });
       } else {
         navigate('/dashboard', { replace: true });
@@ -117,33 +184,20 @@ export default function Login() {
   };
 
   const handleGoogleLogin = () => {
-    // Simply redirect the current window to the backend's Google OAuth endpoint
-    window.location.href = `http://localhost:5000/api/auth/google`;
-    navigate('/superadmin/dashboard', { replace: true });
-    // // Open Google OAuth in a popup window
-    // const width = 500;
-    // const height = 600;
-    // const left = (window.innerWidth - width) / 2;
-    // const top = (window.innerHeight - height) / 2;
+    setIsGoogleLoading(true);
 
-    // const googleAuthUrl = `${process.env.REACT_APP_API_URL}/auth/google`;
+    // Use direct backend URL (no process.env in browser)
+    const backendUrl = 'http://localhost:5000'; // Replace with your actual backend URL
+    const redirectUri = `${window.location.origin}/login`;
+    const googleAuthUrl = `${backendUrl}/api/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
 
+    console.log('Redirecting to Google OAuth:', googleAuthUrl);
 
-    // const popup = window.open(
-    //   googleAuthUrl,
-    //   'Google Login',
-    //   `width=${width},height=${height},top=${top},left=${left}`
-    // );
-
-    // // Check for popup closure and handle the response
-    // const checkPopup = setInterval(() => {
-    //   if (!popup || popup.closed) {
-    //     clearInterval(checkPopup);
-    //     // You might want to check if authentication was successful here
-    //     // by making an API call to verify the user's status
-    //   }
-    // }, 1000);
+    // Redirect to Google OAuth
+    window.location.href = googleAuthUrl;
   };
+
+  const theme = 'light'; // Replace with actual theme detection
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4 relative overflow-hidden">
@@ -170,9 +224,6 @@ export default function Login() {
                 stroke: {
                   width: 0,
                   color: "#000000"
-                },
-                polygon: {
-                  nb_sides: 5
                 }
               },
               opacity: {
@@ -284,7 +335,7 @@ export default function Login() {
       <AuroraBackground>
         {/* Main card container */}
         <motion.div
-          className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-4xl overflow-hidden flex flex-col md:flex-row min-h-[600px] relative z-10 border border-gray-200 "
+          className="w-full max-w-4xl bg-white dark:bg-gray-800 rounded-4xl overflow-hidden flex flex-col md:flex-row min-h-[600px] relative z-10 border border-gray-200 dark:border-gray-700"
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5, ease: "easeOut" }}
@@ -412,7 +463,7 @@ export default function Login() {
 
               <div className="md:hidden flex items-center">
                 <AnimatedGradientBorder borderRadius="0.5rem" className="w-8 h-8">
-                  <div className="w-full h-full rounded-lg flex items-center justify-center bg-gradient-to-r from-teil-600 to-indigo-600">
+                  <div className="w-full h-full rounded-lg flex items-center justify-center bg-gradient-to-r from-teal-600 to-indigo-600">
                     <Sparkles className="text-white" size={16} />
                   </div>
                 </AnimatedGradientBorder>
@@ -463,9 +514,7 @@ export default function Login() {
                           type="email"
                           name="email"
                           placeholder="your@email.com"
-                          className="w-full pl-10 pr-4 py-3 bg-transparent rounded-lg
-                 focus:ring-2 focus:ring-[#0B1E3F] focus:border-transparent
-                 transition-all duration-200 hover:border-[#008080]/50"
+                          className="w-full pl-10 pr-4 py-3 bg-transparent rounded-lg focus:ring-2 focus:ring-[#0B1E3F] focus:border-transparent transition-all duration-200 hover:border-[#008080]/50 dark:text-white"
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           required
@@ -502,7 +551,7 @@ export default function Login() {
                           type={showPassword ? "text" : "password"}
                           name="password"
                           placeholder="••••••••"
-                          className="w-full pl-10 pr-12 py-3 bg-transparent rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-600"
+                          className="w-full pl-10 pr-12 py-3 bg-transparent rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 hover:border-gray-300 dark:hover:border-gray-600 dark:text-white"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           required
@@ -621,29 +670,29 @@ export default function Login() {
                   <motion.button
                     type="button"
                     onClick={handleGoogleLogin}
-                    className="w-full bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-3 px-4 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-3 border border-gray-300 dark:border-gray-600"
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
+                    disabled={isGoogleLoading}
+                    className="w-full bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 py-3 px-4 rounded-lg font-medium shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-3 border border-gray-300 dark:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    whileHover={{ scale: isGoogleLoading ? 1 : 1.01 }}
+                    whileTap={{ scale: isGoogleLoading ? 1 : 0.99 }}
                   >
-                    <svg className="w-5 h-5" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 极客 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-极客 3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      />
-                    </svg>
-                    <span>Sign in with Google</span>
+                    {isGoogleLoading ? (
+                      <svg
+                        className="animate-spin h-5 w-5 text-gray-400"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                    ) : (
+                      <GoogleIcon />
+                    )}
+                    <span>{isGoogleLoading ? 'Redirecting...' : 'Sign in with Google'}</span>
                   </motion.button>
 
                   <div className="mt-6 text-center">
