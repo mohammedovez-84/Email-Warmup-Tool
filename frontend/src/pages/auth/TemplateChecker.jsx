@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import {
   FiAlertTriangle,
   FiCheckCircle,
@@ -26,6 +27,175 @@ import {
   FiSave,
   FiRefreshCw
 } from 'react-icons/fi';
+
+// API Service
+const apiService = {
+  async analyzeEmail(subject, body) {
+    const API_BASE_URL = 'http://localhost:8000';
+    
+    console.log('📡 Calling API:', `${API_BASE_URL}/analyze`);
+    console.log('📧 Subject:', subject);
+    console.log('📝 Content:', body);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/analyze`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          subject,
+          body
+        }),
+      });
+
+      console.log('📨 Response status:', response.status);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ API Error Response:', errorText);
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('✅ API Success - Data received');
+      return data;
+    } catch (error) {
+      console.error('🚨 API Call Failed:', error);
+      throw new Error(
+        error.message === 'Failed to fetch' 
+          ? 'Unable to connect to analysis service. Please check if the backend server is running on port 8000.'
+          : `Analysis failed: ${error.message}`
+      );
+    }
+  }
+};
+
+// Data Transformation Utilities
+const mapPriorityToSeverity = (priority) => {
+  const priorityMap = {
+    'HIGH PRIORITY': 'High',
+    'MEDIUM PRIORITY': 'Medium',
+    'LOW PRIORITY': 'Low',
+    'SUGGESTION': 'Low',
+    'NONE PRIORITY': 'None'
+  };
+  return priorityMap[priority] || 'Low';
+};
+
+const getIconForCategory = (category) => {
+  const iconMap = {
+    'Spam Risk': FiShield,
+    'Spam Trigger Words': FiShield,
+    'Negative Tone Detected': FiAlertTriangle,
+    'Unfilled Personalization Tags': FiUser,
+    'Formatting': FiFileText,
+    'Content Quality': FiFileText,
+    'Subject Optimization': FiTarget,
+    'Email Structure': FiFileText,
+    'Tone & Voice': FiFileText,
+    'Personalization': FiUser,
+    'Content Structure': FiFileText,
+    'Overall Assessment': FiAward,
+    'Positive Feedback': FiAward
+  };
+  return iconMap[category] || FiFileText;
+};
+
+const transformMetrics = (apiMetrics) => {
+  if (!apiMetrics) return {};
+  
+  return {
+    subjectLength: apiMetrics.subject?.value || 0,
+    wordCount: apiMetrics.words?.value || 0,
+    sentenceCount: apiMetrics.sentences?.value || 0,
+    paragraphCount: apiMetrics.paragraphs?.value || 0,
+    lineCount: apiMetrics.lines?.value || 0,
+    readingTime: apiMetrics.read_time?.value || '1 min',
+    linkCount: apiMetrics.links?.value || 0,
+    questionCount: apiMetrics.questions?.value || 0,
+    spammyWordCount: apiMetrics.spam_words?.value || 0,
+    personalizationCount: apiMetrics.personal_tags?.value || 0,
+    uppercaseCount: apiMetrics.uppercase?.value || 0,
+    readabilityScore: apiMetrics.readability?.value || 0
+  };
+};
+
+const transformApiResponse = (apiData) => {
+  if (!apiData || !apiData.result) {
+    throw new Error('Invalid API response format');
+  }
+
+  const { template_analytics, detailed_analysis, warmup_strategies, positive_aspects } = apiData.result;
+
+  // Transform analysis results
+  const analysisResults = [];
+
+  // Transform critical issues
+  if (detailed_analysis.critical_issues) {
+    detailed_analysis.critical_issues.forEach((issue, index) => {
+      analysisResults.push({
+        id: `critical-${index}`,
+        issue: issue.category,
+        severity: mapPriorityToSeverity(issue.priority),
+        found: issue.found,
+        suggestion: issue.recommendation,
+        icon: getIconForCategory(issue.category),
+        category: issue.category
+      });
+    });
+  }
+
+  // Transform warnings
+  if (detailed_analysis.warnings) {
+    detailed_analysis.warnings.forEach((warning, index) => {
+      analysisResults.push({
+        id: `warning-${index}`,
+        issue: warning.category,
+        severity: mapPriorityToSeverity(warning.priority),
+        found: warning.found,
+        suggestion: warning.recommendation,
+        icon: getIconForCategory(warning.category),
+        category: warning.category
+      });
+    });
+  }
+
+  // Transform suggestions
+  if (detailed_analysis.suggestions) {
+    detailed_analysis.suggestions.forEach((suggestion, index) => {
+      analysisResults.push({
+        id: `suggestion-${index}`,
+        issue: suggestion.category,
+        severity: 'Low',
+        found: suggestion.found,
+        suggestion: suggestion.recommendation,
+        icon: FiFileText,
+        category: suggestion.category
+      });
+    });
+  }
+
+  // Add positive aspects
+  if (positive_aspects && positive_aspects.found) {
+    analysisResults.push({
+      id: 'positive',
+      issue: positive_aspects.category,
+      severity: 'None',
+      found: positive_aspects.found,
+      suggestion: positive_aspects.recommendation,
+      icon: FiAward,
+      category: 'Positive Feedback'
+    });
+  }
+
+  return {
+    analysisResults,
+    templateAnalytics: template_analytics,
+    warmupStrategies: warmup_strategies,
+    metrics: transformMetrics(template_analytics?.metrics)
+  };
+};
 
 const TemplateCheckerPage = () => {
   // State Management
@@ -55,10 +225,13 @@ Best regards,
   const [currentHistoryIndex, setCurrentHistoryIndex] = useState(-1);
   const [savedTemplates, setSavedTemplates] = useState([]);
   const [templateName, setTemplateName] = useState('');
+  const [apiMetrics, setApiMetrics] = useState(null);
+  const [warmupStrategies, setWarmupStrategies] = useState([]);
+  const [emailHealthScore, setEmailHealthScore] = useState(0);
 
   const textareaRef = useRef(null);
 
-  // Enhanced Metrics Calculation
+  // Enhanced Metrics Calculation (Fallback)
   const calculateMetrics = () => {
     const words = emailContent.split(/\s+/).filter(word => word.length > 0);
     const sentences = emailContent.split(/[.!?]+/).filter(s => s.length > 0);
@@ -115,7 +288,6 @@ Best regards,
     const sentences = text.split(/[.!?]+/).filter(s => s.length > 0);
     const avgWordsPerSentence = words.length / Math.max(sentences.length, 1);
 
-    // Simple readability score (higher is better)
     let score = 100;
     if (avgWordsPerSentence > 25) score -= 20;
     if (avgWordsPerSentence > 30) score -= 20;
@@ -147,20 +319,50 @@ Best regards,
     'Verdana', 'Tahoma', 'Segoe UI', 'Roboto', 'SF Pro Display', 'Courier New'
   ];
 
-  // Core Functions
+  // Core Functions with API Integration
   const handleAnalyze = async () => {
+    if (!emailSubject.trim() || !emailContent.trim()) {
+      showNotification('Please enter both subject and content', 'error');
+      return;
+    }
+
     setIsAnalyzing(true);
+    
+    try {
+      console.log('🚀 Starting API analysis...');
+      const apiData = await apiService.analyzeEmail(emailSubject, emailContent);
+      console.log('📊 API Data received:', apiData);
+      
+      const transformedData = transformApiResponse(apiData);
+      console.log('🔄 Transformed Data:', transformedData);
+      
+      setAnalysisResults(transformedData.analysisResults);
+      setApiMetrics(transformedData.metrics);
+      setWarmupStrategies(transformedData.warmupStrategies);
+      setEmailHealthScore(transformedData.templateAnalytics?.email_health_score || getScore());
+      
+      setActiveTab('results');
+      showNotification('Email analysis completed successfully!');
+      
+    } catch (error) {
+      console.error('❌ Analysis error:', error);
+      showNotification(error.message, 'error');
+      // Fallback to local analysis
+      performLocalAnalysis();
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
-    // Simulate analysis with more realistic timing
-    await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
-
+  // Fallback local analysis
+  const performLocalAnalysis = () => {
+    console.log('🔄 Falling back to local analysis...');
     const newResults = [];
     const spamWords = emailContent.match(/\b(promotion|free|discount|offer|win|prize|buy now|limited time|act fast|click here|money back|guarantee|no cost|no obligation|risk-free|special promotion|urgent|cash|bonus|credit|deal|price|rate|cheap)\b/gi) || [];
     const personalizationTags = emailContent.match(/\[[^\]]+\]/g) || [];
     const uppercaseWords = emailContent.match(/[A-Z]{3,}/g) || [];
     const linkCount = metrics.linkCount;
 
-    // Comprehensive analysis checks
     if (spamWords.length > 0) {
       newResults.push({
         id: 1,
@@ -185,33 +387,9 @@ Best regards,
       });
     }
 
-    if (uppercaseWords.length > 2) {
-      newResults.push({
-        id: 3,
-        issue: 'Excessive Uppercase Text',
-        severity: 'Medium',
-        found: `${uppercaseWords.length} uppercase words/phrases detected`,
-        suggestion: 'Reduce uppercase usage. Excessive capitalization can trigger spam filters and appear unprofessional.',
-        icon: FiFileText,
-        category: 'Formatting'
-      });
-    }
-
-    if (linkCount > 2) {
-      newResults.push({
-        id: 4,
-        issue: 'Too Many Links',
-        severity: linkCount > 4 ? 'High' : 'Medium',
-        found: `${linkCount} links detected (recommended: 1-2)`,
-        suggestion: 'Limit links to 1-2 most relevant URLs. Multiple links can affect deliverability and click-through rates.',
-        icon: FiLink,
-        category: 'Content Structure'
-      });
-    }
-
     if (emailSubject.length > 50) {
       newResults.push({
-        id: 5,
+        id: 3,
         issue: 'Subject Line Too Long',
         severity: 'Medium',
         found: `${emailSubject.length} characters (optimal: 35-50 characters)`,
@@ -221,99 +399,15 @@ Best regards,
       });
     }
 
-    if (emailSubject.length < 10) {
-      newResults.push({
-        id: 6,
-        issue: 'Subject Line Too Short',
-        severity: 'Medium',
-        found: `${emailSubject.length} characters (minimum recommended: 10 characters)`,
-        suggestion: 'Expand subject line to provide more context and improve open rates.',
-        icon: FiTarget,
-        category: 'Subject Optimization'
-      });
-    }
-
-    if (!emailContent.includes('Best regards') && !emailContent.includes('Sincerely') &&
-      !emailContent.includes('Thank you') && !emailContent.includes('Regards')) {
-      newResults.push({
-        id: 7,
-        issue: 'Professional Closing Missing',
-        severity: 'Low',
-        found: 'No professional email closing detected',
-        suggestion: 'Add a professional closing like "Best regards," "Sincerely," or "Thank you" to maintain professionalism.',
-        icon: FiFileText,
-        category: 'Email Structure'
-      });
-    }
-
-    if (metrics.wordCount < 50) {
-      newResults.push({
-        id: 8,
-        issue: 'Email Content Too Short',
-        severity: 'Medium',
-        found: `${metrics.wordCount} words (recommended minimum: 50 words)`,
-        suggestion: 'Expand your email content to provide more value and context to recipients.',
-        icon: FiFileText,
-        category: 'Content Quality'
-      });
-    }
-
-    if (metrics.wordCount > 500) {
-      newResults.push({
-        id: 9,
-        issue: 'Email Content Too Long',
-        severity: 'Low',
-        found: `${metrics.wordCount} words (recommended maximum: 500 words)`,
-        suggestion: 'Consider shortening your email for better readability and engagement.',
-        icon: FiFileText,
-        category: 'Content Quality'
-      });
-    }
-
-    if (metrics.sentimentScore < -0.1) {
-      newResults.push({
-        id: 10,
-        issue: 'Negative Tone Detected',
-        severity: 'Low',
-        found: 'Email content may sound negative or problematic',
-        suggestion: 'Rephrase to maintain a positive, solution-oriented tone while addressing issues.',
-        icon: FiFileText,
-        category: 'Tone & Voice'
-      });
-    }
-
-    if (metrics.readabilityScore < 60) {
-      newResults.push({
-        id: 11,
-        issue: 'Readability Concerns',
-        severity: 'Low',
-        found: `Readability score: ${Math.round(metrics.readabilityScore)}/100`,
-        suggestion: 'Simplify sentence structure and break up long paragraphs for better readability.',
-        icon: FiFileText,
-        category: 'Content Quality'
-      });
-    }
-
-    // Add positive reinforcement for good practices
     const positiveAspects = [];
     if (metrics.personalizationCount > 0) positiveAspects.push('personalization tags');
     if (metrics.questionCount > 0) positiveAspects.push('engaging questions');
     if (metrics.paragraphCount >= 2) positiveAspects.push('good paragraph structure');
     if (emailSubject.length >= 10 && emailSubject.length <= 50) positiveAspects.push('optimal subject length');
 
-    if (positiveAspects.length > 0 && newResults.length === 0) {
+    if (positiveAspects.length > 0) {
       newResults.push({
-        id: 12,
-        issue: 'Excellent Template Quality',
-        severity: 'None',
-        found: `Strong aspects: ${positiveAspects.join(', ')}`,
-        suggestion: 'Your email template follows best practices. Ready for sending!',
-        icon: FiAward,
-        category: 'Overall Assessment'
-      });
-    } else if (positiveAspects.length > 0) {
-      newResults.push({
-        id: 13,
+        id: 4,
         issue: 'Positive Aspects Found',
         severity: 'None',
         found: `Well done on: ${positiveAspects.join(', ')}`,
@@ -325,7 +419,7 @@ Best regards,
 
     setAnalysisResults(newResults);
     setActiveTab('results');
-    setIsAnalyzing(false);
+    showNotification('Local analysis completed (API unavailable)');
   };
 
   const handleCopyToClipboard = () => {
@@ -407,7 +501,7 @@ Best regards,
     return Math.max(0, Math.min(100, Math.round(score)));
   };
 
-  const score = getScore();
+  const score = emailHealthScore || getScore();
   const scoreColor = score >= 80 ? '#0D9488' : score >= 60 ? '#D97706' : '#DC2626';
 
   // Template Management
@@ -495,6 +589,9 @@ Best regards,
       </div>
     );
   };
+
+  // Use API metrics when available, otherwise use local metrics
+  const displayMetrics = apiMetrics || metrics;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50/40 to-blue-50/30 p-4 font-sans">
@@ -788,10 +885,10 @@ Best regards,
                   />
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 md:px-6 py-3 md:py-4 bg-gray-50/50 border-t border-gray-300/50 gap-2">
                     <span className="text-xs md:text-sm text-gray-500">
-                      {metrics.wordCount} words • {metrics.lineCount} lines • {metrics.paragraphCount} paragraphs
+                      {displayMetrics.wordCount} words • {displayMetrics.lineCount} lines • {displayMetrics.paragraphCount} paragraphs
                     </span>
                     <span className="text-xs md:text-sm text-gray-500">
-                      Reading time: {metrics.readingTime} • {metrics.sentenceCount} sentences
+                      Reading time: {displayMetrics.readingTime} • {displayMetrics.sentenceCount} sentences
                     </span>
                   </div>
                 </div>
@@ -860,18 +957,18 @@ Best regards,
                       {/* Enhanced Metrics Grid - Improved Responsive Grid */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
                         {[
-                          { label: 'Subject', value: metrics.subjectLength, warning: metrics.subjectLength > 50 || metrics.subjectLength < 10, optimal: metrics.subjectLength >= 10 && metrics.subjectLength <= 50, icon: FiTarget, description: 'chars' },
-                          { label: 'Words', value: metrics.wordCount, warning: metrics.wordCount < 50 || metrics.wordCount > 500, optimal: metrics.wordCount >= 50 && metrics.wordCount <= 500, icon: FiFileText, description: 'words' },
-                          { label: 'Sentences', value: metrics.sentenceCount, optimal: metrics.sentenceCount >= 3, icon: FiFileText, description: 'sentences' },
-                          { label: 'Paragraphs', value: metrics.paragraphCount, optimal: metrics.paragraphCount >= 2, icon: FiFileText, description: 'paragraphs' },
-                          { label: 'Lines', value: metrics.lineCount, icon: FiFileText, description: 'lines' },
-                          { label: 'Read Time', value: metrics.readingTime, icon: FiClock, description: 'minutes' },
-                          { label: 'Links', value: metrics.linkCount, warning: metrics.linkCount > 2, optimal: metrics.linkCount <= 2, icon: FiLink, description: 'links' },
-                          { label: 'Questions', value: metrics.questionCount, optimal: metrics.questionCount >= 1, icon: FiFileText, description: 'questions' },
-                          { label: 'Spam Words', value: metrics.spammyWordCount, warning: metrics.spammyWordCount > 0, optimal: metrics.spammyWordCount === 0, icon: FiShield, description: 'words' },
-                          { label: 'Personal Tags', value: metrics.personalizationCount, optimal: metrics.personalizationCount > 0, icon: FiUser, description: 'tags' },
-                          { label: 'UPPERCASE', value: metrics.uppercaseCount, warning: metrics.uppercaseCount > 2, optimal: metrics.uppercaseCount <= 2, icon: FiFileText, description: 'instances' },
-                          { label: 'Readability', value: Math.round(metrics.readabilityScore), warning: metrics.readabilityScore < 60, optimal: metrics.readabilityScore >= 60, icon: FiFileText, description: 'score' },
+                          { label: 'Subject', value: displayMetrics.subjectLength, warning: displayMetrics.subjectLength > 50 || displayMetrics.subjectLength < 10, optimal: displayMetrics.subjectLength >= 10 && displayMetrics.subjectLength <= 50, icon: FiTarget, description: 'chars' },
+                          { label: 'Words', value: displayMetrics.wordCount, warning: displayMetrics.wordCount < 50 || displayMetrics.wordCount > 500, optimal: displayMetrics.wordCount >= 50 && displayMetrics.wordCount <= 500, icon: FiFileText, description: 'words' },
+                          { label: 'Sentences', value: displayMetrics.sentenceCount, optimal: displayMetrics.sentenceCount >= 3, icon: FiFileText, description: 'sentences' },
+                          { label: 'Paragraphs', value: displayMetrics.paragraphCount, optimal: displayMetrics.paragraphCount >= 2, icon: FiFileText, description: 'paragraphs' },
+                          { label: 'Lines', value: displayMetrics.lineCount, icon: FiFileText, description: 'lines' },
+                          { label: 'Read Time', value: displayMetrics.readingTime, icon: FiClock, description: 'minutes' },
+                          { label: 'Links', value: displayMetrics.linkCount, warning: displayMetrics.linkCount > 2, optimal: displayMetrics.linkCount <= 2, icon: FiLink, description: 'links' },
+                          { label: 'Questions', value: displayMetrics.questionCount, optimal: displayMetrics.questionCount >= 1, icon: FiFileText, description: 'questions' },
+                          { label: 'Spam Words', value: displayMetrics.spammyWordCount, warning: displayMetrics.spammyWordCount > 0, optimal: displayMetrics.spammyWordCount === 0, icon: FiShield, description: 'words' },
+                          { label: 'Personal Tags', value: displayMetrics.personalizationCount, optimal: displayMetrics.personalizationCount > 0, icon: FiUser, description: 'tags' },
+                          { label: 'UPPERCASE', value: displayMetrics.uppercaseCount, warning: displayMetrics.uppercaseCount > 2, optimal: displayMetrics.uppercaseCount <= 2, icon: FiFileText, description: 'instances' },
+                          { label: 'Readability', value: Math.round(displayMetrics.readabilityScore), warning: displayMetrics.readabilityScore < 60, optimal: displayMetrics.readabilityScore >= 60, icon: FiFileText, description: 'score' },
                         ].map((metric, index) => {
                           const IconComponent = metric.icon;
                           return (
@@ -969,46 +1066,81 @@ Best regards,
                   </div>
                 </div>
 
-                {/* Summary Cards - Improved Grid & Responsive */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 md:gap-6">
-                  {[
-                    { severity: 'Critical', count: analysisResults.filter(r => r.severity === 'High').length, color: 'red', description: 'Urgent fixes needed', icon: FiAlertTriangle },
-                    { severity: 'Warning', count: analysisResults.filter(r => r.severity === 'Medium').length, color: 'amber', description: 'Recommended improvements', icon: FiAlertTriangle },
-                    { severity: 'Suggestion', count: analysisResults.filter(r => r.severity === 'Low').length, color: 'teal', description: 'Optional enhancements', icon: FiFileText },
-                    { severity: 'Passed', count: analysisResults.filter(r => r.severity === 'None').length, color: 'green', description: 'All checks passed', icon: FiAward },
-                  ].map((summary, index) => (
-                    <div key={index} className={`p-4 md:p-6 rounded-xl md:rounded-2xl border-l-4 backdrop-blur-sm shadow-sm hover:shadow-md transition-shadow duration-300 ${summary.color === 'red' ? 'bg-red-50/80 border-red-500' :
-                      summary.color === 'amber' ? 'bg-amber-50/80 border-amber-500' :
-                        summary.color === 'teal' ? 'bg-teal-50/80 border-teal-500' :
-                          'bg-green-50/80 border-green-500'
-                      }`}>
-                      <div className="flex items-center justify-between mb-3 md:mb-4">
-                        <div className={`p-2 md:p-3 rounded-lg md:rounded-xl ${summary.color === 'red' ? 'bg-red-100 text-red-600' :
-                          summary.color === 'amber' ? 'bg-amber-100 text-amber-600' :
-                            summary.color === 'teal' ? 'bg-teal-100 text-teal-600' :
-                              'bg-green-100 text-green-600'
-                          }`}>
-                          <summary.icon className="w-4 h-4 md:w-6 md:h-6" />
-                        </div>
-                        <div className={`text-3xl md:text-4xl font-bold ${summary.color === 'red' ? 'text-red-600' :
-                          summary.color === 'amber' ? 'text-amber-600' :
-                            summary.color === 'teal' ? 'text-teal-600' :
-                              'text-green-600'
-                          }`}>
-                          {summary.count}
-                        </div>
-                      </div>
-                      <div className="space-y-1 md:space-y-2">
-                        <div className="text-lg md:text-xl font-semibold text-gray-900">
-                          {summary.severity}
-                        </div>
-                        <div className="text-xs md:text-sm text-gray-600">
-                          {summary.description}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+               {/* Summary Cards - Analytics Dashboard Design */}
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+  {[
+    { 
+      severity: 'Critical', 
+      count: analysisResults.filter(r => r.severity === 'High').length, 
+      percentage: Math.min(100, analysisResults.filter(r => r.severity === 'High').length * 25),
+      description: 'Urgent fixes needed', 
+      icon: FiAlertTriangle,
+      color: 'text-red-600',
+      bgColor: 'bg-red-50'
+    },
+    { 
+      severity: 'Warning', 
+      count: analysisResults.filter(r => r.severity === 'Medium').length, 
+      percentage: Math.min(100, analysisResults.filter(r => r.severity === 'Medium').length * 25),
+      description: 'Recommended improvements', 
+      icon: FiAlertTriangle,
+      color: 'text-orange-600',
+      bgColor: 'bg-orange-50'
+    },
+    { 
+      severity: 'Suggestion', 
+      count: analysisResults.filter(r => r.severity === 'Low').length, 
+      percentage: Math.min(100, analysisResults.filter(r => r.severity === 'Low').length * 25),
+      description: 'Optional enhancements', 
+      icon: FiFileText,
+      color: 'text-blue-600',
+      bgColor: 'bg-blue-50'
+    },
+    { 
+      severity: 'Passed', 
+      count: analysisResults.filter(r => r.severity === 'None').length, 
+      percentage: Math.min(100, analysisResults.filter(r => r.severity === 'None').length * 25),
+      description: 'All checks passed', 
+      icon: FiAward,
+      color: 'text-green-600',
+      bgColor: 'bg-green-50'
+    },
+  ].map((summary, index) => (
+    <motion.div
+      key={summary.severity}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.1 }}
+      className="relative bg-white border border-gray-200 rounded-xl p-4 transition-all duration-300 hover:shadow-md group"
+    >
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-teal-500 to-teal-600 rounded-b-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+      
+      <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-teal-500 to-teal-600 opacity-0 group-hover:opacity-5 transition-opacity duration-300"></div>
+      
+      <div className="relative z-10">
+        <div className="flex items-center justify-between mb-3">
+          <div className={`w-10 h-10 ${summary.bgColor} rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
+            <summary.icon className={`text-lg ${summary.color}`} />
+          </div>
+          <span className="text-sm font-medium text-gray-500">{summary.severity}</span>
+        </div>
+
+        <div className="flex items-end justify-between mb-2">
+          <p className={`text-xl font-bold ${summary.color} antialiased subpixel-antialiased`}>{summary.count}</p>
+          <p className="text-lg font-semibold text-teal-600 antialiased">
+            {summary.percentage}%
+          </p>
+        </div>
+
+        <div className="flex items-center">
+          <span className="text-sm text-gray-500 truncate antialiased">
+            {summary.description}
+          </span>
+        </div>
+      </div>
+    </motion.div>
+  ))}
+</div>
 
                 {/* Enhanced Issues List - Responsive */}
                 <div className="space-y-4 md:space-y-6">
@@ -1087,53 +1219,41 @@ Best regards,
                   )}
                 </div>
 
-                {/* Enhanced Best Practices - Responsive */}
+                {/* Enhanced Best Practices - Use API strategies when available */}
                 <div className="bg-gradient-to-r from-teal-50/60 to-teal-100/30 rounded-xl md:rounded-2xl p-6 md:p-8 border border-teal-300/50 shadow-sm">
                   <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 md:mb-6 flex items-center gap-2 md:gap-3">
                     <FiSettings className="w-5 h-5 md:w-7 md:h-7 text-teal-500" />
                     Email Best Practices & Warmup Strategies
                   </h3>
                   <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 md:gap-6 text-sm md:text-base">
-                    <div className="space-y-3 md:space-y-4">
-                      <div className="flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white/60 rounded-lg md:rounded-xl border border-gray-300/30 shadow-sm hover:shadow-md transition-shadow duration-300">
+                    {(warmupStrategies.length > 0 ? warmupStrategies : [
+                      {
+                        title: "Gradual Warmup Process",
+                        description: "Start with 5-10 emails daily, gradually increasing volume over 4-8 weeks. Monitor engagement metrics closely and adjust based on performance."
+                      },
+                      {
+                        title: "Authentication Setup",
+                        description: "Configure SPF, DKIM, and DMARC records properly. This builds trust with email providers and improves deliverability rates significantly."
+                      },
+                      {
+                        title: "List Hygiene & Engagement",
+                        description: "Regularly clean your email list. Remove inactive subscribers, validate email addresses, and monitor open/click rates to maintain list quality."
+                      },
+                      {
+                        title: "Content Optimization",
+                        description: "Personalize content, avoid spam triggers, maintain a clean professional tone, and ensure mobile responsiveness for better engagement."
+                      }
+                    ]).map((strategy, index) => (
+                      <div key={index} className="flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white/60 rounded-lg md:rounded-xl border border-gray-300/30 shadow-sm hover:shadow-md transition-shadow duration-300">
                         <div className="w-8 h-8 md:w-10 md:h-10 bg-teal-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-teal-600 text-xs md:text-sm font-bold">1</span>
+                          <span className="text-teal-600 text-xs md:text-sm font-bold">{index + 1}</span>
                         </div>
                         <div>
-                          <h4 className="font-semibold text-gray-900 text-base md:text-lg mb-1 md:mb-2">Gradual Warmup Process</h4>
-                          <p className="text-gray-600 leading-relaxed text-sm md:text-base">Start with 5-10 emails daily, gradually increasing volume over 4-8 weeks. Monitor engagement metrics closely and adjust based on performance.</p>
+                          <h4 className="font-semibold text-gray-900 text-base md:text-lg mb-1 md:mb-2">{strategy.title}</h4>
+                          <p className="text-gray-600 leading-relaxed text-sm md:text-base">{strategy.description}</p>
                         </div>
                       </div>
-                      <div className="flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white/60 rounded-lg md:rounded-xl border border-gray-300/30 shadow-sm hover:shadow-md transition-shadow duration-300">
-                        <div className="w-8 h-8 md:w-10 md:h-10 bg-teal-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-teal-600 text-xs md:text-sm font-bold">2</span>
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-gray-900 text-base md:text-lg mb-1 md:mb-2">Authentication Setup</h4>
-                          <p className="text-gray-600 leading-relaxed text-sm md:text-base">Configure SPF, DKIM, and DMARC records properly. This builds trust with email providers and improves deliverability rates significantly.</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-3 md:space-y-4">
-                      <div className="flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white/60 rounded-lg md:rounded-xl border border-gray-300/30 shadow-sm hover:shadow-md transition-shadow duration-300">
-                        <div className="w-8 h-8 md:w-10 md:h-10 bg-teal-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-teal-600 text-xs md:text-sm font-bold">3</span>
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-gray-900 text-base md:text-lg mb-1 md:mb-2">List Hygiene & Engagement</h4>
-                          <p className="text-gray-600 leading-relaxed text-sm md:text-base">Regularly clean your email list. Remove inactive subscribers, validate email addresses, and monitor open/click rates to maintain list quality.</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3 md:gap-4 p-3 md:p-4 bg-white/60 rounded-lg md:rounded-xl border border-gray-300/30 shadow-sm hover:shadow-md transition-shadow duration-300">
-                        <div className="w-8 h-8 md:w-10 md:h-10 bg-teal-100 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5">
-                          <span className="text-teal-600 text-xs md:text-sm font-bold">4</span>
-                        </div>
-                        <div>
-                          <h4 className="font-semibold text-gray-900 text-base md:text-lg mb-1 md:mb-2">Content Optimization</h4>
-                          <p className="text-gray-600 leading-relaxed text-sm md:text-base">Personalize content, avoid spam triggers, maintain a clean professional tone, and ensure mobile responsiveness for better engagement.</p>
-                        </div>
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 </div>
               </div>
