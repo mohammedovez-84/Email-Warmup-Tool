@@ -1,7 +1,0 @@
-scikit-learn
-transformers
-torch
-textstat
-joblib
-pandas
-numpy
