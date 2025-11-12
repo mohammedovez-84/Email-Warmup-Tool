@@ -1,7 +1,4 @@
 const cron = require('node-cron');
-const moment = require('moment');
-moment.suppressDeprecationWarnings = true;
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
@@ -11,6 +8,7 @@ const passport = require('passport');
 require('./config/microsoftStrategy');
 const { sequelize } = require('./config/db');
 
+// Import routes
 const microsoftAuthRoutes = require('./routes/auth/microsoftAuth');
 const authRoutes = require('./routes/auth/auth');
 const googleRoutes = require('./routes/auth/googleRoutes');
@@ -21,15 +19,14 @@ const warmupRoutes = require('./routes/warmup/warmupRoutes');
 const userRoutes = require('./routes/users/users');
 const metricsRoutes = require('./routes/metrics/metricsRoutes');
 const healthRoutes = require('./routes/health/healthRoutes');
-// In your server.js or app.js
+const analyticsRoutes = require("./routes/analytics/analytics");
+const googleAuthRoutes = require("./routes/auth/google-auth");
+const dnsRoutes = require("./routes/dns/auth-checker");
+
+// Import services
 require('./models/associations')();
 const warmupScheduler = require('./services/schedule/Scheduler');
 const dailyResetService = require('./services/volume/dailyReset');
-const analyticsRoutes = require("./routes/analytics/analytics")
-const googleAuthRoutes = require("./routes/auth/google-auth")
-// const analyticsRoutes = require("./routes/analytics/analytics")
-const dnsRoutes = require("./routes/dns/auth-checker")
-
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -46,13 +43,11 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 // Routes
-
 app.use('/auth/microsoft2', microsoftAuthRoutes);
 app.use('/api/auth', authRoutes);
-// app.use("/api/ms-oauth_admin",)
-app.use("/api/analytics", analyticsRoutes)
-app.use("/api/dns", dnsRoutes)
-app.use("/api/auth", googleAuthRoutes)
+app.use("/api/analytics", analyticsRoutes);
+app.use("/api/dns", dnsRoutes);
+app.use("/api/auth", googleAuthRoutes);
 app.use('/api', googleRoutes);
 app.use('/auth', microsoftRoutes);
 app.use('/api', smtpImapRoutes);
@@ -62,47 +57,46 @@ app.use('/api/users', userRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/health', healthRoutes);
 
-// app.use("/analytics", analyticsRoutes)
-
-
-
-
-// In your server.js file, replace the scheduler startup section:
-
+// Application startup
 (async () => {
     try {
+        // Database connection
         await sequelize.authenticate();
-        console.log('✅ Database connection established');
-        console.log('✅ Database connection verified');
+        console.log('✅ DATABASE CONNECTION ESTABLISHED');
 
-        await sequelize.sync();
+        await sequelize.sync({ alter: false });
+        console.log('✅ DATABASE SYNCED');
 
-        // 🚨 DAILY CRON - This is the ONLY place that should increment days
+        // Daily reset cron job
         cron.schedule('0 0 * * *', async () => {
-            console.log('⏰ DAILY CRON: Running warmup day increment...');
+            console.log('⏰ DAILY CRON: Running warmup reset...');
             await dailyResetService.performDailyReset();
         });
 
+        // Start warmup scheduler with delay
         setTimeout(async () => {
             try {
-                console.log('🚀 Starting Warmup Scheduler...');
+                console.log('🚀 STARTING WARMUP SCHEDULER...');
+                await warmupScheduler.scheduleWarmup();
 
+                // Schedule periodic warmup (every 15 minutes)
+                setInterval(async () => {
+                    await warmupScheduler.scheduleWarmup();
+                }, 15 * 60 * 1000);
 
-                await warmupScheduler.scheduleWarmup()
-
-
-                console.log('✅ Warmup scheduler started successfully');
+                console.log('✅ WARMUP SYSTEM READY');
             } catch (error) {
-                console.error('❌ Failed to start scheduler:', error);
+                console.error('❌ SCHEDULER STARTUP FAILED:', error);
             }
-        }, 5000);
+        }, 10000); // 10 second delay
 
+        // Start server
         app.listen(PORT, () => {
-            console.log(`🚀 Server started on http://localhost:${PORT}`);
+            console.log(`🚀 SERVER STARTED: http://localhost:${PORT}`);
         });
 
     } catch (err) {
-        console.error('❌ Startup failed:', err);
+        console.error('❌ STARTUP FAILED:', err);
         process.exit(1);
     }
 })();

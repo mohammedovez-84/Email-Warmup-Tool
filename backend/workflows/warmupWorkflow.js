@@ -1,16 +1,17 @@
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const { sendEmail } = require('../services/schedule/emailSender');
-const { checkEmailStatus, moveEmailToInbox, } = require('../services/schedule/imapHelper');
+const { checkEmailStatus } = require('../services/schedule/imapHelper'); // Removed moveEmailToInbox import
 const { maybeReply } = require('../services/schedule/replyHelper');
-const { generateEmail: gpt2GenerateEmail, generateReplyWithRetry: gpt2GenerateReplyWithRetry } = require("../services/email/aiService");
-const { generateEmail: templateGenerateEmail, generateReplyWithRetry: templateGenerateReplyWithRetry } = require("../services/email/email-template.service");
+const { generateEmail: generateEmailByGpt, generateReply: generateReplyByGpt } = require("../services/email/email-generator");
+const { generateReplyWithRetry: templateGenerateReplyWithRetry } = require("../services/email/email-template.service");
 const GoogleUser = require('../models/GoogleUser');
 const MicrosoftUser = require('../models/MicrosoftUser');
 const SmtpAccount = require('../models/smtpAccounts');
 const EmailPool = require('../models/EmailPool');
 const { getSenderType } = require('../utils/senderConfig');
 const { sequelize } = require('../config/db');
-
+// In warmupSingleEmail function - COMPLETE UPDATED VERSION
+const trackingService = require('../services/tracking/trackingService');
 
 const RATE_LIMIT_CONFIG = {
     minDelayBetweenEmails: 15 * 60 * 1000,
@@ -290,11 +291,11 @@ async function resetPoolDailyCount(poolEmail) {
     }
 }
 
-// In warmupSingleEmail function - COMPLETE UPDATED VERSION
-const trackingService = require('../services/tracking/trackingService');
+
 
 async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isScheduledReply = false, isCoordinatedJob = false, isInitialEmail = false, direction = 'WARMUP_TO_POOL') {
     let messageId = null;
+    let deliveryStatus = null; // 🚨 ADD THIS to track delivery status
 
     try {
         console.log(`📧 Starting ${direction}: ${senderConfig.email} → ${receiver.email} [${isInitialEmail ? 'INITIAL' : 'REPLY'}]`);
@@ -370,31 +371,33 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
 
             try {
                 const statusResult = await checkEmailStatus(receiver, messageId);
+                deliveryStatus = statusResult; // 🚨 STORE THE STATUS RESULT
+
                 if (statusResult.success) {
                     const deliveredInbox = statusResult.folder === 'INBOX';
 
                     // 🚨 TRACK DELIVERY STATUS
                     await trackingService.trackEmailDelivered(messageId, {
                         deliveredInbox: deliveredInbox,
-                        deliveryFolder: statusResult.folder
+                        deliveryFolder: statusResult.folder,
+                        isSpamFolder: statusResult.isSpamFolder || false,
+                        spamRisk: statusResult.spamRisk || 'unknown'
                     });
 
-                    // Try to move to inbox if not delivered
-                    if (!deliveredInbox) {
-                        try {
-                            await moveEmailToInbox(receiver, messageId, statusResult.folder);
-                            console.log(`📥 Attempted to move email to inbox`);
-
-                            // Track inbox movement attempt
-                            await trackingService.trackEmailDelivered(messageId, {
-                                deliveredInbox: true, // Assume successful after move attempt
-                                deliveryFolder: 'INBOX',
-                                movedToInbox: true
-                            });
-                        } catch (moveError) {
-                            console.log(`⚠️  Could not move email to inbox: ${moveError.message}`);
-                        }
+                    // 🚨 REMOVED: Forceful email moving to inbox
+                    // We now only track spam folder placement without attempting to move
+                    if (statusResult.isSpamFolder) {
+                        console.log(`⚠️  Email delivered to spam folder: ${statusResult.folder}`);
+                        // Track spam placement for analytics but don't attempt to move
+                        await trackingService.trackSpamComplaint(messageId, {
+                            complaintType: 'automated_filter',
+                            complaintSource: 'ISP_FILTER',
+                            complaintFeedback: `Automatically placed in ${statusResult.folder} folder by email provider`,
+                            reportingIsp: statusResult.isp || 'unknown',
+                            folder: statusResult.folder
+                        });
                     }
+
                 } else {
                     // 🚨 TRACK DELIVERY FAILURE
                     await trackingService.trackEmailBounce(messageId, {
@@ -438,12 +441,14 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
 
         console.log(`✅ ${direction} email completed: ${senderConfig.email} → ${receiver.email}`);
 
+        // 🚨 FIXED: Use deliveryStatus instead of statusResult
         return {
             success: true,
             messageId: messageId,
             subject: subject,
-            deliveredInbox: sendResult.deliveredInbox || false,
-            deliveryFolder: sendResult.deliveryFolder
+            deliveredInbox: deliveryStatus?.deliveredInbox || sendResult.deliveredInbox || false,
+            deliveryFolder: deliveryStatus?.folder || sendResult.deliveryFolder,
+            isSpamFolder: deliveryStatus?.isSpamFolder || false
         };
 
     } catch (error) {
@@ -451,7 +456,7 @@ async function warmupSingleEmail(senderConfig, receiver, replyRate = 0.25, isSch
 
         // 🚨 TRACK FAILURE/BOUNCE
         if (messageId) {
-            const bounceType = this.determineBounceType(error);
+            const bounceType = determineBounceType(error);
             await trackingService.trackEmailBounce(messageId, {
                 bounceType: bounceType,
                 bounceCategory: bounceType === 'hard_bounce' ? 'permanent' : 'transient',
@@ -628,20 +633,24 @@ function getRateLimitStats() {
     };
 }
 
-async function generateEmail(senderName, receiverName, industry = "general") {
+async function generateEmail(senderName, receiverName) {
     try {
-        console.log('🤖 Attempting GPT-2 email generation...');
-        return await gpt2GenerateEmail(senderName, receiverName, industry);
+        console.log('🤖 Generating email with template service...');
+        const result = await generateEmailByGpt(senderName, receiverName);
+        return {
+            subject: result.subject,
+            content: result.body
+        };
     } catch (error) {
-        console.log('🔄 GPT-2 failed, using template service...');
-        return await templateGenerateEmail(senderName, receiverName, industry);
+        console.log('❌ Email generation failed:', error.message);
+        throw error;
     }
 }
 
 async function generateReplyWithRetry(originalEmail, maxRetries = 2) {
     try {
         console.log('🤖 Attempting GPT-2 reply generation...');
-        return await gpt2GenerateReplyWithRetry(originalEmail, maxRetries);
+        return await generateReplyByGpt(originalEmail, maxRetries);
     } catch (error) {
         console.log('🔄 GPT-2 reply failed, using template service...');
         return await templateGenerateReplyWithRetry(originalEmail, maxRetries);

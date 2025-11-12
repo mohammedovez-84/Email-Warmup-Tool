@@ -2,7 +2,9 @@ const EmailMetric = require('../../models/EmailMetric');
 const EngagementTracking = require('../../models/EngagementTracking');
 const ReplyTracking = require('../../models/ReplyTracking');
 const BounceTracking = require('../../models/BounceTracking');
-const { Op } = require('sequelize');
+const SpamAnalysis = require('../../models/SpamAnalysis');
+const SpamComplaint = require('../../models/SpamComplaint');
+const { Op, Sequelize } = require('sequelize');
 const { sequelize } = require('../../config/db');
 
 // Safe parsing utilities
@@ -18,17 +20,19 @@ const safeParseFloat = (value, defaultValue = 0) => {
     return isNaN(parsed) ? defaultValue : parsed;
 };
 
-// Helper function to calculate email health based on actual metrics
-const calculateEmailHealth = (deliveryRate, inboxRate, spamRate, hardBounceRate) => {
+// Helper function to calculate email health
+const calculateEmailHealth = (deliveryRate, inboxRate, spamRate, hardBounceRate, spamRiskScore = 0) => {
     let excellent = 0, good = 0, fair = 0, needsImprovement = 0;
 
-    // Enhanced scoring algorithm considering multiple factors including bounces
+    const spamRiskPenalty = Math.min(spamRiskScore * 2, 30);
     const bouncePenalty = hardBounceRate * 2;
+
     const overallScore = Math.max(0,
-        (deliveryRate * 0.3) +
-        (inboxRate * 0.4) +
-        ((100 - spamRate) * 0.2) +
-        ((100 - hardBounceRate) * 0.1)
+        (deliveryRate * 0.25) +
+        (inboxRate * 0.35) +
+        ((100 - spamRate) * 0.15) +
+        ((100 - hardBounceRate) * 0.1) +
+        ((100 - spamRiskPenalty) * 0.15)
     );
 
     if (overallScore >= 90) {
@@ -61,130 +65,448 @@ const calculateEmailHealth = (deliveryRate, inboxRate, spamRate, hardBounceRate)
     ];
 };
 
-// Helper to get daily performance data for the last 7 days
+// Helper to get daily performance data
 const getDailyPerformance = async (email, startDate) => {
-    const dailyData = await EmailMetric.findAll({
-        where: {
-            senderEmail: email,
-            sentAt: { [Op.gte]: startDate }
-        },
-        attributes: [
-            [sequelize.fn('DATE', sequelize.col('sentAt')), 'date'],
-            [sequelize.fn('COUNT', sequelize.col('id')), 'totalSent'],
-            [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = "delivered" THEN 1 ELSE 0 END')), 'delivered'],
-            [sequelize.fn('SUM', sequelize.literal('CASE WHEN deliveredInbox = true THEN 1 ELSE 0 END')), 'inbox'],
-            [sequelize.fn('SUM', sequelize.literal('CASE WHEN deliveryFolder = "spam" THEN 1 ELSE 0 END')), 'spam']
-        ],
-        group: [sequelize.fn('DATE', sequelize.col('sentAt'))],
-        raw: true,
-        order: [[sequelize.fn('DATE', sequelize.col('sentAt')), 'ASC']]
-    });
+    try {
+        const dailyData = await EmailMetric.findAll({
+            where: {
+                senderEmail: email,
+                sentAt: { [Op.gte]: startDate }
+            },
+            attributes: [
+                [Sequelize.fn('DATE', Sequelize.col('sentAt')), 'date'],
+                [Sequelize.fn('COUNT', Sequelize.col('id')), 'totalSent'],
+                [Sequelize.literal('SUM(CASE WHEN status = "delivered" AND deliveredInbox = true THEN 1 ELSE 0 END)'), 'inbox'],
+                [Sequelize.literal('SUM(CASE WHEN status = "delivered" AND deliveryFolder = "spam" THEN 1 ELSE 0 END)'), 'spam']
+            ],
+            group: [Sequelize.fn('DATE', Sequelize.col('sentAt'))],
+            raw: true,
+            order: [[Sequelize.fn('DATE', Sequelize.col('sentAt')), 'ASC']]
+        });
 
-    // Format for chart display
-    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const chartData = daysOfWeek.map(day => ({
-        day,
-        inbox: 0,
-        spam: 0
-    }));
+        // Format for chart display - last 7 days
+        const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const chartData = daysOfWeek.map(day => ({
+            day,
+            inbox: 0,
+            spam: 0
+        }));
 
-    dailyData.forEach(day => {
-        const date = new Date(day.date);
-        const dayIndex = date.getDay();
+        dailyData.forEach(day => {
+            const date = new Date(day.date);
+            const dayIndex = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
 
-        if (dayIndex >= 0 && dayIndex < 7) {
-            chartData[dayIndex].inbox = safeParseInt(day.inbox);
-            chartData[dayIndex].spam = safeParseInt(day.spam);
-        }
-    });
+            if (dayIndex >= 0 && dayIndex < 7) {
+                chartData[dayIndex].inbox = safeParseInt(day.inbox);
+                chartData[dayIndex].spam = safeParseInt(day.spam);
+            }
+        });
 
-    return chartData;
+        return chartData;
+    } catch (error) {
+        console.error('Error in getDailyPerformance:', error);
+        return [];
+    }
 };
 
 // Helper to calculate engagement metrics
 const getEngagementMetrics = async (email, startDate) => {
-    const engagementData = await EngagementTracking.findOne({
-        where: {
-            senderEmail: email,
-            firstOpenedAt: { [Op.gte]: startDate }
-        },
-        attributes: [
-            [sequelize.fn('COUNT', sequelize.col('id')), 'totalTracked'],
-            [sequelize.fn('SUM', sequelize.literal('CASE WHEN opened = true THEN 1 ELSE 0 END')), 'opened'],
-            [sequelize.fn('SUM', sequelize.literal('CASE WHEN clicked = true THEN 1 ELSE 0 END')), 'clicked'],
-            [sequelize.fn('AVG', sequelize.literal('openCount')), 'avgOpens'],
-            [sequelize.fn('AVG', sequelize.literal('clickCount')), 'avgClicks']
-        ],
-        raw: true
-    });
+    try {
+        // Count total tracked emails
+        const totalTracked = await EngagementTracking.count({
+            where: {
+                senderEmail: email,
+                createdAt: { [Op.gte]: startDate }
+            }
+        });
 
-    const totalTracked = safeParseInt(engagementData?.totalTracked, 0);
-    const opened = safeParseInt(engagementData?.opened, 0);
-    const clicked = safeParseInt(engagementData?.clicked, 0);
+        // Count opened emails
+        const opened = await EngagementTracking.count({
+            where: {
+                senderEmail: email,
+                opened: true,
+                createdAt: { [Op.gte]: startDate }
+            }
+        });
 
-    return {
-        openRate: totalTracked > 0 ? (opened / totalTracked) * 100 : 0,
-        clickRate: totalTracked > 0 ? (clicked / totalTracked) * 100 : 0,
-        avgOpens: safeParseFloat(engagementData?.avgOpens, 0),
-        avgClicks: safeParseFloat(engagementData?.avgClicks, 0)
-    };
+        // Count clicked emails
+        const clicked = await EngagementTracking.count({
+            where: {
+                senderEmail: email,
+                clicked: true,
+                createdAt: { [Op.gte]: startDate }
+            }
+        });
+
+        // Get average opens and clicks
+        const avgData = await EngagementTracking.findOne({
+            where: {
+                senderEmail: email,
+                createdAt: { [Op.gte]: startDate }
+            },
+            attributes: [
+                [Sequelize.fn('AVG', Sequelize.col('openCount')), 'avgOpens'],
+                [Sequelize.fn('AVG', Sequelize.col('clickCount')), 'avgClicks']
+            ],
+            raw: true
+        });
+
+        return {
+            openRate: totalTracked > 0 ? (opened / totalTracked) * 100 : 0,
+            clickRate: totalTracked > 0 ? (clicked / totalTracked) * 100 : 0,
+            avgOpens: safeParseFloat(avgData?.avgOpens, 0),
+            avgClicks: safeParseFloat(avgData?.avgClicks, 0),
+            totalTracked,
+            opened,
+            clicked
+        };
+    } catch (error) {
+        console.error('Error in getEngagementMetrics:', error);
+        return {
+            openRate: 0,
+            clickRate: 0,
+            avgOpens: 0,
+            avgClicks: 0,
+            totalTracked: 0,
+            opened: 0,
+            clicked: 0
+        };
+    }
 };
 
 // Helper to calculate bounce metrics
 const getBounceMetrics = async (email, startDate) => {
-    const bounceData = await BounceTracking.findOne({
-        where: {
-            senderEmail: email,
-            bouncedAt: { [Op.gte]: startDate }
-        },
-        attributes: [
-            [sequelize.fn('COUNT', sequelize.col('id')), 'totalBounces'],
-            [sequelize.fn('SUM', sequelize.literal('CASE WHEN bounceType = "hard_bounce" THEN 1 ELSE 0 END')), 'hardBounces'],
-            [sequelize.fn('SUM', sequelize.literal('CASE WHEN bounceType = "soft_bounce" THEN 1 ELSE 0 END')), 'softBounces'],
-            [sequelize.fn('SUM', sequelize.literal('CASE WHEN bounceType = "spam" THEN 1 ELSE 0 END')), 'spamBounces'],
-            [sequelize.fn('SUM', sequelize.literal('CASE WHEN bounceCategory = "permanent" THEN 1 ELSE 0 END')), 'permanentBounces'],
-            [sequelize.fn('SUM', sequelize.literal('CASE WHEN bounceCategory = "transient" THEN 1 ELSE 0 END')), 'transientBounces']
-        ],
-        raw: true
-    });
+    try {
+        // Count bounces by type
+        const totalBounces = await BounceTracking.count({
+            where: {
+                senderEmail: email,
+                bouncedAt: { [Op.gte]: startDate }
+            }
+        });
 
-    const totalBounces = safeParseInt(bounceData?.totalBounces, 0);
-    const hardBounces = safeParseInt(bounceData?.hardBounces, 0);
-    const softBounces = safeParseInt(bounceData?.softBounces, 0);
-    const spamBounces = safeParseInt(bounceData?.spamBounces, 0);
+        const hardBounces = await BounceTracking.count({
+            where: {
+                senderEmail: email,
+                bounceType: 'hard_bounce',
+                bouncedAt: { [Op.gte]: startDate }
+            }
+        });
 
-    return {
-        totalBounces,
-        hardBounces,
-        softBounces,
-        spamBounces,
-        hardBounceRate: totalBounces > 0 ? (hardBounces / totalBounces) * 100 : 0,
-        softBounceRate: totalBounces > 0 ? (softBounces / totalBounces) * 100 : 0
-    };
+        const softBounces = await BounceTracking.count({
+            where: {
+                senderEmail: email,
+                bounceType: 'soft_bounce',
+                bouncedAt: { [Op.gte]: startDate }
+            }
+        });
+
+        const spamBounces = await BounceTracking.count({
+            where: {
+                senderEmail: email,
+                bounceType: 'spam',
+                bouncedAt: { [Op.gte]: startDate }
+            }
+        });
+
+        return {
+            totalBounces,
+            hardBounces,
+            softBounces,
+            spamBounces,
+            hardBounceRate: totalBounces > 0 ? (hardBounces / totalBounces) * 100 : 0,
+            softBounceRate: totalBounces > 0 ? (softBounces / totalBounces) * 100 : 0
+        };
+    } catch (error) {
+        console.error('Error in getBounceMetrics:', error);
+        return {
+            totalBounces: 0,
+            hardBounces: 0,
+            softBounces: 0,
+            spamBounces: 0,
+            hardBounceRate: 0,
+            softBounceRate: 0
+        };
+    }
 };
 
 // Helper to calculate reply metrics
 const getReplyMetrics = async (email, startDate) => {
-    const replyData = await ReplyTracking.findOne({
-        where: {
-            originalSender: email,
-            repliedAt: { [Op.gte]: startDate }
-        },
-        attributes: [
-            [sequelize.fn('COUNT', sequelize.col('id')), 'totalReplies'],
-            [sequelize.fn('AVG', sequelize.col('responseTime')), 'avgResponseTime']
-        ],
-        raw: true
-    });
+    try {
+        const totalReplies = await ReplyTracking.count({
+            where: {
+                originalSender: email,
+                repliedAt: { [Op.gte]: startDate }
+            }
+        });
 
-    return {
-        totalReplies: safeParseInt(replyData?.totalReplies, 0),
-        avgResponseTime: safeParseFloat(replyData?.avgResponseTime, 0)
-    };
+        const avgResponseData = await ReplyTracking.findOne({
+            where: {
+                originalSender: email,
+                repliedAt: { [Op.gte]: startDate }
+            },
+            attributes: [
+                [Sequelize.fn('AVG', Sequelize.col('responseTime')), 'avgResponseTime']
+            ],
+            raw: true
+        });
+
+        return {
+            totalReplies,
+            avgResponseTime: safeParseFloat(avgResponseData?.avgResponseTime, 0)
+        };
+    } catch (error) {
+        console.error('Error in getReplyMetrics:', error);
+        return {
+            totalReplies: 0,
+            avgResponseTime: 0
+        };
+    }
+};
+
+// Helper to get spam analysis metrics
+const getSpamAnalysisMetrics = async (email, startDate) => {
+    try {
+        const totalAnalyses = await SpamAnalysis.count({
+            where: {
+                senderEmail: email,
+                analyzedAt: { [Op.gte]: startDate }
+            }
+        });
+
+        // If no analyses found, return defaults
+        if (totalAnalyses === 0) {
+            return {
+                totalAnalyses: 0,
+                avgRiskScore: 0,
+                riskDistribution: { critical: 0, high: 0, medium: 0, low: 0 },
+                criticalCount: 0,
+                highCount: 0,
+                mediumCount: 0,
+                lowCount: 0
+            };
+        }
+
+        // Get risk level counts
+        const criticalCount = await SpamAnalysis.count({
+            where: {
+                senderEmail: email,
+                riskLevel: 'critical',
+                analyzedAt: { [Op.gte]: startDate }
+            }
+        });
+
+        const highCount = await SpamAnalysis.count({
+            where: {
+                senderEmail: email,
+                riskLevel: 'high',
+                analyzedAt: { [Op.gte]: startDate }
+            }
+        });
+
+        const mediumCount = await SpamAnalysis.count({
+            where: {
+                senderEmail: email,
+                riskLevel: 'medium',
+                analyzedAt: { [Op.gte]: startDate }
+            }
+        });
+
+        const lowCount = await SpamAnalysis.count({
+            where: {
+                senderEmail: email,
+                riskLevel: 'low',
+                analyzedAt: { [Op.gte]: startDate }
+            }
+        });
+
+        // Get average risk score
+        const riskScoreData = await SpamAnalysis.findOne({
+            where: {
+                senderEmail: email,
+                analyzedAt: { [Op.gte]: startDate }
+            },
+            attributes: [
+                [Sequelize.fn('AVG', Sequelize.col('riskScore')), 'avgRiskScore']
+            ],
+            raw: true
+        });
+
+        const avgRiskScore = safeParseFloat(riskScoreData?.avgRiskScore, 0);
+
+        const riskDistribution = {
+            critical: totalAnalyses > 0 ? (criticalCount / totalAnalyses) * 100 : 0,
+            high: totalAnalyses > 0 ? (highCount / totalAnalyses) * 100 : 0,
+            medium: totalAnalyses > 0 ? (mediumCount / totalAnalyses) * 100 : 0,
+            low: totalAnalyses > 0 ? (lowCount / totalAnalyses) * 100 : 0
+        };
+
+        return {
+            totalAnalyses,
+            avgRiskScore,
+            riskDistribution,
+            criticalCount,
+            highCount,
+            mediumCount,
+            lowCount
+        };
+    } catch (error) {
+        console.error('Error in getSpamAnalysisMetrics:', error);
+        return {
+            totalAnalyses: 0,
+            avgRiskScore: 0,
+            riskDistribution: { critical: 0, high: 0, medium: 0, low: 0 },
+            criticalCount: 0,
+            highCount: 0,
+            mediumCount: 0,
+            lowCount: 0
+        };
+    }
+};
+
+// Helper to get spam complaints
+const getSpamComplaints = async (email, startDate) => {
+    try {
+        const totalComplaints = await SpamComplaint.count({
+            where: {
+                senderEmail: email,
+                reportedAt: { [Op.gte]: startDate }
+            }
+        });
+
+        const userComplaints = await SpamComplaint.count({
+            where: {
+                senderEmail: email,
+                complaintType: 'user_complaint',
+                reportedAt: { [Op.gte]: startDate }
+            }
+        });
+
+        const ispComplaints = await SpamComplaint.count({
+            where: {
+                senderEmail: email,
+                complaintType: 'isp_feedback',
+                reportedAt: { [Op.gte]: startDate }
+            }
+        });
+
+        const automatedComplaints = await SpamComplaint.count({
+            where: {
+                senderEmail: email,
+                complaintType: 'automated_filter',
+                reportedAt: { [Op.gte]: startDate }
+            }
+        });
+
+        return {
+            totalComplaints,
+            userComplaints,
+            ispComplaints,
+            automatedComplaints,
+            complaintRate: totalComplaints > 0 ? (totalComplaints / totalComplaints) * 100 : 0
+        };
+    } catch (error) {
+        console.error('Error in getSpamComplaints:', error);
+        return {
+            totalComplaints: 0,
+            userComplaints: 0,
+            ispComplaints: 0,
+            automatedComplaints: 0,
+            complaintRate: 0
+        };
+    }
+};
+
+// Helper to get top spam warnings and recommendations
+const getSpamInsights = async (email, startDate) => {
+    try {
+        const recentAnalyses = await SpamAnalysis.findAll({
+            where: {
+                senderEmail: email,
+                analyzedAt: { [Op.gte]: startDate }
+            },
+            attributes: ['warnings', 'recommendations', 'riskLevel', 'analyzedAt'],
+            order: [['analyzedAt', 'DESC']],
+            limit: 50,
+            raw: true
+        });
+
+        const warningCounts = {};
+        const recommendationCounts = {};
+
+        recentAnalyses.forEach(analysis => {
+            if (analysis.warnings && Array.isArray(analysis.warnings)) {
+                analysis.warnings.forEach(warning => {
+                    warningCounts[warning] = (warningCounts[warning] || 0) + 1;
+                });
+            }
+
+            if (analysis.recommendations && Array.isArray(analysis.recommendations)) {
+                analysis.recommendations.forEach(recommendation => {
+                    recommendationCounts[recommendation] = (recommendationCounts[recommendation] || 0) + 1;
+                });
+            }
+        });
+
+        const topWarnings = Object.entries(warningCounts)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5)
+            .map(([warning, count]) => ({ warning, count }));
+
+        const topRecommendations = Object.entries(recommendationCounts)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5)
+            .map(([recommendation, count]) => ({ recommendation, count }));
+
+        return {
+            topWarnings,
+            topRecommendations,
+            recentRiskLevels: recentAnalyses.map(a => a.riskLevel)
+        };
+    } catch (error) {
+        console.error('Error in getSpamInsights:', error);
+        return {
+            topWarnings: [],
+            topRecommendations: [],
+            recentRiskLevels: []
+        };
+    }
+};
+
+// Helper to get spam risk trends over time
+const getSpamRiskTrends = async (email, days = 7) => {
+    try {
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - days);
+
+        const dailyRiskData = await SpamAnalysis.findAll({
+            where: {
+                senderEmail: email,
+                analyzedAt: { [Op.gte]: startDate }
+            },
+            attributes: [
+                [Sequelize.fn('DATE', Sequelize.col('analyzedAt')), 'date'],
+                [Sequelize.fn('AVG', Sequelize.col('riskScore')), 'avgRiskScore'],
+                [Sequelize.fn('COUNT', Sequelize.col('id')), 'analysisCount']
+            ],
+            group: [Sequelize.fn('DATE', Sequelize.col('analyzedAt'))],
+            raw: true,
+            order: [[Sequelize.fn('DATE', Sequelize.col('analyzedAt')), 'ASC']]
+        });
+
+        return dailyRiskData.map(day => ({
+            date: day.date,
+            avgRiskScore: safeParseFloat(day.avgRiskScore, 0),
+            analysisCount: safeParseInt(day.analysisCount, 0)
+        }));
+    } catch (error) {
+        console.error('Error in getSpamRiskTrends:', error);
+        return [];
+    }
 };
 
 class AnalyticsController {
-    // 🎯 COMPREHENSIVE ANALYTICS DASHBOARD - REAL DATA FROM DB
+    // 🎯 COMPREHENSIVE ANALYTICS DASHBOARD
     async getAnalytics(req, res) {
         try {
             const { email, days = 7 } = req.query;
@@ -196,73 +518,114 @@ class AnalyticsController {
             const startDate = new Date();
             startDate.setDate(startDate.getDate() - parseInt(days));
 
+            // Get email metrics using individual counts
+            const totalSent = await EmailMetric.count({
+                where: {
+                    senderEmail: email,
+                    sentAt: { [Op.gte]: startDate }
+                }
+            });
+
+            const delivered = await EmailMetric.count({
+                where: {
+                    senderEmail: email,
+                    status: 'delivered',
+                    sentAt: { [Op.gte]: startDate }
+                }
+            });
+
+            const bounced = await EmailMetric.count({
+                where: {
+                    senderEmail: email,
+                    status: 'bounced',
+                    sentAt: { [Op.gte]: startDate }
+                }
+            });
+
+            const inbox = await EmailMetric.count({
+                where: {
+                    senderEmail: email,
+                    deliveredInbox: true,
+                    sentAt: { [Op.gte]: startDate }
+                }
+            });
+
+            const spam = await EmailMetric.count({
+                where: {
+                    senderEmail: email,
+                    deliveryFolder: 'spam',
+                    sentAt: { [Op.gte]: startDate }
+                }
+            });
+
             // Get previous period for comparison
             const previousStartDate = new Date();
             previousStartDate.setDate(previousStartDate.getDate() - (parseInt(days) * 2));
 
-            // Get real metrics from database
-            const metrics = await EmailMetric.findOne({
-                where: {
-                    senderEmail: email,
-                    sentAt: { [Op.gte]: startDate }
-                },
-                attributes: [
-                    [sequelize.fn('COUNT', sequelize.col('id')), 'totalSent'],
-                    [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = "delivered" THEN 1 ELSE 0 END')), 'delivered'],
-                    [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = "bounced" THEN 1 ELSE 0 END')), 'bounced'],
-                    [sequelize.fn('SUM', sequelize.literal('CASE WHEN deliveredInbox = true THEN 1 ELSE 0 END')), 'inbox'],
-                    [sequelize.fn('SUM', sequelize.literal('CASE WHEN deliveryFolder = "spam" THEN 1 ELSE 0 END')), 'spam']
-                ],
-                raw: true
-            });
-
-            // Get previous period metrics
-            const previousMetrics = await EmailMetric.findOne({
+            const prevTotalSent = await EmailMetric.count({
                 where: {
                     senderEmail: email,
                     sentAt: {
                         [Op.gte]: previousStartDate,
                         [Op.lt]: startDate
                     }
-                },
-                attributes: [
-                    [sequelize.fn('COUNT', sequelize.col('id')), 'totalSent'],
-                    [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = "delivered" THEN 1 ELSE 0 END')), 'delivered'],
-                    [sequelize.fn('SUM', sequelize.literal('CASE WHEN deliveredInbox = true THEN 1 ELSE 0 END')), 'inbox'],
-                    [sequelize.fn('SUM', sequelize.literal('CASE WHEN deliveryFolder = "spam" THEN 1 ELSE 0 END')), 'spam']
-                ],
-                raw: true
+                }
             });
 
-            // Get additional metrics
+            const prevDelivered = await EmailMetric.count({
+                where: {
+                    senderEmail: email,
+                    status: 'delivered',
+                    sentAt: {
+                        [Op.gte]: previousStartDate,
+                        [Op.lt]: startDate
+                    }
+                }
+            });
+
+            const prevInbox = await EmailMetric.count({
+                where: {
+                    senderEmail: email,
+                    deliveredInbox: true,
+                    sentAt: {
+                        [Op.gte]: previousStartDate,
+                        [Op.lt]: startDate
+                    }
+                }
+            });
+
+            const prevSpam = await EmailMetric.count({
+                where: {
+                    senderEmail: email,
+                    deliveryFolder: 'spam',
+                    sentAt: {
+                        [Op.gte]: previousStartDate,
+                        [Op.lt]: startDate
+                    }
+                }
+            });
+
+            // Get all additional metrics
             const engagementMetrics = await getEngagementMetrics(email, startDate);
             const bounceMetrics = await getBounceMetrics(email, startDate);
             const replyMetrics = await getReplyMetrics(email, startDate);
+            const spamAnalysisMetrics = await getSpamAnalysisMetrics(email, startDate);
+            const spamComplaints = await getSpamComplaints(email, startDate);
+            const spamInsights = await getSpamInsights(email, startDate);
+            const spamRiskTrends = await getSpamRiskTrends(email, parseInt(days));
             const dailyPerformance = await getDailyPerformance(email, startDate);
 
-            // Parse real data with safe defaults
-            const totalSent = safeParseInt(metrics?.totalSent, 0);
-            const delivered = safeParseInt(metrics?.delivered, 0);
-            const bounced = safeParseInt(metrics?.bounced, 0);
-            const inbox = safeParseInt(metrics?.inbox, 0);
-            const spam = safeParseInt(metrics?.spam, 0);
-
-            const prevTotalSent = safeParseInt(previousMetrics?.totalSent, 0);
-            const prevDelivered = safeParseInt(previousMetrics?.delivered, 0);
-            const prevInbox = safeParseInt(previousMetrics?.inbox, 0);
-            const prevSpam = safeParseInt(previousMetrics?.spam, 0);
-
-            // Calculate percentages including bounce data
+            // Calculate percentages
             const deliveryRate = totalSent > 0 ? (delivered / totalSent) * 100 : 0;
             const inboxRate = delivered > 0 ? (inbox / delivered) * 100 : 0;
             const spamRate = delivered > 0 ? (spam / delivered) * 100 : 0;
             const totalBounceRate = totalSent > 0 ? (bounceMetrics.totalBounces / totalSent) * 100 : 0;
 
             // Calculate trends
-            const totalTrend = totalSent > prevTotalSent ? "Increase" : totalSent < prevTotalSent ? "Decrease" : "No change";
-            const deliveredTrend = delivered > prevDelivered ? "Increase" : delivered < prevDelivered ? "Decrease" : "No change";
-            const inboxTrend = inbox > prevInbox ? "Increase" : inbox < prevInbox ? "Decrease" : "No change";
-            const spamTrend = spam > prevSpam ? "Increase" : spam < prevSpam ? "Decrease" : "No change";
+            const totalTrend = totalSent > prevTotalSent ? "increase" : totalSent < prevTotalSent ? "decrease" : "no change";
+            const deliveredTrend = delivered > prevDelivered ? "increase" : delivered < prevDelivered ? "decrease" : "no change";
+            const inboxTrend = inbox > prevInbox ? "increase" : inbox < prevInbox ? "decrease" : "no change";
+            const spamTrend = spam > prevSpam ? "increase" : spam < prevSpam ? "decrease" : "no change";
 
             // Calculate trend values
             const totalTrendValue = prevTotalSent > 0 ? totalSent - prevTotalSent : totalSent;
@@ -271,61 +634,91 @@ class AnalyticsController {
             const spamTrendValue = prevSpam > 0 ? spam - prevSpam : spam;
 
             const analyticsData = {
-                // Sent section - REAL DATA (matching your UI design)
+                // Sent section
                 sent: {
                     total: totalSent,
                     trend: {
-                        type: totalTrend.toLowerCase(),
+                        type: totalTrend,
                         value: Math.abs(totalTrendValue),
-                        text: `${totalTrend.toLowerCase()} compared to last week`
+                        text: `${totalTrend} compared to last period`
                     },
                     delivered: {
                         percentage: deliveryRate.toFixed(1) + "%",
                         count: delivered,
                         trend: {
-                            type: deliveredTrend.toLowerCase(),
+                            type: deliveredTrend,
                             value: Math.abs(deliveredTrendValue),
-                            text: `${deliveredTrend.toLowerCase()} compared to last week`
+                            text: `${deliveredTrend} compared to last period`
                         }
                     },
                     inbox: {
                         percentage: inboxRate.toFixed(1) + "%",
                         count: inbox,
                         trend: {
-                            type: inboxTrend.toLowerCase(),
+                            type: inboxTrend,
                             value: Math.abs(inboxTrendValue),
-                            text: `${inboxTrend.toLowerCase()} compared to last week`
+                            text: `${inboxTrend} compared to last period`
                         }
                     },
                     spam: {
                         percentage: spamRate.toFixed(1) + "%",
                         count: spam,
                         trend: {
-                            type: spamTrend.toLowerCase(),
+                            type: spamTrend,
                             value: Math.abs(spamTrendValue),
-                            text: `${spamTrend.toLowerCase()} compared to last week`
+                            text: `${spamTrend} compared to last period`
                         }
-                    },
-                    credits: "1:30 credits"
+                    }
                 },
 
-                // Bounce Metrics - Using BounceTracking model
+                // Spam Analysis Section
+                spamAnalysis: {
+                    totalAnalyses: spamAnalysisMetrics.totalAnalyses,
+                    avgRiskScore: spamAnalysisMetrics.avgRiskScore.toFixed(1),
+                    riskLevel: spamAnalysisMetrics.avgRiskScore >= 15 ? 'critical' :
+                        spamAnalysisMetrics.avgRiskScore >= 10 ? 'high' :
+                            spamAnalysisMetrics.avgRiskScore >= 5 ? 'medium' : 'low',
+                    riskDistribution: {
+                        critical: spamAnalysisMetrics.riskDistribution.critical.toFixed(1) + "%",
+                        high: spamAnalysisMetrics.riskDistribution.high.toFixed(1) + "%",
+                        medium: spamAnalysisMetrics.riskDistribution.medium.toFixed(1) + "%",
+                        low: spamAnalysisMetrics.riskDistribution.low.toFixed(1) + "%"
+                    },
+                    spamComplaints: {
+                        total: spamComplaints.totalComplaints,
+                        userComplaints: spamComplaints.userComplaints,
+                        ispComplaints: spamComplaints.ispComplaints,
+                        automatedComplaints: spamComplaints.automatedComplaints
+                    },
+                    topWarnings: spamInsights.topWarnings,
+                    topRecommendations: spamInsights.topRecommendations,
+                    riskTrends: spamRiskTrends
+                },
+
+                // Bounce Metrics
                 bounceMetrics: {
                     total: bounceMetrics.totalBounces,
                     hardBounces: bounceMetrics.hardBounces,
                     softBounces: bounceMetrics.softBounces,
+                    spamBounces: bounceMetrics.spamBounces,
                     hardBounceRate: bounceMetrics.hardBounceRate.toFixed(1) + "%",
                     softBounceRate: bounceMetrics.softBounceRate.toFixed(1) + "%",
                     totalBounceRate: totalBounceRate.toFixed(1) + "%"
                 },
 
-                // Email Health Overview - Calculate based on actual performance including bounces
-                emailHealth: calculateEmailHealth(deliveryRate, inboxRate, spamRate, bounceMetrics.hardBounceRate),
+                // Email Health Overview
+                emailHealth: calculateEmailHealth(
+                    deliveryRate,
+                    inboxRate,
+                    spamRate,
+                    bounceMetrics.hardBounceRate,
+                    spamAnalysisMetrics.avgRiskScore
+                ),
 
-                // Daily Warmup Performance (for the chart)
+                // Daily Performance
                 dailyPerformance,
 
-                // Additional engagement metrics
+                // Engagement metrics
                 engagement: {
                     openRate: engagementMetrics.openRate.toFixed(1) + "%",
                     clickRate: engagementMetrics.clickRate.toFixed(1) + "%",
@@ -358,7 +751,7 @@ class AnalyticsController {
         }
     }
 
-    // 📊 SIMPLE METRICS ONLY - REAL DATA
+    // 📊 SIMPLE METRICS ONLY - FIXED VERSION
     async getSimpleMetrics(req, res) {
         try {
             const { email, days = 7 } = req.query;
@@ -370,42 +763,72 @@ class AnalyticsController {
             const startDate = new Date();
             startDate.setDate(startDate.getDate() - parseInt(days));
 
-            // Get real counts from database
-            const result = await EmailMetric.findOne({
+            // Get email metrics using individual counts
+            const totalSent = await EmailMetric.count({
                 where: {
                     senderEmail: email,
                     sentAt: { [Op.gte]: startDate }
-                },
-                attributes: [
-                    [sequelize.fn('COUNT', sequelize.col('id')), 'totalSent'],
-                    [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = "delivered" THEN 1 ELSE 0 END')), 'delivered'],
-                    [sequelize.fn('SUM', sequelize.literal('CASE WHEN status = "bounced" THEN 1 ELSE 0 END')), 'bounced'],
-                    [sequelize.fn('SUM', sequelize.literal('CASE WHEN deliveredInbox = true THEN 1 ELSE 0 END')), 'inbox']
-                ],
-                raw: true
+                }
             });
 
-            // Get bounce metrics for simple view
+            const delivered = await EmailMetric.count({
+                where: {
+                    senderEmail: email,
+                    status: 'delivered',
+                    sentAt: { [Op.gte]: startDate }
+                }
+            });
+
+            const bounced = await EmailMetric.count({
+                where: {
+                    senderEmail: email,
+                    status: 'bounced',
+                    sentAt: { [Op.gte]: startDate }
+                }
+            });
+
+            const inbox = await EmailMetric.count({
+                where: {
+                    senderEmail: email,
+                    deliveredInbox: true,
+                    sentAt: { [Op.gte]: startDate }
+                }
+            });
+
+            // Get additional metrics
+            const engagementMetrics = await getEngagementMetrics(email, startDate);
             const bounceMetrics = await getBounceMetrics(email, startDate);
-
-            const metrics = result || {};
-
-            const totalSent = safeParseInt(metrics.totalSent, 0);
-            const delivered = safeParseInt(metrics.delivered, 0);
-            const bounced = safeParseInt(metrics.bounced, 0);
-            const inbox = safeParseInt(metrics.inbox, 0);
+            const spamAnalysisMetrics = await getSpamAnalysisMetrics(email, startDate);
 
             const simpleData = {
                 totalSent,
                 delivered,
                 bounced,
                 inbox,
-                deliveryRate: totalSent > 0 ? ((delivered / totalSent) * 100).toFixed(1) : 0,
-                bounceRate: totalSent > 0 ? ((bounced / totalSent) * 100).toFixed(1) : 0,
-                inboxRate: delivered > 0 ? ((inbox / delivered) * 100).toFixed(1) : 0,
+                deliveryRate: totalSent > 0 ? ((delivered / totalSent) * 100).toFixed(1) : "0.0",
+                bounceRate: totalSent > 0 ? ((bounced / totalSent) * 100).toFixed(1) : "0.0",
+                inboxRate: delivered > 0 ? ((inbox / delivered) * 100).toFixed(1) : "0.0",
+                openRate: engagementMetrics.openRate.toFixed(1),
+                clickRate: engagementMetrics.clickRate.toFixed(1),
                 hardBounces: bounceMetrics.hardBounces,
-                softBounces: bounceMetrics.softBounces
+                softBounces: bounceMetrics.softBounces,
+                spamRiskScore: spamAnalysisMetrics.avgRiskScore.toFixed(1),
+                spamRiskLevel: spamAnalysisMetrics.avgRiskScore >= 15 ? 'critical' :
+                    spamAnalysisMetrics.avgRiskScore >= 10 ? 'high' :
+                        spamAnalysisMetrics.avgRiskScore >= 5 ? 'medium' : 'low'
             };
+
+            console.log('📊 Simple Metrics Debug:', {
+                email,
+                days,
+                totalSent,
+                delivered,
+                bounced,
+                inbox,
+                engagement: engagementMetrics,
+                bounce: bounceMetrics,
+                spam: spamAnalysisMetrics
+            });
 
             res.json({
                 success: true,
@@ -416,7 +839,8 @@ class AnalyticsController {
             console.error('❌ Simple metrics error:', error);
             res.status(500).json({
                 success: false,
-                error: 'Failed to fetch simple metrics'
+                error: 'Failed to fetch simple metrics',
+                details: error.message
             });
         }
     }
@@ -449,6 +873,66 @@ class AnalyticsController {
         }
     }
 
+    // 🔍 DETAILED SPAM ANALYSIS
+    async getSpamAnalysis(req, res) {
+        try {
+            const { email, days = 30 } = req.query;
+
+            if (!email) {
+                return res.status(400).json({ error: 'Email parameter is required' });
+            }
+
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - parseInt(days));
+
+            // Get detailed spam analysis data
+            const spamAnalyses = await SpamAnalysis.findAll({
+                where: {
+                    senderEmail: email,
+                    analyzedAt: { [Op.gte]: startDate }
+                },
+                attributes: [
+                    'messageId',
+                    'riskScore',
+                    'riskLevel',
+                    'warnings',
+                    'recommendations',
+                    'deliveredInbox',
+                    'deliveryFolder',
+                    'analyzedAt'
+                ],
+                order: [['analyzedAt', 'DESC']],
+                limit: 100,
+                raw: true
+            });
+
+            // Get spam analysis metrics
+            const spamMetrics = await getSpamAnalysisMetrics(email, startDate);
+            const spamInsights = await getSpamInsights(email, startDate);
+            const spamRiskTrends = await getSpamRiskTrends(email, parseInt(days));
+            const spamComplaints = await getSpamComplaints(email, startDate);
+
+            res.json({
+                success: true,
+                data: {
+                    spamAnalyses,
+                    spamMetrics,
+                    spamInsights,
+                    spamRiskTrends,
+                    spamComplaints,
+                    totalAnalyses: spamAnalyses.length
+                }
+            });
+
+        } catch (error) {
+            console.error('❌ Spam analysis error:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Failed to fetch spam analysis'
+            });
+        }
+    }
+
     // 🔍 DETAILED BOUNCE ANALYSIS
     async getBounceAnalysis(req, res) {
         try {
@@ -477,7 +961,8 @@ class AnalyticsController {
                     'bouncedAt'
                 ],
                 order: [['bouncedAt', 'DESC']],
-                limit: 100
+                limit: 100,
+                raw: true
             });
 
             // Group by bounce type for analysis
@@ -488,17 +973,20 @@ class AnalyticsController {
                 },
                 attributes: [
                     'bounceType',
-                    [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+                    [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
                 ],
                 group: ['bounceType'],
                 raw: true
             });
+
+            const bounceMetrics = await getBounceMetrics(email, startDate);
 
             res.json({
                 success: true,
                 data: {
                     bounceDetails,
                     bounceSummary,
+                    bounceMetrics,
                     totalBounces: bounceDetails.length
                 }
             });
@@ -508,6 +996,144 @@ class AnalyticsController {
             res.status(500).json({
                 success: false,
                 error: 'Failed to fetch bounce analysis'
+            });
+        }
+    }
+
+    // 🔍 DETAILED ENGAGEMENT ANALYSIS
+    async getEngagementAnalysis(req, res) {
+        try {
+            const { email, days = 30 } = req.query;
+
+            if (!email) {
+                return res.status(400).json({ error: 'Email parameter is required' });
+            }
+
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - parseInt(days));
+
+            // Get detailed engagement data
+            const engagementDetails = await EngagementTracking.findAll({
+                where: {
+                    senderEmail: email,
+                    firstOpenedAt: { [Op.gte]: startDate }
+                },
+                attributes: [
+                    'receiverEmail',
+                    'opened',
+                    'clicked',
+                    'openCount',
+                    'clickCount',
+                    'firstOpenedAt',
+                    'firstClickedAt',
+                    'platform',
+                    'clientType'
+                ],
+                order: [['firstOpenedAt', 'DESC']],
+                limit: 100,
+                raw: true
+            });
+
+            const engagementMetrics = await getEngagementMetrics(email, startDate);
+
+            // Get platform distribution
+            const platformDistribution = await EngagementTracking.findAll({
+                where: {
+                    senderEmail: email,
+                    firstOpenedAt: { [Op.gte]: startDate },
+                    platform: { [Op.ne]: null }
+                },
+                attributes: [
+                    'platform',
+                    [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
+                ],
+                group: ['platform'],
+                raw: true
+            });
+
+            res.json({
+                success: true,
+                data: {
+                    engagementDetails,
+                    engagementMetrics,
+                    platformDistribution,
+                    totalEngagements: engagementDetails.length
+                }
+            });
+
+        } catch (error) {
+            console.error('❌ Engagement analysis error:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Failed to fetch engagement analysis'
+            });
+        }
+    }
+
+    // 🔍 REPLY ANALYSIS
+    async getReplyAnalysis(req, res) {
+        try {
+            const { email, days = 30 } = req.query;
+
+            if (!email) {
+                return res.status(400).json({ error: 'Email parameter is required' });
+            }
+
+            const startDate = new Date();
+            startDate.setDate(startDate.getDate() - parseInt(days));
+
+            // Get detailed reply data
+            const replyDetails = await ReplyTracking.findAll({
+                where: {
+                    originalSender: email,
+                    repliedAt: { [Op.gte]: startDate }
+                },
+                attributes: [
+                    'replySender',
+                    'replyReceiver',
+                    'responseTime',
+                    'repliedAt',
+                    'threadDepth',
+                    'replyQuality',
+                    'isAutomatedReply'
+                ],
+                order: [['repliedAt', 'DESC']],
+                limit: 100,
+                raw: true
+            });
+
+            const replyMetrics = await getReplyMetrics(email, startDate);
+
+            // Get reply quality distribution
+            const qualityDistribution = await ReplyTracking.findAll({
+                where: {
+                    originalSender: email,
+                    repliedAt: { [Op.gte]: startDate },
+                    replyQuality: { [Op.ne]: null }
+                },
+                attributes: [
+                    'replyQuality',
+                    [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']
+                ],
+                group: ['replyQuality'],
+                raw: true
+            });
+
+            res.json({
+                success: true,
+                data: {
+                    replyDetails,
+                    replyMetrics,
+                    qualityDistribution,
+                    totalReplies: replyDetails.length
+                }
+            });
+
+        } catch (error) {
+            console.error('❌ Reply analysis error:', error);
+            res.status(500).json({
+                success: false,
+                error: 'Failed to fetch reply analysis'
             });
         }
     }

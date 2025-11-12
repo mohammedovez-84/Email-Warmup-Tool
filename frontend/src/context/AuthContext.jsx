@@ -259,12 +259,32 @@ export function AuthProvider({ children }) {
         navigate('/dashboard', { replace: true });
     };
 
-    const logout = () => {
+    const logout = async () => {
+        try {
+            await axios.get(`${backendUrl}/api/auth/logout`, { withCredentials: true });
+        } catch (err) {
+            console.error('Server logout error:', err);
+        }
+
+        const user = JSON.parse(localStorage.getItem('user'));
+
+
+        if (user?.isGoogle) {
+            const googleLogoutUrl =
+                'https://accounts.google.com/Logout?continue=https://appengine.google.com/_ah/logout?continue=' +
+                encodeURIComponent(window.location.origin + '/login');
+
+            window.location.href = googleLogoutUrl;
+            return;
+        }
+
+        // 🧹 Normal JWT logout
         localStorage.removeItem('token');
         localStorage.removeItem('user');
         setCurrentUser(null);
         navigate('/login', { replace: true });
     };
+
 
     const verifyEmail = async (email, otp) => {
         try {

@@ -1,42 +1,102 @@
-// services/dailyResetService.js
 const VolumeEnforcement = require('./volume-enforcement');
 
 class DailyResetService {
     constructor() {
-        this.lastResetDate = null;
+        this.volumeEnforcement = new VolumeEnforcement();
+        this.initialized = false;
+    }
+
+    async initialize() {
+        if (this.initialized) return;
+
+        await this.volumeEnforcement.initialize();
+        this.initialized = true;
+        console.log('✅ DAILY RESET SERVICE READY');
     }
 
     async performDailyReset() {
         try {
-            const today = new Date().toDateString();
+            console.log('🔄 STARTING DAILY RESET PROCESS...');
 
-            // Check if we already reset today
-            if (this.lastResetDate === today) {
-                console.log('✅ Daily reset already performed today');
-                return;
-            }
+            // Ensure service is initialized
+            await this.initialize();
 
-            console.log('🔄 PERFORMING DAILY RESET - INCREMENTING WARMUP DAYS...');
+            // Reset volume enforcement
+            await this.volumeEnforcement.resetForNewDay();
 
+            // Reset warmup day counts in database
+            await this.incrementWarmupDayCounts();
 
-            await VolumeEnforcement.resetForNewDay();
+            // Reset pool account usage
+            await this.resetPoolAccountUsage();
 
-            this.lastResetDate = today;
-            console.log('✅ DAILY RESET COMPLETE - All warmup days incremented');
+            console.log('✅ DAILY RESET COMPLETED SUCCESSFULLY');
 
         } catch (error) {
-            console.error('❌ Daily reset error:', error);
+            console.error('❌ DAILY RESET ERROR:', error);
+            throw error;
         }
     }
 
-    // Check if reset is needed (for cron job)
-    async checkAndResetIfNeeded() {
-        const today = new Date().toDateString();
-        if (this.lastResetDate !== today) {
-            await this.performDailyReset();
+    async incrementWarmupDayCounts() {
+        try {
+            const { Op } = require('sequelize');
+            const GoogleUser = require('../../models/GoogleUser');
+            const MicrosoftUser = require('../../models/MicrosoftUser');
+            const SmtpAccount = require('../../models/smtpAccounts');
+
+            // Increment day count for all active warmup accounts
+            await GoogleUser.update(
+                { warmupDayCount: require('sequelize').literal('COALESCE(warmupDayCount, 0) + 1') },
+                { where: { active: true } }
+            );
+
+            await MicrosoftUser.update(
+                { warmupDayCount: require('sequelize').literal('COALESCE(warmupDayCount, 0) + 1') },
+                { where: { active: true } }
+            );
+
+            await SmtpAccount.update(
+                { warmupDayCount: require('sequelize').literal('COALESCE(warmupDayCount, 0) + 1') },
+                { where: { active: true } }
+            );
+
+            console.log('📈 INCREMENTED WARMUP DAY COUNTS');
+
+        } catch (error) {
+            console.error('❌ Error incrementing warmup day counts:', error);
         }
+    }
+
+    async resetPoolAccountUsage() {
+        try {
+            const EmailPool = require('../../models/EmailPool');
+
+            // Reset daily usage for all pool accounts
+            await EmailPool.update(
+                {
+                    dailyUsage: 0,
+                    lastReset: new Date()
+                },
+                { where: {} }
+            );
+
+            console.log('🔄 RESET POOL ACCOUNT USAGE');
+
+        } catch (error) {
+            console.error('❌ Error resetting pool account usage:', error);
+        }
+    }
+
+    // Get reset status
+    async getResetStatus() {
+        return {
+            volumeEnforcementInitialized: this.initialized,
+            dailyCountsSize: this.volumeEnforcement.dailyCounts?.size || 0,
+            blockedAccountsSize: this.volumeEnforcement.blockedAccounts?.size || 0
+        };
     }
 }
 
-const dailyResetService = new DailyResetService();
-module.exports = dailyResetService;
+// 🚨 IMPORTANT: Export a singleton instance
+module.exports = new DailyResetService();
