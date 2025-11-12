@@ -540,34 +540,7 @@ async function checkEmailStatusWithSpamTracking(receiver, messageId, direction =
     return result;
 }
 
-async function moveEmailToInboxWithTracking(receiver, messageId, currentFolder, direction = 'WARMUP_TO_POOL', senderEmail = null) {
-    const wasSpamFolder = isSpamFolder(currentFolder);
-
-    const result = await moveEmailToInbox(receiver, messageId, currentFolder, direction);
-
-    // 🚨 TRACK SPAM RECOVERY ATTEMPT
-    if (wasSpamFolder && result.success && !result.skipped && senderEmail) {
-        console.log(`🔄 SPAM RECOVERY: Moved email from ${currentFolder} to INBOX`);
-
-        await trackingService.trackSpamComplaint(messageId, {
-            complaintType: 'recovered_from_spam',
-            complaintSource: 'MANUAL_RECOVERY',
-            complaintFeedback: `Successfully moved from ${currentFolder} to INBOX`,
-            reportingIsp: detectISP(receiver.email),
-            resolved: true,
-            resolvedAt: new Date(),
-            resolutionNotes: 'Automatically moved from spam folder to inbox'
-        }).catch(err => console.error('❌ Error tracking spam recovery:', err));
-    }
-
-    return {
-        ...result,
-        wasSpamFolder: wasSpamFolder,
-        spamRecoveryAttempted: wasSpamFolder && !result.skipped
-    };
-}
-
-// Core email checking functionality (single implementation)
+// Core email checking functionality
 async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL') {
     // 🚨 CRITICAL FIX: Handle undefined messageId
     if (!messageId || messageId === 'undefined') {
@@ -720,7 +693,7 @@ async function checkEmailStatus(receiver, messageId, direction = 'WARMUP_TO_POOL
     }
 }
 
-// Helper functions (single implementations)
+// Helper functions
 async function trackSkippedEmail(messageId, reason, deliveredInbox) {
     if (deliveredInbox) {
         await trackingService.trackEmailDelivered(messageId, {
@@ -783,7 +756,7 @@ async function searchFoldersForEmail(connection, folders, messageId) {
     };
 }
 
-// 🚨 FIXED: Get IMAP Configuration
+// Get IMAP Configuration
 function getImapConfig(account) {
     const { email } = account;
 
@@ -858,8 +831,6 @@ function getImapConfig(account) {
                     }
                 };
 
-
-
             case 'smtp':
                 const finalImapHost = account.imap_host || account.smtp_host;
                 const finalImapUser = account.imap_user || account.smtp_user || email;
@@ -893,92 +864,9 @@ function getImapConfig(account) {
     }
 }
 
-// 🚨 FIXED: Move Email to Inbox with bidirectional awareness
-async function moveEmailToInbox(receiver, messageId, currentFolder, direction = 'WARMUP_TO_POOL') {
-    const accountType = detectAccountType(receiver);
-    const hasOAuthToken = receiver.access_token;
-    const hasPassword = receiver.smtp_pass || receiver.smtpPassword || receiver.password || receiver.app_password;
-
-    console.log(`📦 Attempting to move email for ${direction}: ${messageId}`);
-    console.log(`   Current folder: ${currentFolder}, Account: ${receiver.email}`);
-
-    // Skip for OAuth accounts without passwords
-    if ((accountType === 'microsoft_organizational' || accountType === 'outlook_personal') &&
-        hasOAuthToken && !hasPassword) {
-        console.log(`⏩ Skipping move to inbox for ${accountType} account (OAuth token only)`);
-        return {
-            success: true,
-            message: 'Skipped for OAuth account',
-            skipped: true
-        };
-    }
-
-    // Skip moving for Graph API emails
-    if (messageId && messageId.startsWith('graph-')) {
-        console.log(`⏩ Skipping move for Graph API email: ${messageId}`);
-        return { success: true, skipped: true };
-    }
-
-    // Skip if already in inbox or doesn't exist
-    if (currentFolder === 'INBOX' || currentFolder === 'NOT_FOUND' ||
-        currentFolder === 'GRAPH_API' || currentFolder.includes('SKIPPED')) {
-        console.log(`⏩ Skipping move - email is in ${currentFolder}`);
-        return { success: true, skipped: true };
-    }
-
-    // Skip for pool accounts in inbound direction
-    if (direction === 'POOL_TO_WARMUP' && receiver.providerType) {
-        console.log(`⏩ Skipping move for pool account in inbound direction`);
-        return { success: true, skipped: true };
-    }
-
-    let connection;
-
-    try {
-        console.log(`📦 Moving email from ${currentFolder} to INBOX: ${messageId}`);
-        const config = getImapConfig(receiver);
-        connection = await imaps.connect(config);
-
-        await connection.openBox(currentFolder, false);
-        const searchCriteria = [['HEADER', 'Message-ID', messageId]];
-        const results = await connection.search(searchCriteria, { bodies: [''], struct: true });
-
-        if (results.length === 0) {
-            await connection.end();
-            console.log(`❌ Email not found in current folder: ${currentFolder}`);
-            return { success: false, error: 'Email not found in current folder' };
-        }
-
-        const uid = results[0].attributes.uid;
-        await connection.moveMessage(uid, 'INBOX');
-        console.log(`✅ Email moved from ${currentFolder} to INBOX`);
-
-        await connection.end();
-        return {
-            success: true,
-            message: 'Email moved to INBOX'
-        };
-
-    } catch (err) {
-        console.error('❌ Error moving email to inbox:', err.message);
-        if (connection) {
-            try {
-                await connection.end();
-            } catch (e) {
-                console.error('   ⚠️  Error closing connection:', e.message);
-            }
-        }
-        return {
-            success: false,
-            error: err.message
-        };
-    }
-}
-
 module.exports = {
     getImapConfig,
     checkEmailStatus,
-    moveEmailToInbox,
     replyToEmail,
     markEmailAsSeenAndFlagged,
     testImapConnection,
@@ -991,7 +879,6 @@ module.exports = {
     isSpamFolder,
     calculateSpamRiskFromFolder,
     detectISP,
-    moveEmailToInboxWithTracking,
     analyzeSpamPatterns,
     monitorSpamFolderForWarmup,
     analyzeSpamFilterStrength,

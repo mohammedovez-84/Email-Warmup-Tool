@@ -1,7 +1,17 @@
+### TODO: uninstall these:- pip uninstall torch torchvision torchaudio
+### then: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+
+
 scikit-learn
 transformers
-torch
+#torch
 textstat
 joblib
 pandas
 numpy
+accelerate
+datasets
+#torchvision
+#torchaudio
+tqdm

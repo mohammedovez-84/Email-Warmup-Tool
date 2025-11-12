@@ -103,8 +103,6 @@ class WarmupScheduler {
         if (timeSinceLastScheduling < this.SCHEDULING_COOLDOWN_MS) {
             console.log(`⏸️ Skipping scheduling - in cooldown period`);
             this.isRunning = false;
-
-
             return 0;
         }
 
@@ -116,44 +114,52 @@ class WarmupScheduler {
         if (activeAccounts.length === 0 || activePools.length === 0) {
             console.log('⚠️ No active accounts or pools found');
             this.isRunning = false;
-
-
             return 0;
         }
 
         console.log(`📊 Found ${activeAccounts.length} warmup accounts and ${activePools.length} pool accounts`);
 
-        this.clearScheduledJobs();
+        // 🚨 NEW: Get accounts that already have scheduled jobs
+        const accountsWithExistingJobs = await this.getAccountsWithExistingScheduledJobs();
 
-        // 🚨 GET VOLUME STATUS BEFORE SCHEDULING
+        // 🚨 NEW: Filter out accounts that already have sufficient scheduled jobs
+        const accountsNeedingScheduling = await this.filterAccountsNeedingScheduling(activeAccounts, accountsWithExistingJobs);
+
+        if (accountsNeedingScheduling.length === 0) {
+            console.log('💤 All accounts already have sufficient scheduled jobs');
+            this.isRunning = false;
+            return 0;
+        }
+
+        console.log(`🎯 Global scheduling: ${accountsNeedingScheduling.length} accounts need scheduling`);
+        console.log(`   └── Accounts: ${accountsNeedingScheduling.map(a => a.email).join(', ')}`);
+
+        // 🚨 NEW: Get volume status before scheduling
         console.log('\n🔍 PRE-SCHEDULING VOLUME CHECK:');
-        const accountsWithCapacity = await this.filterAccountsWithCapacity(activeAccounts, activePools);
+        const accountsWithCapacity = await this.filterAccountsWithCapacity(accountsNeedingScheduling, activePools);
 
         if (accountsWithCapacity.length === 0) {
             console.log('🚫 No accounts with capacity available for scheduling');
             this.isRunning = false;
-
-
             return 0;
         }
 
-        // Filter out recently incremental accounts
+        // 🚨 NEW: Filter out recently incremental accounts
         const accountsForGlobalScheduling = await this.filterOutRecentlyIncrementalAccounts(accountsWithCapacity);
 
         if (accountsForGlobalScheduling.length === 0) {
             console.log('💤 All capable accounts were recently handled by incremental scheduling');
             this.isRunning = false;
-
-
             return 0;
         }
 
-        console.log(`🎯 Global scheduling: ${accountsForGlobalScheduling.length} accounts`);
+        console.log(`🎯 Final scheduling candidates: ${accountsForGlobalScheduling.length} accounts`);
+        console.log(`   └── Accounts: ${accountsForGlobalScheduling.map(a => a.email).join(', ')}`);
 
         let totalScheduled = 0;
         let scheduledPerAccount = new Map();
 
-        // 🚨 SCHEDULE FOR EACH ACCOUNT
+        // 🚨 SCHEDULE FOR EACH ACCOUNT THAT NEEDS IT
         for (const warmupAccount of accountsForGlobalScheduling) {
             const scheduledCount = await this.createAndScheduleBidirectionalPlan(warmupAccount, activePools, channel);
             totalScheduled += scheduledCount;
@@ -176,10 +182,76 @@ class WarmupScheduler {
             }
         }
 
-
-
-
         return totalScheduled;
+    }
+
+    // 🚨 NEW: Get accounts that already have scheduled jobs
+    async getAccountsWithExistingScheduledJobs() {
+        const accountsWithJobs = new Set();
+        try {
+            const storedJobs = await this.redis.getAllScheduledJobs();
+
+            for (const [jobKey, jobData] of Object.entries(storedJobs)) {
+                if (jobData.warmupAccount) {
+                    accountsWithJobs.add(jobData.warmupAccount);
+                }
+            }
+
+            console.log(`📋 Accounts with existing jobs: ${Array.from(accountsWithJobs).join(', ') || 'None'}`);
+            return accountsWithJobs;
+        } catch (error) {
+            console.error('❌ Error getting accounts with existing jobs:', error);
+            return new Set();
+        }
+    }
+
+    // 🚨 NEW: Filter accounts that actually need scheduling
+    async filterAccountsNeedingScheduling(activeAccounts, accountsWithExistingJobs) {
+        const accountsNeedingScheduling = [];
+
+        for (const account of activeAccounts) {
+            const hasExistingJobs = accountsWithExistingJobs.has(account.email);
+            const hasSufficientJobs = await this.hasSufficientScheduledJobs(account.email);
+
+            if (!hasExistingJobs || !hasSufficientJobs) {
+                accountsNeedingScheduling.push(account);
+                console.log(`   ✅ ${account.email} - Needs scheduling (existing: ${hasExistingJobs}, sufficient: ${hasSufficientJobs})`);
+            } else {
+                console.log(`   ⏩ ${account.email} - Already has sufficient scheduled jobs`);
+            }
+        }
+
+        return accountsNeedingScheduling;
+    }
+
+    // 🚨 NEW: Check if account already has sufficient scheduled jobs
+    async hasSufficientScheduledJobs(email) {
+        try {
+            const storedJobs = await this.redis.getAllScheduledJobs();
+            let jobCount = 0;
+
+            // Count jobs for this account
+            for (const [jobKey, jobData] of Object.entries(storedJobs)) {
+                if (jobData.warmupAccount === email) {
+                    jobCount++;
+                }
+            }
+
+            // Get account's daily volume limit
+            const account = await this.getAccountByEmail(email);
+            const dailyLimit = account?.maxEmailsPerDay || 25;
+
+            // Consider sufficient if we have at least 50% of daily limit scheduled
+            const sufficientThreshold = Math.max(3, Math.floor(dailyLimit * 0.5));
+            const hasSufficient = jobCount >= sufficientThreshold;
+
+            console.log(`   📊 ${email}: ${jobCount} scheduled jobs, threshold: ${sufficientThreshold}, sufficient: ${hasSufficient}`);
+
+            return hasSufficient;
+        } catch (error) {
+            console.error(`❌ Error checking sufficient jobs for ${email}:`, error);
+            return false; // Default to needing scheduling on error
+        }
     }
 
     async getAccountVolumeLimit(email, accountType = 'warmup') {
@@ -354,7 +426,146 @@ class WarmupScheduler {
         return adjustedVolume;
     }
 
+    async scheduleIncrementalWarmup(emailAddress, senderType) {
+        try {
+            console.log(`🎯 INCREMENTAL SCHEDULING: ${emailAddress}`);
 
+            const { markAccountAsIncrementallyScheduled } = require('../../services/schedule/Scheduler');
+            await markAccountAsIncrementallyScheduled(emailAddress);
+
+            // Get the specific warmup account with PROPER error handling
+            const warmupAccount = await getAccountByEmailAndType(emailAddress, senderType);
+            if (!warmupAccount) {
+                throw new Error(`Account not found in database: ${emailAddress} (type: ${senderType})`);
+            }
+
+            // 🚨 VALIDATE ACCOUNT DATA BEFORE PROCEEDING
+            if (!warmupAccount.email) {
+                throw new Error(`Account email is missing for: ${emailAddress}`);
+            }
+
+            // 🚨 FLEXIBLE VALIDATION WITH DEFAULTS
+            const requiredFields = ['startEmailsPerDay', 'increaseEmailsPerDay', 'maxEmailsPerDay', 'warmupDayCount'];
+            const missingFields = requiredFields.filter(field =>
+                warmupAccount[field] === undefined || warmupAccount[field] === null
+            );
+
+            if (missingFields.length > 0) {
+                console.log(`⚠️  Missing warmup fields, applying defaults: ${missingFields.join(', ')}`);
+
+                // Apply defaults instead of throwing error
+                warmupAccount.startEmailsPerDay = warmupAccount.startEmailsPerDay || 3;
+                warmupAccount.increaseEmailsPerDay = warmupAccount.increaseEmailsPerDay || 3;
+                warmupAccount.maxEmailsPerDay = warmupAccount.maxEmailsPerDay || 25;
+                warmupAccount.warmupDayCount = warmupAccount.warmupDayCount || 0;
+
+                console.log(`✅ Applied defaults: Start=${warmupAccount.startEmailsPerDay}, Increase=${warmupAccount.increaseEmailsPerDay}, Max=${warmupAccount.maxEmailsPerDay}, Day=${warmupAccount.warmupDayCount}`);
+            }
+
+            console.log(`✅ Account validation passed for: ${emailAddress}`);
+            console.log(`   Warmup Config: Start=${warmupAccount.startEmailsPerDay}, Increase=${warmupAccount.increaseEmailsPerDay}, Max=${warmupAccount.maxEmailsPerDay}, Day=${warmupAccount.warmupDayCount}`);
+
+            // Get active pool accounts
+            const activePools = await EmailPool.findAll({ where: { isActive: true } });
+            if (activePools.length === 0) {
+                throw new Error('No active pool accounts available');
+            }
+
+            console.log(`🏊 Found ${activePools.length} active pool accounts`);
+
+            // USE UNIFIED STRATEGY WITH DB VALUES
+            const strategy = new UnifiedWarmupStrategy();
+            const plan = await strategy.generateWarmupPlan(warmupAccount, activePools);
+
+            if (plan.error) {
+                throw new Error(`Plan generation failed: ${plan.error}`);
+            }
+
+            // 🚨 ENHANCED LOGGING WITH BETTER FIELD ACCESS
+            console.log(`📊 ${emailAddress} warmup plan generated:`);
+            console.log(`   ├── Day: ${plan.warmupDay || warmupAccount.warmupDayCount}`);
+            console.log(`   ├── Total Emails: ${plan.totalEmails || plan.sequence?.length || 0}`);
+            console.log(`   ├── Outbound: ${plan.outboundCount || plan.outbound?.length || 0}`);
+            console.log(`   └── Inbound: ${plan.inboundCount || plan.inbound?.length || 0}`);
+
+            // Log DB values if available
+            if (plan.dbValues) {
+                console.log(`   📋 DB Values: Start=${plan.dbValues.startEmailsPerDay}, Increase=${plan.dbValues.increaseEmailsPerDay}, Max=${plan.dbValues.maxEmailsPerDay}`);
+            }
+
+            // Log the sequence with better error handling
+            if (plan.sequence && plan.sequence.length > 0) {
+                console.log(`   📧 Email Sequence (${plan.sequence.length} emails):`);
+                plan.sequence.forEach((email, index) => {
+                    try {
+                        const delayHours = (email.scheduleDelay / (60 * 60 * 1000)).toFixed(1);
+                        const targetEmail = email.direction === 'WARMUP_TO_POOL' ? email.receiverEmail : email.senderEmail;
+                        console.log(`      ${index + 1}. ${email.direction} to ${targetEmail} (${delayHours}h)`);
+                    } catch (error) {
+                        console.log(`      ${index + 1}. INVALID EMAIL JOB:`, email);
+                    }
+                });
+            } else {
+                console.log(`   ⚠️ No emails scheduled in the sequence`);
+            }
+
+            // 🚨 CRITICAL: Schedule the emails using the scheduler instance
+            const scheduler = require('../../services/schedule/Scheduler');
+            let totalScheduled = 0;
+
+            if (plan.sequence && plan.sequence.length > 0) {
+                console.log(`🚀 Scheduling ${plan.sequence.length} emails for ${emailAddress}...`);
+
+                // Get channel for scheduling
+                const getChannel = require('../../queues/rabbitConnection');
+                const channel = await getChannel();
+                await channel.assertQueue('warmup_jobs', { durable: true });
+
+                // Schedule each email in the plan
+                for (const emailJob of plan.sequence) {
+                    try {
+                        const scheduled = await scheduler.scheduleSingleEmailWithEnforcement(
+                            emailJob,
+                            channel,
+                            warmupAccount.email
+                        );
+                        if (scheduled) {
+                            totalScheduled++;
+                        }
+                    } catch (error) {
+                        console.error(`❌ Failed to schedule email:`, error.message);
+                    }
+                }
+
+                console.log(`✅ Successfully scheduled ${totalScheduled}/${plan.sequence.length} emails for ${emailAddress}`);
+            }
+
+            // 🚨 CRITICAL: DO NOT trigger global scheduling here
+            console.log(`✅ Incremental scheduling completed for ${emailAddress} - NO global scheduling triggered`);
+
+            return {
+                success: true,
+                email: emailAddress,
+                warmupDay: plan.warmupDay || warmupAccount.warmupDayCount,
+                totalEmails: plan.totalEmails || plan.sequence?.length || 0,
+                outboundCount: plan.outboundCount || plan.outbound?.length || 0,
+                inboundCount: plan.inboundCount || plan.inbound?.length || 0,
+                actuallyScheduled: totalScheduled,
+                markedAsIncremental: true
+            };
+
+        } catch (error) {
+            console.error(`❌ Incremental scheduling failed for ${emailAddress}:`, error.message);
+
+            // Return error details for better debugging
+            return {
+                success: false,
+                email: emailAddress,
+                error: error.message,
+                markedAsIncremental: false
+            };
+        }
+    }
     async cleanupStaleJobs() {
         try {
             console.log('🧹 Cleaning up stale jobs from previous server runs...');

@@ -3,6 +3,7 @@ const SmtpAccount = require('../../models/smtpAccounts');
 const MicrosoftUser = require('../../models/MicrosoftUser');
 const EmailMetric = require('../../models/EmailMetric');
 const EmailExchange = require('../../models/MailExchange');
+const User = require("../../models/userModel")
 
 const { getRateLimitStats } = require('../../workflows/warmupWorkflow');
 const { Op } = require("sequelize");
@@ -638,3 +639,30 @@ exports.deleteByEmail = async (req, res) => {
         res.status(500).json({ error: 'Internal server error' });
     }
 };
+
+exports.updateGoogleUserOnboard = async (req, res) => {
+    try {
+        const { phone, company, industry, title } = req.body;
+        const { email } = req.params;
+        const userId = req.user.id;
+        const googleUser = await User.findOne({ where: { email, id: userId, isGoogleAccount: true } });
+
+        if (!googleUser) {
+            console.log(`⚠️ No Google user found for email: ${email} and user: ${userId}`);
+            return res.status(404).json({ error: 'Google user not found' });
+        }
+
+        googleUser.phone = phone || googleUser.phone;
+        googleUser.company = company || googleUser.company;
+        googleUser.industry = industry || googleUser.industry;
+        googleUser.title = title || googleUser.title;
+
+        await googleUser.save();
+        console.log(`✅ Updated Google user onboard info for email: ${email}`);
+        res.json({ message: 'Google user onboard info updated successfully' });
+    }
+    catch (error) {
+        console.error('❌ Error updating google auth user:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+}

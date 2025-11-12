@@ -6,7 +6,7 @@ const { authenticate } = require('../../middleware/authMiddleware');
 router.post('/account', authenticate, accountController.addAccount);
 
 // Get accounts
-router.get('/account', accountController.getAccount);
+router.get('/account', authenticate, accountController.getAccount);
 
 // Test SMTP
 router.post('/account/test-smtp', accountController.testSmtp);

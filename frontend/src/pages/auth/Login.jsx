@@ -74,18 +74,17 @@ export default function Login() {
     setParticlesInitialized(true);
   };
 
-  // Check for Google OAuth callback on component mount
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    const userData = urlParams.get('user');
-    const isNewUser = urlParams.get('isNewUser') === 'true';
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+    const userData = params.get('user');
+    const isNewUser = params.get('isNewUser') === 'true';
 
     if (token && userData) {
       try {
-        const user = JSON.parse(decodeURIComponent(userData));
+        const decoded = decodeURIComponent(userData);
+        const user = JSON.parse(decoded);
 
-        // Store auth data
         login(token, user);
         localStorage.setItem('authToken', token);
         localStorage.setItem('user', JSON.stringify(user));
@@ -93,25 +92,23 @@ export default function Login() {
         toast.success('Google login successful!', {
           position: 'top-center',
           duration: 2000,
-          icon: <Rocket className="text-blue-500" />
+          icon: <Rocket className="text-blue-500" />,
         });
 
-        // Redirect based on whether user is new or existing
+        // Role-based redirect
         if (isNewUser) {
           navigate('/onboarding', { replace: true });
+        } else if (user.role === 'superadmin') {
+          navigate('/superadmin/dashboard', { replace: true });
         } else {
-          if (user.role === 'superadmin') {
-            navigate('/superadmin/dashboard', { replace: true });
-          } else {
-            navigate('/dashboard', { replace: true });
-          }
+          navigate('/dashboard', { replace: true });
         }
-      } catch (error) {
-        console.error('Error processing Google OAuth callback:', error);
-        toast.error('Authentication failed', {
+      } catch (err) {
+        console.error('Google callback parse error:', err);
+        toast.error('Google authentication failed', {
           position: 'top-center',
           duration: 2000,
-          icon: <X className="text-red-500" />
+          icon: <X className="text-red-500" />,
         });
       }
     }
@@ -185,16 +182,8 @@ export default function Login() {
 
   const handleGoogleLogin = () => {
     setIsGoogleLoading(true);
-
-    // Use direct backend URL (no process.env in browser)
-    const backendUrl = 'http://localhost:5000'; // Replace with your actual backend URL
-    const redirectUri = `${window.location.origin}/login`;
-    const googleAuthUrl = `${backendUrl}/api/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}`;
-
-    console.log('Redirecting to Google OAuth:', googleAuthUrl);
-
-    // Redirect to Google OAuth
-    window.location.href = googleAuthUrl;
+    const backendUrl = 'http://localhost:5000';
+    window.location.href = `${backendUrl}/api/auth/google`;
   };
 
   const theme = 'light'; // Replace with actual theme detection
