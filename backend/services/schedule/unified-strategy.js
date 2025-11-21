@@ -100,61 +100,106 @@ class UnifiedWarmupStrategy {
         }
     }
 
+    // 🎯 FIXED: True random pool selection
+    distributeEmailsAcrossPools(pools, emailCount, direction) {
+        const jobs = [];
+
+        if (pools.length === 0) return jobs;
+
+        console.log(`   🎲 RANDOMIZING: Selecting from ${pools.length} available pools`);
+
+        // 🎯 SHUFFLE pools randomly first
+        const shuffledPools = this.shuffleArray([...pools]);
+
+        // 🎯 DISTRIBUTE emails randomly across shuffled pools
+        for (let i = 0; i < emailCount; i++) {
+            const poolIndex = i % shuffledPools.length;
+            const pool = shuffledPools[poolIndex];
+
+            const emailJob = direction === 'WARMUP_TO_POOL'
+                ? this.createRandomizedEmailJob(warmupAccount, pool, direction, i, emailCount)
+                : this.createRandomizedEmailJob(pool, warmupAccount, direction, i, emailCount);
+
+            jobs.push(emailJob);
+        }
+
+        console.log(`   ✅ Distributed ${emailCount} emails across ${shuffledPools.length} randomly selected pools`);
+        return jobs;
+    }
+
     createRandomizedBidirectionalSequence(warmupAccount, outboundPools, inboundPools, outboundCount, inboundCount) {
         const allEmailJobs = [];
 
-        console.log(`   🔨 Creating distributed email combinations...`);
+        console.log(`   🔨 Creating TRULY RANDOM email combinations...`);
 
-        // 🚨 ENHANCED: Distribute emails evenly across available pools
-        const distributeEmailsAcrossPools = (pools, emailCount, direction) => {
-            const jobs = [];
-            const poolCount = pools.length;
+        // 🎯 SHUFFLE BOTH POOL SETS for true randomness
+        const randomizedOutboundPools = this.shuffleArray([...outboundPools]);
+        const randomizedInboundPools = this.shuffleArray([...inboundPools]);
 
-            if (poolCount === 0) return jobs;
+        console.log(`   🎲 Outbound pools shuffled: ${randomizedOutboundPools.map(p => p.email).join(', ')}`);
+        console.log(`   🎲 Inbound pools shuffled: ${randomizedInboundPools.map(p => p.email).join(', ')}`);
 
-            // Calculate how many emails per pool
-            const baseEmailsPerPool = Math.floor(emailCount / poolCount);
-            const extraEmails = emailCount % poolCount;
+        // 🎯 CREATE OUTBOUND emails with random pool selection
+        const outboundJobs = this.createRandomizedEmailSet(
+            warmupAccount,
+            randomizedOutboundPools,
+            outboundCount,
+            'WARMUP_TO_POOL'
+        );
 
-            let emailIndex = 0;
-
-            for (let i = 0; i < pools.length; i++) {
-                const pool = pools[i];
-                const emailsForThisPool = baseEmailsPerPool + (i < extraEmails ? 1 : 0);
-
-                for (let j = 0; j < emailsForThisPool; j++) {
-                    const emailJob = direction === 'WARMUP_TO_POOL'
-                        ? this.createRandomizedEmailJob(warmupAccount, pool, direction, emailIndex, emailCount)
-                        : this.createRandomizedEmailJob(pool, warmupAccount, direction, emailIndex, emailCount);
-
-                    jobs.push(emailJob);
-                    emailIndex++;
-                }
-            }
-
-            return jobs;
-        };
-
-        // Create outbound emails with distribution
-        const outboundJobs = distributeEmailsAcrossPools(outboundPools, outboundCount, 'WARMUP_TO_POOL');
-
-        // Create inbound emails with distribution  
-        const inboundJobs = distributeEmailsAcrossPools(inboundPools, inboundCount, 'POOL_TO_WARMUP');
+        // 🎯 CREATE INBOUND emails with random pool selection  
+        const inboundJobs = this.createRandomizedEmailSet(
+            warmupAccount,
+            randomizedInboundPools,
+            inboundCount,
+            'POOL_TO_WARMUP'
+        );
 
         allEmailJobs.push(...outboundJobs, ...inboundJobs);
 
         console.log(`   ├── Created ${allEmailJobs.length} total email jobs`);
-        console.log(`   ├── Outbound distribution: ${outboundCount} emails across ${outboundPools.length} pools`);
-        console.log(`   ├── Inbound distribution: ${inboundCount} emails across ${inboundPools.length} pools`);
+        console.log(`   ├── Outbound: ${outboundCount} emails across ${randomizedOutboundPools.length} pools`);
+        console.log(`   ├── Inbound: ${inboundCount} emails across ${randomizedInboundPools.length} pools`);
 
-        // 🎯 SHUFFLE for natural randomness
-        console.log(`   🔀 Shuffling all email jobs randomly...`);
-        const shuffledSequence = this.shuffleArray(allEmailJobs);
+        // 🎯 FINAL SHUFFLE for maximum randomness
+        console.log(`   🔀 Final shuffle of all email jobs...`);
+        const finalShuffled = this.shuffleArray(allEmailJobs);
 
-        // Apply timing
-        this.applyNaturalConversationTiming(shuffledSequence, warmupAccount);
+        // Apply timing to the final shuffled sequence
+        this.applyNaturalConversationTiming(finalShuffled, warmupAccount);
 
-        return shuffledSequence;
+        return finalShuffled;
+    }
+
+    // 🎯 NEW: Create randomized email set with proper distribution
+    createRandomizedEmailSet(primaryAccount, availablePools, emailCount, direction) {
+        const jobs = [];
+
+        if (availablePools.length === 0) return jobs;
+
+        console.log(`   🎯 Creating ${emailCount} ${direction} emails across ${availablePools.length} pools`);
+
+        // 🎯 STRATEGY: Round-robin through shuffled pools for even distribution
+        for (let i = 0; i < emailCount; i++) {
+            const poolIndex = i % availablePools.length;
+            const selectedPool = availablePools[poolIndex];
+
+            const emailJob = direction === 'WARMUP_TO_POOL'
+                ? this.createRandomizedEmailJob(primaryAccount, selectedPool, direction, i, emailCount)
+                : this.createRandomizedEmailJob(selectedPool, primaryAccount, direction, i, emailCount);
+
+            jobs.push(emailJob);
+
+            if (i < 5) { // Log first few selections to verify randomness
+                console.log(`      ${i + 1}. Using pool: ${selectedPool.email}`);
+            }
+        }
+
+        if (emailCount > 5) {
+            console.log(`      ... and ${emailCount - 5} more emails`);
+        }
+
+        return jobs;
     }
 
     // 🎯 NEW: Create email job with randomized timing
@@ -220,6 +265,8 @@ class UnifiedWarmupStrategy {
                 delay += replyDelay;
             }
 
+
+
             return delay;
         }
     }
@@ -245,6 +292,7 @@ class UnifiedWarmupStrategy {
                     (1 + Math.random() * 3) * 60 * 1000 : // 1-4 minutes in testing
                     (15 + Math.random() * 45) * 60 * 1000; // 15-60 minutes in production
             } else {
+
                 // Inbound email - typically comes as a reply after outbound
                 const replyDelay = this.TESTING_MODE ?
                     (1 + Math.random() * 2) * 60 * 1000 : // 1-3 minutes in testing

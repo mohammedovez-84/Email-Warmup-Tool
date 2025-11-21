@@ -98,13 +98,7 @@ class WarmupScheduler {
 
 
     async scheduleBidirectionalWarmup(channel) {
-        // Check cooldown period
-        const timeSinceLastScheduling = Date.now() - this.lastSchedulingTime;
-        if (timeSinceLastScheduling < this.SCHEDULING_COOLDOWN_MS) {
-            console.log(`⏸️ Skipping scheduling - in cooldown period`);
-            this.isRunning = false;
-            return 0;
-        }
+
 
         console.log('📧 GLOBAL SCHEDULING: Finding accounts needing emails...');
 
@@ -894,22 +888,21 @@ class WarmupScheduler {
     }
 
     // In WarmupScheduler - REPLACE applyVolumeLimitsToRandomizedSequence
+    // 🎯 UPDATED: Apply volume limits while preserving randomization
     applyVolumeLimitsToRandomizedSequence(randomizedSequence, warmupMaxToSchedule, poolCapacities) {
+        console.log(`   🎯 Applying volume limits to RANDOMIZED sequence...`);
+
         const limitedSequence = [];
         let outboundScheduled = 0;
         const poolUsage = new Map();
 
-        console.log(`   🎯 Applying volume limits to INTERLEAVED sequence...`);
-
-        // 🎯 NEW: Preserve the interleaved pattern while applying limits
+        // 🎯 PRESERVE THE RANDOM ORDER while applying limits
         for (const emailJob of randomizedSequence) {
             if (emailJob.direction === 'WARMUP_TO_POOL') {
                 // Check warmup outbound limit
                 if (outboundScheduled < warmupMaxToSchedule) {
                     limitedSequence.push(emailJob);
                     outboundScheduled++;
-                } else {
-                    console.log(`   🚫 Outbound limit reached: ${outboundScheduled}/${warmupMaxToSchedule}`);
                 }
             } else if (emailJob.direction === 'POOL_TO_WARMUP') {
                 // Check pool inbound limit
@@ -920,20 +913,24 @@ class WarmupScheduler {
                 if (currentUsage < poolCapacity) {
                     limitedSequence.push(emailJob);
                     poolUsage.set(poolEmail, currentUsage + 1);
-                } else {
-                    console.log(`   🚫 Pool ${poolEmail} limit reached: ${currentUsage}/${poolCapacity}`);
                 }
             }
         }
 
-        // 🎯 NEW: Log the final interleaved pattern
+        // 🎯 LOG THE FINAL RANDOM DISTRIBUTION
         const finalOutbound = limitedSequence.filter(job => job.direction === 'WARMUP_TO_POOL').length;
         const finalInbound = limitedSequence.filter(job => job.direction === 'POOL_TO_WARMUP').length;
 
-        console.log(`   ✅ Volume-limited INTERLEAVED sequence: ${limitedSequence.length} emails`);
+        console.log(`   ✅ Volume-limited RANDOM sequence: ${limitedSequence.length} emails`);
         console.log(`      ├── Outbound: ${finalOutbound}/${warmupMaxToSchedule}`);
         console.log(`      └── Inbound: ${finalInbound} from ${poolUsage.size} pools`);
-        console.log(`      📊 Pattern: ${this.getSequencePattern(limitedSequence)}`);
+
+        // 🎯 LOG POOL USAGE DISTRIBUTION
+        console.log(`   📊 Pool usage distribution:`);
+        for (const [poolEmail, usage] of poolUsage) {
+            const capacity = poolCapacities.get(poolEmail) || 0;
+            console.log(`      ├── ${poolEmail}: ${usage}/${capacity}`);
+        }
 
         return limitedSequence;
     }
@@ -947,6 +944,24 @@ class WarmupScheduler {
         ).join(' → ');
 
         return pattern;
+    }
+
+    // 🎯 ENHANCED: Log pool selection for verification
+    logPoolSelection(randomizedOutboundPools, randomizedInboundPools, outboundCount, inboundCount) {
+        console.log(`\n   🔍 VERIFYING RANDOM POOL SELECTION:`);
+        console.log(`   🎲 Outbound pools (${randomizedOutboundPools.length}):`);
+        randomizedOutboundPools.forEach((pool, index) => {
+            console.log(`      ${index + 1}. ${pool.email}`);
+        });
+
+        console.log(`   🎲 Inbound pools (${randomizedInboundPools.length}):`);
+        randomizedInboundPools.forEach((pool, index) => {
+            console.log(`      ${index + 1}. ${pool.email}`);
+        });
+
+        console.log(`   📊 Expected distribution:`);
+        console.log(`      ├── Outbound: ${outboundCount} emails across ${randomizedOutboundPools.length} pools`);
+        console.log(`      └── Inbound: ${inboundCount} emails across ${randomizedInboundPools.length} pools`);
     }
     async scheduleSingleEmailWithEnforcement(emailJob, channel, warmupEmail) {
         try {

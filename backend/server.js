@@ -73,7 +73,7 @@ app.use('/api/health', healthRoutes);
             await dailyResetService.performDailyReset();
         });
 
-        // Start warmup scheduler with delay
+
         setTimeout(async () => {
             try {
                 console.log('🚀 STARTING WARMUP SCHEDULER...');
