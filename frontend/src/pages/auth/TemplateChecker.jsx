@@ -28,16 +28,19 @@ import {
   FiRefreshCw
 } from 'react-icons/fi';
 
-// API Service
+// API Service with better error handling
 const apiService = {
   async analyzeEmail(subject, body) {
-    const API_BASE_URL = 'http://localhost:8000';
+    const API_BASE_URL = 'https://email-gen-gpt2.onrender.com';
     
     console.log('📡 Calling API:', `${API_BASE_URL}/analyze`);
     console.log('📧 Subject:', subject);
-    console.log('📝 Content:', body);
+    console.log('📝 Content length:', body.length);
     
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
       const response = await fetch(`${API_BASE_URL}/analyze`, {
         method: 'POST',
         headers: {
@@ -47,43 +50,63 @@ const apiService = {
           subject,
           body
         }),
+        signal: controller.signal
       });
 
+      clearTimeout(timeoutId);
+
       console.log('📨 Response status:', response.status);
+      console.log('📨 Response headers:', Object.fromEntries(response.headers.entries()));
       
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ API Error Response:', errorText);
-        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        let errorText;
+        try {
+          errorText = await response.text();
+          console.error('❌ API Error Response:', errorText);
+        } catch (e) {
+          errorText = 'No error message available';
+        }
+        
+        throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const data = await response.json();
-      console.log('✅ API Success - Data received');
+      console.log('✅ API Success - Data received:', data);
       return data;
     } catch (error) {
       console.error('🚨 API Call Failed:', error);
-      throw new Error(
-        error.message === 'Failed to fetch' 
-          ? 'Unable to connect to analysis service. Please check if the backend server is running on port 8000.'
-          : `Analysis failed: ${error.message}`
-      );
+      if (error.name === 'AbortError') {
+        throw new Error('Request timeout - API is taking too long to respond');
+      } else if (error.message === 'Failed to fetch') {
+        throw new Error('Unable to connect to analysis service. The server might be down.');
+      } else {
+        throw new Error(`Analysis failed: ${error.message}`);
+      }
     }
   }
 };
 
 // Data Transformation Utilities
 const mapPriorityToSeverity = (priority) => {
+  if (!priority) return 'Low';
+  
   const priorityMap = {
     'HIGH PRIORITY': 'High',
     'MEDIUM PRIORITY': 'Medium',
     'LOW PRIORITY': 'Low',
     'SUGGESTION': 'Low',
-    'NONE PRIORITY': 'None'
+    'NONE PRIORITY': 'None',
+    'High': 'High',
+    'Medium': 'Medium',
+    'Low': 'Low',
+    'None': 'None'
   };
   return priorityMap[priority] || 'Low';
 };
 
 const getIconForCategory = (category) => {
+  if (!category) return FiFileText;
+  
   const iconMap = {
     'Spam Risk': FiShield,
     'Spam Trigger Words': FiShield,
@@ -97,94 +120,157 @@ const getIconForCategory = (category) => {
     'Personalization': FiUser,
     'Content Structure': FiFileText,
     'Overall Assessment': FiAward,
-    'Positive Feedback': FiAward
+    'Positive Feedback': FiAward,
+    'Content Length': FiFileText,
+    'Engagement': FiUser,
+    'Spam Risk Detected': FiShield,
+    'Critical Issue': FiAlertTriangle,
+    'Warning': FiAlertTriangle,
+    'Suggestion': FiFileText
   };
   return iconMap[category] || FiFileText;
 };
 
 const transformMetrics = (apiMetrics) => {
-  if (!apiMetrics) return {};
+  if (!apiMetrics) return {
+    subjectLength: 0,
+    wordCount: 0,
+    sentenceCount: 0,
+    paragraphCount: 0,
+    lineCount: 0,
+    readingTime: '0 min',
+    linkCount: 0,
+    questionCount: 0,
+    spammyWordCount: 0,
+    personalizationCount: 0,
+    uppercaseCount: 0,
+    readabilityScore: 0
+  };
   
   return {
-    subjectLength: apiMetrics.subject?.value || 0,
-    wordCount: apiMetrics.words?.value || 0,
-    sentenceCount: apiMetrics.sentences?.value || 0,
-    paragraphCount: apiMetrics.paragraphs?.value || 0,
-    lineCount: apiMetrics.lines?.value || 0,
-    readingTime: apiMetrics.read_time?.value || '1 min',
-    linkCount: apiMetrics.links?.value || 0,
-    questionCount: apiMetrics.questions?.value || 0,
-    spammyWordCount: apiMetrics.spam_words?.value || 0,
-    personalizationCount: apiMetrics.personal_tags?.value || 0,
-    uppercaseCount: apiMetrics.uppercase?.value || 0,
-    readabilityScore: apiMetrics.readability?.value || 0
+    subjectLength: apiMetrics.subject?.value || apiMetrics.subjectLength || 0,
+    wordCount: apiMetrics.words?.value || apiMetrics.wordCount || 0,
+    sentenceCount: apiMetrics.sentences?.value || apiMetrics.sentenceCount || 0,
+    paragraphCount: apiMetrics.paragraphs?.value || apiMetrics.paragraphCount || 0,
+    lineCount: apiMetrics.lines?.value || apiMetrics.lineCount || 0,
+    readingTime: apiMetrics.read_time?.value || apiMetrics.readingTime || '0 min',
+    linkCount: apiMetrics.links?.value || apiMetrics.linkCount || 0,
+    questionCount: apiMetrics.questions?.value || apiMetrics.questionCount || 0,
+    spammyWordCount: apiMetrics.spam_words?.value || apiMetrics.spammyWordCount || 0,
+    personalizationCount: apiMetrics.personal_tags?.value || apiMetrics.personalizationCount || 0,
+    uppercaseCount: apiMetrics.uppercase?.value || apiMetrics.uppercaseCount || 0,
+    readabilityScore: apiMetrics.readability?.value || apiMetrics.readabilityScore || 0
   };
 };
 
+// FIXED: More flexible transformApiResponse that handles different response structures
 const transformApiResponse = (apiData) => {
-  if (!apiData || !apiData.result) {
-    throw new Error('Invalid API response format');
+  console.log('🔄 Transforming API response...', apiData);
+  
+  if (!apiData) {
+    throw new Error('No API data received');
   }
 
-  const { template_analytics, detailed_analysis, warmup_strategies, positive_aspects } = apiData.result;
+  // Handle different possible response structures
+  const result = apiData.result || apiData.data || apiData;
+  
+  if (!result) {
+    throw new Error('Invalid API response format - missing result/data');
+  }
 
-  // Transform analysis results
+  const detailed_analysis = result?.detailed_analysis || result?.analysis || result?.issues || {};
+  const template_analytics = result?.template_analytics || result?.analytics || result?.metrics || {};
+  const warmup_strategies = result?.warmup_strategies || result?.strategies || [];
+  const positive_aspects = result?.positive_aspects || result?.positive_feedback || {};
+
+  console.log('📋 Processed data:', {
+    detailed_analysis,
+    template_analytics,
+    warmup_strategies,
+    positive_aspects
+  });
+
+  // Transform analysis results - WITH PROPER NULL CHECKS
   const analysisResults = [];
 
+  // Check for different possible issue arrays
+  const criticalIssues = detailed_analysis?.critical_issues || detailed_analysis?.critical || [];
+  const warnings = detailed_analysis?.warnings || detailed_analysis?.warning || [];
+  const suggestions = detailed_analysis?.suggestions || detailed_analysis?.suggestion || [];
+
+  console.log('🔍 Found issues:', {
+    criticalIssues,
+    warnings,
+    suggestions
+  });
+
   // Transform critical issues
-  if (detailed_analysis.critical_issues) {
-    detailed_analysis.critical_issues.forEach((issue, index) => {
+  if (Array.isArray(criticalIssues)) {
+    criticalIssues.forEach((issue, index) => {
       analysisResults.push({
         id: `critical-${index}`,
-        issue: issue.category,
-        severity: mapPriorityToSeverity(issue.priority),
-        found: issue.found,
-        suggestion: issue.recommendation,
+        issue: issue.category || issue.issue || 'Critical Issue',
+        severity: mapPriorityToSeverity(issue.priority || issue.severity),
+        found: issue.found || issue.description || 'Issue detected',
+        suggestion: issue.recommendation || issue.suggestion || 'Please review this issue',
         icon: getIconForCategory(issue.category),
-        category: issue.category
+        category: issue.category || 'General'
       });
     });
   }
 
   // Transform warnings
-  if (detailed_analysis.warnings) {
-    detailed_analysis.warnings.forEach((warning, index) => {
+  if (Array.isArray(warnings)) {
+    warnings.forEach((warning, index) => {
       analysisResults.push({
         id: `warning-${index}`,
-        issue: warning.category,
-        severity: mapPriorityToSeverity(warning.priority),
-        found: warning.found,
-        suggestion: warning.recommendation,
+        issue: warning.category || warning.issue || 'Warning',
+        severity: mapPriorityToSeverity(warning.priority || warning.severity),
+        found: warning.found || warning.description || 'Warning detected',
+        suggestion: warning.recommendation || warning.suggestion || 'Please review this warning',
         icon: getIconForCategory(warning.category),
-        category: warning.category
+        category: warning.category || 'General'
       });
     });
   }
 
   // Transform suggestions
-  if (detailed_analysis.suggestions) {
-    detailed_analysis.suggestions.forEach((suggestion, index) => {
+  if (Array.isArray(suggestions)) {
+    suggestions.forEach((suggestion, index) => {
       analysisResults.push({
         id: `suggestion-${index}`,
-        issue: suggestion.category,
+        issue: suggestion.category || suggestion.issue || 'Suggestion',
         severity: 'Low',
-        found: suggestion.found,
-        suggestion: suggestion.recommendation,
-        icon: FiFileText,
-        category: suggestion.category
+        found: suggestion.found || suggestion.description || 'Suggestion available',
+        suggestion: suggestion.recommendation || suggestion.suggestion || 'Consider this improvement',
+        icon: getIconForCategory(suggestion.category),
+        category: suggestion.category || 'General'
       });
     });
   }
 
   // Add positive aspects
-  if (positive_aspects && positive_aspects.found) {
+  if (positive_aspects && (positive_aspects.found || positive_aspects.description)) {
     analysisResults.push({
       id: 'positive',
-      issue: positive_aspects.category,
+      issue: positive_aspects.category || 'Positive Feedback',
       severity: 'None',
-      found: positive_aspects.found,
-      suggestion: positive_aspects.recommendation,
+      found: positive_aspects.found || positive_aspects.description || 'Positive aspects found',
+      suggestion: positive_aspects.recommendation || positive_aspects.suggestion || 'Great work!',
       icon: FiAward,
+      category: 'Positive Feedback'
+    });
+  }
+
+  // If no results were found, add a fallback message
+  if (analysisResults.length === 0) {
+    analysisResults.push({
+      id: 'no-issues',
+      issue: 'No Issues Detected',
+      severity: 'None',
+      found: 'Your email template looks good!',
+      suggestion: 'Continue following email best practices.',
+      icon: FiCheckCircle,
       category: 'Positive Feedback'
     });
   }
@@ -193,23 +279,15 @@ const transformApiResponse = (apiData) => {
     analysisResults,
     templateAnalytics: template_analytics,
     warmupStrategies: warmup_strategies,
-    metrics: transformMetrics(template_analytics?.metrics)
+    metrics: transformMetrics(template_analytics?.metrics || template_analytics),
+    emailHealthScore: template_analytics?.email_health_score || template_analytics?.score || 0
   };
 };
 
 const TemplateCheckerPage = () => {
-  // State Management
-  const [emailSubject, setEmailSubject] = useState('Problem with emails going to SPAM');
-  const [emailContent, setEmailContent] = useState(`Hi [Recipient_Name],
-
-I ran into a problem with my email campaigns.
-I sent emails to my clients to announce the launch of a new promotion in our company, but most of the recipients received my emails in the SPAM folder.
-
-Perhaps this is due to the fact that my domain is very young and has not participated in mailing lists before?
-Could you tell me how I can warm up my domain and mailbox to improve deliverability?
-
-Best regards,
-[My_Name]`);
+  // State Management - All values reset to zero/empty
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailContent, setEmailContent] = useState('');
 
   const [analysisResults, setAnalysisResults] = useState([]);
   const [activeTab, setActiveTab] = useState('editor');
@@ -231,7 +309,7 @@ Best regards,
 
   const textareaRef = useRef(null);
 
-  // Enhanced Metrics Calculation (Fallback)
+  // Enhanced Metrics Calculation (Fallback) - All zeros by default
   const calculateMetrics = () => {
     const words = emailContent.split(/\s+/).filter(word => word.length > 0);
     const sentences = emailContent.split(/[.!?]+/).filter(s => s.length > 0);
@@ -255,49 +333,31 @@ Best regards,
       paragraphCount: paragraphs.length,
       lineCount: lines.length,
       avgWordsPerSentence: words.length / Math.max(sentences.length, 1),
-      readingTime: Math.max(1, Math.ceil(words.length / 200)) + ' min',
+      readingTime: Math.max(0, Math.ceil(words.length / 200)) + ' min',
       linkCount: (emailContent.match(/https?:\/\/[^\s]+/g) || []).length,
       questionCount: (emailContent.match(/\?/g) || []).length,
       spammyWordCount: spammyWordsFound.length,
       personalizationCount: (emailContent.match(/\[[^\]]+\]/g) || []).length,
       uppercaseCount: (emailContent.match(/[A-Z]{3,}/g) || []).length,
-      sentimentScore: calculateSentiment(emailContent),
-      readabilityScore: calculateReadability(emailContent)
+      sentimentScore: 0,
+      readabilityScore: 0
     };
   };
 
-  const calculateSentiment = (text) => {
-    const positiveWords = ['great', 'excellent', 'amazing', 'wonderful', 'perfect',
-      'outstanding', 'fantastic', 'good', 'happy', 'pleased'];
-    const negativeWords = ['problem', 'issue', 'spam', 'failed', 'wrong', 'bad',
-      'terrible', 'sorry', 'unfortunately', 'difficult'];
-
-    const words = text.toLowerCase().split(/\s+/);
-    let score = 0;
-
-    words.forEach(word => {
-      if (positiveWords.includes(word)) score += 1;
-      if (negativeWords.includes(word)) score -= 1;
-    });
-
-    return Math.max(-1, Math.min(1, score / Math.max(words.length / 10, 1)));
-  };
-
-  const calculateReadability = (text) => {
-    const words = text.split(/\s+/).filter(word => word.length > 0);
-    const sentences = text.split(/[.!?]+/).filter(s => s.length > 0);
-    const avgWordsPerSentence = words.length / Math.max(sentences.length, 1);
-
-    let score = 100;
-    if (avgWordsPerSentence > 25) score -= 20;
-    if (avgWordsPerSentence > 30) score -= 20;
-    if (words.length < 50) score -= 10;
-    if (words.length > 500) score -= 10;
-
-    return Math.max(0, Math.min(100, score));
-  };
-
-  const [metrics, setMetrics] = useState(calculateMetrics());
+  const [metrics, setMetrics] = useState({
+    subjectLength: 0,
+    wordCount: 0,
+    sentenceCount: 0,
+    paragraphCount: 0,
+    lineCount: 0,
+    readingTime: '0 min',
+    linkCount: 0,
+    questionCount: 0,
+    spammyWordCount: 0,
+    personalizationCount: 0,
+    uppercaseCount: 0,
+    readabilityScore: 0
+  });
 
   // Effects
   useEffect(() => {
@@ -331,15 +391,25 @@ Best regards,
     try {
       console.log('🚀 Starting API analysis...');
       const apiData = await apiService.analyzeEmail(emailSubject, emailContent);
-      console.log('📊 API Data received:', apiData);
+      console.log('📊 RAW API Data received:', apiData);
       
+      // Debug: Log the entire response structure
+      console.log('🔍 API Response Structure:', {
+        hasResult: !!apiData.result,
+        resultKeys: apiData.result ? Object.keys(apiData.result) : 'No result',
+        detailedAnalysis: apiData.result?.detailed_analysis,
+        templateAnalytics: apiData.result?.template_analytics,
+        warmupStrategies: apiData.result?.warmup_strategies,
+        positiveAspects: apiData.result?.positive_aspects
+      });
+
       const transformedData = transformApiResponse(apiData);
       console.log('🔄 Transformed Data:', transformedData);
       
       setAnalysisResults(transformedData.analysisResults);
       setApiMetrics(transformedData.metrics);
       setWarmupStrategies(transformedData.warmupStrategies);
-      setEmailHealthScore(transformedData.templateAnalytics?.email_health_score || getScore());
+      setEmailHealthScore(transformedData.emailHealthScore || 0);
       
       setActiveTab('results');
       showNotification('Email analysis completed successfully!');
@@ -418,6 +488,7 @@ Best regards,
     }
 
     setAnalysisResults(newResults);
+    setEmailHealthScore(getScore());
     setActiveTab('results');
     showNotification('Local analysis completed (API unavailable)');
   };
@@ -477,6 +548,8 @@ Best regards,
 
   // Enhanced scoring algorithm
   const getScore = () => {
+    if (!emailSubject && !emailContent) return 0;
+    
     let score = 100;
 
     // Content quality deductions
@@ -533,21 +606,24 @@ Best regards,
   const clearTemplate = () => {
     setEmailSubject('');
     setEmailContent('');
+    setAnalysisResults([]);
+    setEmailHealthScore(0);
+    setApiMetrics(null);
     showNotification('Template cleared!');
   };
 
   const loadSampleTemplate = () => {
-    setEmailSubject('Follow-up: Recent Conversation');
+    setEmailSubject('Problem with emails going to SPAM');
     setEmailContent(`Hi [Recipient_Name],
 
-I hope this email finds you well. I wanted to follow up on our recent conversation about [Topic].
+I ran into a problem with my email campaigns.
+I sent emails to my clients to announce the launch of a new promotion in our company, but most of the recipients received my emails in the SPAM folder.
 
-I've attached the document we discussed, which includes the key points and next steps. Please let me know if you have any questions or need additional information.
-
-Looking forward to hearing your thoughts.
+Perhaps this is due to the fact that my domain is very young and has not participated in mailing lists before?
+Could you tell me how I can warm up my domain and mailbox to improve deliverability?
 
 Best regards,
-[Your_Name]`);
+[My_Name]`);
     showNotification('Sample template loaded!');
   };
 
@@ -849,10 +925,15 @@ Best regards,
                         <FiAlertTriangle className="w-3 h-3 md:w-4 md:h-4" />
                         Recommended: 50 characters max
                       </span>
-                    ) : emailSubject.length < 10 ? (
+                    ) : emailSubject.length < 10 && emailSubject.length > 0 ? (
                       <span className="text-amber-600 text-xs md:text-sm font-medium bg-amber-50 px-2 md:px-3 py-1 md:py-1.5 rounded-lg border border-amber-200 flex items-center gap-1 md:gap-2">
                         <FiAlertTriangle className="w-3 h-3 md:w-4 md:h-4" />
                         Recommended: at least 10 characters
+                      </span>
+                    ) : emailSubject.length === 0 ? (
+                      <span className="text-gray-500 text-xs md:text-sm font-medium bg-gray-50 px-2 md:px-3 py-1 md:py-1.5 rounded-lg border border-gray-200 flex items-center gap-1 md:gap-2">
+                        <FiAlertTriangle className="w-3 h-3 md:w-4 md:h-4" />
+                        Enter a subject line
                       </span>
                     ) : (
                       <span className="text-teal-600 text-xs md:text-sm font-medium bg-teal-50 px-2 md:px-3 py-1 md:py-1.5 rounded-lg border border-teal-200 flex items-center gap-1 md:gap-2">
@@ -933,9 +1014,10 @@ Best regards,
                             score >= 60 ? 'text-amber-600' :
                               'text-red-600'
                             }`}>
-                            {score >= 80 ? '🎉 Excellent - Your template is ready for sending!' :
-                              score >= 60 ? '📝 Good - Minor improvements can boost performance' :
-                                '⚠️ Needs Work - Review recommendations below'}
+                            {score === 0 ? '📝 Enter email content to get started' :
+                            score >= 80 ? '🎉 Excellent - Your template is ready for sending!' :
+                            score >= 60 ? '📝 Good - Minor improvements can boost performance' :
+                            '⚠️ Needs Work - Review recommendations below'}
                           </p>
                           <div className="flex flex-wrap justify-center lg:justify-start items-center gap-4 md:gap-6 text-xs md:text-sm text-gray-600">
                             <div className="flex items-center gap-1 md:gap-2">
@@ -957,8 +1039,8 @@ Best regards,
                       {/* Enhanced Metrics Grid - Improved Responsive Grid */}
                       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
                         {[
-                          { label: 'Subject', value: displayMetrics.subjectLength, warning: displayMetrics.subjectLength > 50 || displayMetrics.subjectLength < 10, optimal: displayMetrics.subjectLength >= 10 && displayMetrics.subjectLength <= 50, icon: FiTarget, description: 'chars' },
-                          { label: 'Words', value: displayMetrics.wordCount, warning: displayMetrics.wordCount < 50 || displayMetrics.wordCount > 500, optimal: displayMetrics.wordCount >= 50 && displayMetrics.wordCount <= 500, icon: FiFileText, description: 'words' },
+                          { label: 'Subject', value: displayMetrics.subjectLength, warning: displayMetrics.subjectLength > 50 || (displayMetrics.subjectLength < 10 && displayMetrics.subjectLength > 0), optimal: displayMetrics.subjectLength >= 10 && displayMetrics.subjectLength <= 50, icon: FiTarget, description: 'chars' },
+                          { label: 'Words', value: displayMetrics.wordCount, warning: (displayMetrics.wordCount < 50 && displayMetrics.wordCount > 0) || displayMetrics.wordCount > 500, optimal: displayMetrics.wordCount >= 50 && displayMetrics.wordCount <= 500, icon: FiFileText, description: 'words' },
                           { label: 'Sentences', value: displayMetrics.sentenceCount, optimal: displayMetrics.sentenceCount >= 3, icon: FiFileText, description: 'sentences' },
                           { label: 'Paragraphs', value: displayMetrics.paragraphCount, optimal: displayMetrics.paragraphCount >= 2, icon: FiFileText, description: 'paragraphs' },
                           { label: 'Lines', value: displayMetrics.lineCount, icon: FiFileText, description: 'lines' },
@@ -968,7 +1050,7 @@ Best regards,
                           { label: 'Spam Words', value: displayMetrics.spammyWordCount, warning: displayMetrics.spammyWordCount > 0, optimal: displayMetrics.spammyWordCount === 0, icon: FiShield, description: 'words' },
                           { label: 'Personal Tags', value: displayMetrics.personalizationCount, optimal: displayMetrics.personalizationCount > 0, icon: FiUser, description: 'tags' },
                           { label: 'UPPERCASE', value: displayMetrics.uppercaseCount, warning: displayMetrics.uppercaseCount > 2, optimal: displayMetrics.uppercaseCount <= 2, icon: FiFileText, description: 'instances' },
-                          { label: 'Readability', value: Math.round(displayMetrics.readabilityScore), warning: displayMetrics.readabilityScore < 60, optimal: displayMetrics.readabilityScore >= 60, icon: FiFileText, description: 'score' },
+                          { label: 'Readability', value: Math.round(displayMetrics.readabilityScore), warning: displayMetrics.readabilityScore < 60 && displayMetrics.readabilityScore > 0, optimal: displayMetrics.readabilityScore >= 60, icon: FiFileText, description: 'score' },
                         ].map((metric, index) => {
                           const IconComponent = metric.icon;
                           return (
