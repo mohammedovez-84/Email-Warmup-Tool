@@ -1,3 +1,4 @@
+// App.jsx
 import {
     BrowserRouter as Router,
     Routes,
@@ -9,12 +10,14 @@ import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import Onboarding from './components/Onboarding';
+import BuyCredits from './components/BuyCredits';
 import SuperAdminRoute from './components/SuperAdminRoute';
 import LoadingSpinner from './components/LoadingSpinner';
 import MainLayout from './layouts/MainLayout';
 import AuthLayout from './layouts/AuthLayout';
 import { CreditProvider } from "./context/CreditContext";
 import AdminOAuthCallback from "./pages/superadmin/CallbackHandler";
+
 // Lazy load components
 const Login = lazy(() => import('./pages/auth/Login'));
 const Signup = lazy(() => import('./pages/auth/Signup'));
@@ -38,114 +41,144 @@ function App() {
     return (
         <Router>
             <AuthProvider>
-                <Suspense fallback={<LoadingSpinner />}>
-                    <Routes>
-                        {/* Default route */}
-                        <Route path="/" element={<Navigate to="/login" replace />} />
+                <CreditProvider>
+                    <Suspense fallback={<LoadingSpinner />}>
+                        <Routes>
+                            {/* Default route */}
+                            <Route path="/" element={<Navigate to="/login" replace />} />
 
-                        {/* Auth routes with AuthLayout */}
-                        <Route element={<AuthLayout />}>
-                            <Route path="/login" element={<Login />} />
-                            <Route path="/signup" element={<Signup />} />
-                            <Route path="/verify-email" element={<VerifyEmail />} />
-                            <Route path="/onboarding" element={<Onboarding />} />
-                            <Route path="/forgot-password" element={<ForgotPassword />} />
-                            <Route path="/reset-password" element={<ResetPassword />} />
-                            <Route path="/two-factor-login" element={<TwoFactorLogin />} />
-                            <Route path="/verify-2fa" element={<Verify2FA />} />
-                            <Route path="/email-verification" element={<EmailVerification />} />
-                        </Route>
+                            {/* Auth routes with AuthLayout */}
+                            <Route element={<AuthLayout />}>
+                                <Route path="/login" element={<Login />} />
+                                <Route path="/signup" element={<Signup />} />
+                                <Route path="/verify-email" element={<VerifyEmail />} />
+                                <Route path="/onboarding" element={<Onboarding />} />
+                                <Route path="/forgot-password" element={<ForgotPassword />} />
+                                <Route path="/reset-password" element={<ResetPassword />} />
+                                <Route path="/two-factor-login" element={<TwoFactorLogin />} />
+                                <Route path="/verify-2fa" element={<Verify2FA />} />
+                                <Route path="/email-verification" element={<EmailVerification />} />
+                            </Route>
 
-                        {/* Protected routes with MainLayout */}
-                        <Route element={<MainLayout />}>
-                            <Route
-                                path="/dashboard"
-                                element={
-                                    <ProtectedRoute>
-                                        <Dashboard />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/settings"
-                                element={
-                                    <ProtectedRoute>
-                                        <Settings />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/Analytics"
-                                element={
-                                    <ProtectedRoute>
-                                        <Analytics />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/template-checker"
-                                element={
-                                    <ProtectedRoute>
-                                        <TemplateChecker />
-                                    </ProtectedRoute>
-                                }
-                            />
+                            {/* Protected routes with MainLayout (includes Sidebar + Navbar) */}
+                            <Route element={<MainLayout />}>
+                                <Route
+                                    path="/dashboard"
+                                    element={
+                                        <ProtectedRoute>
+                                            <Dashboard />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/BuyCredits"
+                                    element={
+                                        <ProtectedRoute>
+                                            <BuyCredits />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/settings"
+                                    element={
+                                        <ProtectedRoute>
+                                            <Settings />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/Analytics"
+                                    element={
+                                        <ProtectedRoute>
+                                            <Analytics />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/template-checker"
+                                    element={
+                                        <ProtectedRoute>
+                                            <TemplateChecker />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/AuthenticationChecker"
+                                    element={
+                                        <ProtectedRoute>
+                                            <AuthenticationChecker />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/Ipdomain-checker"
+                                    element={
+                                        <ProtectedRoute>
+                                            <Ipdomainchecker />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/Alert"
+                                    element={
+                                        <ProtectedRoute>
+                                            <Alert />
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/billing"
+                                    element={
+                                        <ProtectedRoute>
+                                            <div className="p-8 text-center">
+                                                <h1 className="text-2xl font-bold text-gray-900">Billing & Payments</h1>
+                                                <p className="text-gray-600 mt-2">Payment history page coming soon...</p>
+                                            </div>
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/help"
+                                    element={
+                                        <ProtectedRoute>
+                                            <div className="p-8 text-center">
+                                                <h1 className="text-2xl font-bold text-gray-900">Help Desk</h1>
+                                                <p className="text-gray-600 mt-2">Help desk page coming soon...</p>
+                                            </div>
+                                        </ProtectedRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/admin/dashboard"
+                                    element={
+                                        <AdminRoute>
+                                            <AdminDashboard />
+                                        </AdminRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/superadmin/dashboard"
+                                    element={
+                                        <SuperAdminRoute>
+                                            <SuperAdminDashboard />
+                                        </SuperAdminRoute>
+                                    }
+                                />
+                                <Route
+                                    path="/superadmin/oauth-callback"
+                                    element={
+                                        <SuperAdminRoute>
+                                            <AdminOAuthCallback />
+                                        </SuperAdminRoute>
+                                    }
+                                />
+                            </Route>
 
-                            <Route
-                                path="/AuthenticationChecker"
-                                element={
-                                    <ProtectedRoute>
-                                        <AuthenticationChecker />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/Ipdomain-checker"
-                                element={
-                                    <ProtectedRoute>
-                                        <Ipdomainchecker />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/Alert"
-                                element={
-                                    <ProtectedRoute>
-                                        <Alert />
-                                    </ProtectedRoute>
-                                }
-                            />
-                            <Route
-                                path="/admin/dashboard"
-                                element={
-                                    <AdminRoute>
-                                        <AdminDashboard />
-                                    </AdminRoute>
-                                }
-                            />
-
-                            <Route
-                                path="/superadmin/dashboard"
-                                element={
-                                    <SuperAdminRoute>
-                                        <SuperAdminDashboard />
-                                    </SuperAdminRoute>
-                                }
-                            />
-                            <Route
-                                path="/superadmin/oauth-callback"
-                                element={
-                                    <SuperAdminRoute>
-                                        <AdminOAuthCallback />
-                                    </SuperAdminRoute>
-                                }
-                            />
-                        </Route>
-
-                        {/* Fallback route */}
-                        <Route path="*" element={<Navigate to="/login" replace />} />
-                    </Routes>
-                </Suspense>
+                            {/* Fallback route */}
+                            <Route path="*" element={<Navigate to="/login" replace />} />
+                        </Routes>
+                    </Suspense>
+                </CreditProvider>
             </AuthProvider>
         </Router>
     );

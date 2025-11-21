@@ -84,7 +84,7 @@ const welcomeWords = [
     { text: "🎉", className: "text-blue-600" },
 ];
 
-// Fixed Google SVG icon component
+// Google SVG icon component
 const GoogleIcon = () => (
     <svg className="w-5 h-5" viewBox="0 0 24 24">
         <path
@@ -107,7 +107,7 @@ const GoogleIcon = () => (
 );
 
 export default function Onboarding() {
-    const { login } = useAuth();
+    const { login, user } = useAuth();
     const [currentStep, setCurrentStep] = useState(0);
     const [completed, setCompleted] = useState(false);
     const [formData, setFormData] = useState({
@@ -142,12 +142,15 @@ export default function Onboarding() {
                     icon: <Rocket className="text-blue-500" />
                 });
 
-                // Redirect to dashboard
-                if (user.role === 'superadmin') {
-                    navigate('/superadmin/dashboard', { replace: true });
-                } else {
-                    navigate('/dashboard', { replace: true });
+                // If user completed onboarding via Google, redirect to dashboard
+                if (!isNewUser) {
+                    if (user.role === 'superadmin') {
+                        navigate('/superadmin/dashboard', { replace: true });
+                    } else {
+                        navigate('/dashboard', { replace: true });
+                    }
                 }
+                // If it's a new user, they'll continue with onboarding
             } catch (error) {
                 console.error('Error processing Google OAuth callback:', error);
                 toast.error('Authentication failed', {
@@ -158,6 +161,13 @@ export default function Onboarding() {
             }
         }
     }, [login, navigate]);
+
+    // Auto-start onboarding if user is logged in but hasn't completed it
+    useEffect(() => {
+        if (user && user.isFirstLogin && currentStep === 0) {
+            setCurrentStep(1); // Skip welcome step if user is already logged in
+        }
+    }, [user, currentStep]);
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -171,11 +181,7 @@ export default function Onboarding() {
         if (currentStep < onboardingSteps.length - 1) {
             setCurrentStep(currentStep + 1);
         } else {
-            setCompleted(true);
-            // Redirect to dashboard after a delay
-            setTimeout(() => {
-                navigate('/dashboard');
-            }, 3000);
+            handleOnboardingComplete();
         }
     };
 
@@ -185,15 +191,32 @@ export default function Onboarding() {
         }
     };
 
+    const handleOnboardingComplete = () => {
+        setCompleted(true);
+
+        // Update user's first login status
+        const updatedUser = { ...user, isFirstLogin: false };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+
+        // Redirect to dashboard after a delay
+        setTimeout(() => {
+            if (user?.role === 'superadmin') {
+                navigate('/superadmin/dashboard', { replace: true });
+            } else {
+                navigate('/dashboard', { replace: true });
+            }
+        }, 3000);
+    };
+
     const skipOnboarding = () => {
-        navigate('/dashboard');
+        handleOnboardingComplete();
     };
 
     const handleGoogleLogin = () => {
         setIsGoogleLoading(true);
 
-        // Use direct backend URL
-        const backendUrl = 'http://localhost:5000'; // Replace with your actual backend URL
+        // Use your actual backend URL
+        const backendUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000';
         const redirectUri = `${window.location.origin}/onboarding`;
         const googleAuthUrl = `${backendUrl}/api/auth/google?redirect_uri=${encodeURIComponent(redirectUri)}&signup=true`;
 
@@ -205,6 +228,13 @@ export default function Onboarding() {
         e.preventDefault();
         // Handle form submission logic here
         console.log('Form data:', formData);
+
+        // For demo purposes, simulate successful account creation
+        toast.success('Account created successfully!', {
+            position: 'top-center',
+            duration: 2000,
+        });
+
         nextStep();
     };
 

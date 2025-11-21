@@ -13,6 +13,7 @@ import {
     FiHome
 } from 'react-icons/fi';
 import { HiOutlineChevronDown } from 'react-icons/hi';
+import { ClockFadingIcon } from 'lucide-react';
 
 const Navbar = memo(() => {
     const { logout, currentUser } = useAuth();
@@ -37,11 +38,11 @@ const Navbar = memo(() => {
         { id: 3, title: 'Weekly Usage Report', message: 'You have used 230 credits this week', time: '2 days ago', read: true }
     ], []);
 
-    // Memoize profile menu items (ONLY user-related items) - Profile removed
+    // Memoize profile menu items
     const profileMenuItems = useMemo(() => [
         { icon: <FiSettings className="w-4 h-4" />, label: 'Settings', path: '/settings' },
-        { icon: <FiDollarSign className="w-4 h-4" />, label: 'Billing & Payments', path: '/billing' },
-        { icon: <FiHelpCircle className="w-4 h-4" />, label: 'Help & Support', path: '/help' },
+        { icon: <ClockFadingIcon className="w-4 h-4" />, label: 'Payments history', path: '/billing' },
+        { icon: <FiHelpCircle className="w-4 h-4" />, label: 'Help Desk', path: '/help' },
     ], []);
 
     // Close dropdowns when clicking outside
@@ -68,7 +69,6 @@ const Navbar = memo(() => {
 
     const handleProfileToggle = useCallback(() => {
         setProfileOpen(prev => !prev);
-        // Close other dropdowns when profile opens
         if (!profileOpen) {
             setNotificationsOpen(false);
         }
@@ -76,16 +76,15 @@ const Navbar = memo(() => {
 
     const handleNotificationsToggle = useCallback(() => {
         setNotificationsOpen(prev => !prev);
-        // Close other dropdowns when notifications open
         if (!notificationsOpen) {
             setProfileOpen(false);
         }
     }, [notificationsOpen]);
 
-    // Buy Credits Button Component
+    // Buy Credits Button Component - FIXED PATH
     const BuyCreditsButton = memo(() => (
         <button
-            onClick={() => navigate('/billing')}
+            onClick={() => navigate('/BuyCredits')}
             className="flex items-center justify-center space-x-2 font-medium transition-all duration-200
                 bg-gradient-to-r from-teal-800 to-teal-500 hover:from-teal-900 hover:to-teal-600
                 text-white shadow-md hover:shadow-lg transform hover:scale-105 active:scale-95
@@ -98,9 +97,10 @@ const Navbar = memo(() => {
 
     BuyCreditsButton.displayName = 'BuyCreditsButton';
 
-    // Credits Display Component
+    // Credits Display Component - MAKE CLICKABLE
     const CreditsDisplay = memo(() => (
         <div
+            onClick={() => navigate('/BuyCredits')}
             className="flex items-center bg-gradient-to-r from-teal-50 to-teal-100/80 rounded-lg md:rounded-xl border border-teal-200
                 backdrop-blur-sm transition-all duration-300 cursor-pointer hover:shadow-md hover:scale-105
                 px-3 py-2 md:px-4 md:py-2.5"
@@ -179,7 +179,10 @@ const Navbar = memo(() => {
 
                 {/* Footer */}
                 <div className="p-2 md:p-3 border-t border-teal-100 bg-gray-50">
-                    <button className="w-full text-center text-gray-700 hover:text-gray-800 text-xs md:text-sm font-medium py-2 rounded hover:bg-gray-100 transition-colors duration-200">
+                    <button
+                        onClick={() => navigate('/notifications')}
+                        className="w-full text-center text-gray-700 hover:text-gray-800 text-xs md:text-sm font-medium py-2 rounded hover:bg-gray-100 transition-colors duration-200"
+                    >
                         View All Notifications
                     </button>
                 </div>
@@ -189,7 +192,7 @@ const Navbar = memo(() => {
 
     NotificationsDropdown.displayName = 'NotificationsDropdown';
 
-    // Profile Dropdown Component (Profile removed)
+    // Profile Dropdown Component
     const ProfileDropdown = memo(() => (
         <div className="absolute right-0 top-full mt-2 w-56 md:w-64 bg-white rounded-xl shadow-xl border border-teal-200 overflow-hidden z-50 font-sans">
             {/* Header Section */}
@@ -209,7 +212,21 @@ const Navbar = memo(() => {
                 </div>
             </div>
 
-            {/* Profile Menu Items - Profile removed */}
+            {/* Quick Buy Credits Section */}
+            <div className="p-3 border-b border-teal-100 bg-gradient-to-r from-teal-50 to-teal-100/50">
+                <button
+                    onClick={() => {
+                        navigate('/BuyCredits');
+                        setProfileOpen(false);
+                    }}
+                    className="w-full bg-teal-600 hover:bg-teal-700 text-white text-xs font-medium py-2 px-3 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+                >
+                    <FiZap className="w-3 h-3" />
+                    <span>Buy More Credits</span>
+                </button>
+            </div>
+
+            {/* Profile Menu Items */}
             <div className="p-1 md:p-2">
                 <div className="space-y-0.5 md:space-y-1">
                     {profileMenuItems.map((item, index) => (
@@ -249,7 +266,7 @@ const Navbar = memo(() => {
 
     return (
         <>
-            <nav className="fixed top-0 left-0 lg:left-64 xl:left-72 right-0 h-14 md:h-24 md:px-3 bg-white shadow-sm border-b border-teal-200 z-30 font-sans">
+            <nav className="fixed top-0 left-0 lg:left-64 xl:left-72 right-0 h-14 md:h-16 bg-white shadow-sm border-b border-teal-200 z-30 font-sans">
                 <div className="h-full px-3 md:px-4 lg:px-6">
                     <div className="flex items-center justify-between h-full">
                         {/* Left Section - Breadcrumb */}
