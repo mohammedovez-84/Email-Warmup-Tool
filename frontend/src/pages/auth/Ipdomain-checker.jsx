@@ -862,7 +862,7 @@ const IpDomainChecker = () => {
   </div>
 
 
-                {/* Stats Grid */}
+                {/* Stats Grid
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 p-4 md:p-5 bg-white/80 backdrop-blur-sm border border-white/40 rounded-xl md:rounded-2xl shadow-md">
                     <div className="group relative text-center p-3 md:p-4 bg-gradient-to-br from-white to-slate-50 rounded-lg md:rounded-xl border border-slate-200 shadow-md hover:shadow-lg hover:border-blue-300 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer overflow-hidden">
                         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-cyan-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
@@ -904,6 +904,7 @@ const IpDomainChecker = () => {
                         <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 to-amber-500 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left rounded-b-lg md:rounded-b-xl shadow-md shadow-orange-500/30"></div>
                     </div>
                 </div>
+            </div> */}
             </div>
 
             {/* Error Display */}

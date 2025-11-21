@@ -131,34 +131,18 @@ const AuthenticationChecker = () => {
     return clean;
   };
 
-  // Base64 validation for DKIM keys
-  const isValidBase64 = (str) => {
-    try {
-      return btoa(atob(str)) === str;
-    } catch (err) {
-      return false;
+  // Get authentication token
+  const getAuthToken = () => {
+    // Try different ways to get the token based on your AuthContext implementation
+    if (currentUser?.token) {
+      return currentUser.token;
     }
-  };
-
-  // Calculate RSA key length from modulus
-  const calculateKeyLength = (base64Key) => {
-    if (!base64Key || !isValidBase64(base64Key)) return 0;
-    
-    try {
-      // Decode base64 and get byte length
-      const binaryKey = atob(base64Key);
-      const keyLength = binaryKey.length * 8; // Convert bytes to bits
-      
-      // Common RSA key lengths
-      if (keyLength >= 2048 && keyLength < 3072) return 2048;
-      if (keyLength >= 3072 && keyLength < 4096) return 3072;
-      if (keyLength >= 4096) return 4096;
-      if (keyLength >= 1024 && keyLength < 2048) return 1024;
-      
-      return keyLength;
-    } catch (error) {
-      return 0;
+    if (currentUser?.accessToken) {
+      return currentUser.accessToken;
     }
+    // Check localStorage as fallback
+    const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+    return token;
   };
 
   // Check authentication status on component mount
@@ -211,10 +195,10 @@ const AuthenticationChecker = () => {
 
   // Circular meter animation effect for results
   useEffect(() => {
-    if (results?.overallScore) {
+    if (results?.securityScore?.percentage) {
       const animateScore = () => {
         let currentScore = 0;
-        const finalScore = results.overallScore;
+        const finalScore = results.securityScore.percentage;
         const duration = 1500;
         const steps = 40;
         const increment = finalScore / steps;
@@ -290,511 +274,302 @@ const AuthenticationChecker = () => {
     }));
   };
 
-  // DNS providers defined at component level
-  const dnsProviders = [
-    'https://cloudflare-dns.com/dns-query',
-    'https://dns.google/resolve',
-    'https://1.1.1.1/dns-query'
-  ];
-
-  // Enhanced DNS lookup function with validation
-  const lookupDnsRecord = async (type, domain) => {
-    // Validate domain first - now supports custom IDs
-    if (!isValidDomain(domain)) {
-      return { 
-        exists: false, 
-        record: null, 
-        error: 'Invalid domain format',
-        provider: 'Validation failed'
-      };
-    }
-
-    let lookupDomain = domain;
-    const recordType = 'TXT';
-
-    if (type === 'dkim') {
-      // Enhanced DKIM selectors including Google-specific ones
-      const selectors = [
-        'google', '20230601', '20221208', '20210212', '20161025', '20120113',
-        'default', 'selector1', 'selector2', 'dkim', 's1', 's2', 'k1', 'key1',
-        'mx', 'mail', 'k2', 'selector', 'dkim01', 'dkim02', 'x', 'y', 'z'
-      ];
+  // API call to check domain authentication
+  const checkDomainAuth = async (domain) => {
+    try {
+      const token = getAuthToken();
       
-      for (const selector of selectors) {
-        lookupDomain = `${selector}._domainkey.${domain}`;
-        
-        for (const provider of dnsProviders) {
-          try {
-            const response = await fetch(
-              `${provider}?name=${encodeURIComponent(lookupDomain)}&type=${recordType}`,
-              {
-                headers: { 'Accept': 'application/dns-json' },
-                signal: AbortSignal.timeout(3000)
-              }
-            );
-
-            if (!response.ok) continue;
-
-            const data = await response.json();
-
-            if (data.Answer && data.Answer.length > 0) {
-              const dkimRecord = data.Answer.find(ans => 
-                ans.data && typeof ans.data === 'string' && 
-                (ans.data.includes('v=DKIM1') || ans.data.includes('k=rsa') || ans.data.includes('p='))
-              );
-              
-              if (dkimRecord) {
-                return {
-                  exists: true,
-                  record: dkimRecord.data,
-                  selector: selector,
-                  domain: lookupDomain,
-                  provider: provider
-                };
-              }
-            }
-          } catch (error) {
-            continue;
-          }
-        }
+      if (!token) {
+        throw new Error('Authentication token not found. Please log in again.');
       }
-      return { exists: false, record: null, selector: 'not found' };
 
-    } else if (type === 'dmarc') {
-      lookupDomain = `_dmarc.${domain}`;
-    }
+      const response = await fetch('http://localhost:5000/api/dns/check-auth', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ domain }),
+      });
 
-    for (const provider of dnsProviders) {
-      try {
-        const response = await fetch(
-          `${provider}?name=${encodeURIComponent(lookupDomain)}&type=${recordType}`,
-          {
-            headers: { 'Accept': 'application/dns-json' },
-            signal: AbortSignal.timeout(5000)
-          }
-        );
-
-        if (!response.ok) continue;
-
-        const data = await response.json();
-
-        if (data.Answer && data.Answer.length > 0) {
-          const records = data.Answer.map(ans => ans.data).filter(record => record && typeof record === 'string');
-
-          if (type === 'spf') {
-            const spfRecord = records.find(record => 
-              record.trim().startsWith('v=spf1') || 
-              record.includes('v=spf1')
-            );
-            return spfRecord ? { 
-              exists: true, 
-              record: spfRecord,
-              provider: provider
-            } : { 
-              exists: false, 
-              record: null 
-            };
-          
-          } else if (type === 'dmarc') {
-            const dmarcRecord = records.find(record => 
-              record.trim().startsWith('v=DMARC1') || 
-              record.includes('v=DMARC1')
-            );
-            return dmarcRecord ? { 
-              exists: true, 
-              record: dmarcRecord,
-              provider: provider
-            } : { 
-              exists: false, 
-              record: null 
-            };
-          }
-
-          return { 
-            exists: true, 
-            record: records[0],
-            provider: provider
-          };
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Authentication failed. Please log in again.');
         }
-      } catch (error) {
-        continue;
+        throw new Error(`API request failed with status ${response.status}`);
       }
-    }
 
-    return { exists: false, record: null };
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('API Error:', error);
+      throw new Error(error.message || 'Failed to check domain authentication. Please try again.');
+    }
   };
 
-  // ✅ REAL-TIME: Dynamic blacklist checking with live DNSBL queries
-  const checkBlacklists = async (domain) => {
-    const blacklists = [
-      { name: 'Spamhaus DBL', query: `${domain}.dbl.spamhaus.org` },
-      { name: 'Spamhaus ZEN', query: `${domain}.zen.spamhaus.org` },
-      { name: 'Barracuda', query: `${domain}.b.barracudacentral.org` },
-      { name: 'SORBS', query: `${domain}.dnsbl.sorbs.net` },
-      { name: 'SpamCop', query: `${domain}.bl.spamcop.net` },
-      { name: 'URIBL Black', query: `${domain}.black.uribl.com` },
-      { name: 'URIBL Grey', query: `${domain}.grey.uribl.com` },
-      { name: 'PSBL', query: `${domain}.psbl.surriel.com` },
-      { name: 'URIBL Multi', query: `${domain}.multi.uribl.com` },
-      { name: 'SURBL Multi', query: `${domain}.multi.surbl.org` },
-      { name: 'SURBL', query: `${domain}.surbl.org` }
-    ];
-
-    const results = await Promise.all(
-      blacklists.map(async (blacklist) => {
-        let lastError = null;
-        
-        for (const provider of dnsProviders) {
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-            const response = await fetch(
-              `${provider}?name=${encodeURIComponent(blacklist.query)}&type=A`,
-              {
-                headers: { 'Accept': 'application/dns-json' },
-                signal: controller.signal
-              }
-            );
-            
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-              lastError = `HTTP ${response.status}`;
-              continue;
-            }
-
-            const data = await response.json();
-            
-            // ✅ REAL-TIME: Dynamic detection - ANY 127.x.x.x response means listed
-            const listed = data.Answer && data.Answer.some(ans => {
-              if (!ans.data) return false;
-              
-              const responseIP = ans.data;
-              
-              // Any response in 127.0.0.0/8 range means listed
-              // This is the ACTUAL standard for DNSBLs
-              if (responseIP.startsWith('127.0.')) return true;
-              
-              // Some blacklists use 127.1.x.x ranges
-              if (responseIP.startsWith('127.1.')) return true;
-              
-              // Spamhaus DBL uses 127.0.1.x
-              if (responseIP.startsWith('127.0.1.')) return true;
-              
-              return false;
-            });
-            
-            return {
-              name: blacklist.name,
-              listed: listed,
-              response: listed ? 'Listed' : 'Not Listed',
-              details: data.Answer ? data.Answer.map(a => a.data) : [],
-              query: blacklist.query,
-              responseTime: Date.now(),
-              provider: provider
-            };
-          } catch (error) {
-            lastError = error.message;
-            continue;
-          }
-        }
-
-        return {
-          name: blacklist.name,
-          listed: false,
-          response: 'Check Failed',
-          error: lastError || 'All DNS providers failed',
-          query: blacklist.query
-        };
-      })
-    );
-
-    return results;
-  };
-
-  // Enhanced BIMI check with validation
-  const checkBimi = async (domain) => {
-    const selectors = ['default', 'v1', 'bimi'];
-    
-    for (const selector of selectors) {
-      const bimiDomain = `${selector}._bimi.${domain}`;
-      
-      for (const provider of dnsProviders) {
-        try {
-          const response = await fetch(
-            `${provider}?name=${encodeURIComponent(bimiDomain)}&type=TXT`, 
-            {
-              headers: { 'Accept': 'application/dns-json' },
-              signal: AbortSignal.timeout(3000)
-            }
-          );
-
-          if (!response.ok) continue;
-
-          const data = await response.json();
-
-          if (data.Answer && data.Answer.length > 0) {
-            const bimiRecord = data.Answer.find(ans => 
-              ans.data && ans.data.includes('v=BIMI1')
-            );
-            if (bimiRecord) {
-              return {
-                exists: true,
-                record: bimiRecord.data,
-                valid: true,
-                selector: selector,
-                provider: provider,
-                recommendation: 'BIMI is properly configured with a valid logo and certificate.'
-              };
-            }
-          }
-        } catch (error) {
-          continue;
-        }
-      }
+  // Transform API response to match existing component structure
+  const transformApiResponse = (apiData) => {
+    // Check if apiData has error property
+    if (apiData.error) {
+      throw new Error(apiData.error);
     }
+
+    const { securityScore, summary, records, recommendations, domainHealth, lastChecked } = apiData;
+
+    // Generate issues based on API data
+    const issues = [];
+
+    if (!summary.hasSPF) {
+      issues.push({
+        type: 'error',
+        category: 'SPF',
+        message: 'No SPF record found',
+        description: 'This can lead to email delivery issues and spoofing.'
+      });
+    }
+
+    if (!summary.hasDKIM) {
+      issues.push({
+        type: 'error',
+        category: 'DKIM',
+        message: 'No DKIM record found',
+        description: 'This prevents email authentication and can affect deliverability.'
+      });
+    }
+
+    if (!summary.hasDMARC) {
+      issues.push({
+        type: 'error',
+        category: 'DMARC',
+        message: 'No DMARC record found',
+        description: 'This leaves your domain vulnerable to spoofing and phishing attacks.'
+      });
+    }
+
+    if (summary.isBlacklisted) {
+      const listedBlacklists = records.blacklist.details.filter(d => d.status === 'LISTED');
+      issues.push({
+        type: 'error',
+        category: 'Blacklist',
+        message: `Domain listed on ${listedBlacklists.length} blacklist(s)`,
+        description: `Listed on: ${listedBlacklists.map(d => d.list).join(', ')}. This may affect email deliverability.`
+      });
+    }
+
+    // Add recommendation issues
+    recommendations.forEach(rec => {
+      if (rec.priority === 'HIGH') {
+        issues.push({
+          type: 'error',
+          category: rec.category,
+          message: rec.message,
+          description: rec.fix
+        });
+      } else if (rec.priority === 'MEDIUM') {
+        issues.push({
+          type: 'warning',
+          category: rec.category,
+          message: rec.message,
+          description: rec.fix
+        });
+      } else {
+        issues.push({
+          type: 'info',
+          category: rec.category,
+          message: rec.message,
+          description: rec.fix
+        });
+      }
+    });
 
     return {
-      exists: false,
-      record: null,
-      valid: false,
-      recommendation: 'No BIMI record found. BIMI allows brands to display logos in supporting email clients.'
-    };
-  };
-
-  // Enhanced SPF analysis with accurate lookup counting
-  const analyzeSPFRecord = (spfRecord) => {
-    if (!spfRecord) return { 
-      mechanisms: [], 
-      lookups: 0, 
-      valid: false, 
-      hasHardFail: false,
-      syntaxErrors: []
-    };
-
-    const mechanisms = [];
-    let lookups = 0;
-    let syntaxErrors = [];
-
-    try {
-      if (!spfRecord.includes('v=spf1')) {
-        syntaxErrors.push('Missing SPF version tag (v=spf1)');
-      }
-
-      const parts = spfRecord.split(' ').filter(part => part && !part.startsWith('v='));
-
-      parts.forEach(part => {
-        if (part.startsWith('include:')) {
-          const domain = part.replace('include:', '');
-          mechanisms.push({ type: 'include', value: domain, valid: true });
-          lookups++;
-        } else if (part.startsWith('ip4:') || part.startsWith('ip6:')) {
-          const ip = part.replace('ip4:', '').replace('ip6:', '');
-          mechanisms.push({ type: part.startsWith('ip4:') ? 'ip4' : 'ip6', value: ip, valid: true });
-        } else if (part === 'a' || part === 'mx') {
-          mechanisms.push({ type: part, value: 'self', valid: true });
-          lookups++;
-        } else if (part === '-all' || part === '~all' || part === '+all' || part === '?all') {
-          mechanisms.push({ type: 'all', value: part, valid: true });
-        } else if (part.startsWith('redirect=')) {
-          const redirect = part.replace('redirect=', '');
-          mechanisms.push({ type: 'redirect', value: redirect, valid: true });
-          lookups++;
-        } else if (part.startsWith('exists:')) {
-          mechanisms.push({ type: 'exists', value: part.replace('exists:', ''), valid: true });
-          lookups++;
-        } else {
-          syntaxErrors.push(`Unknown mechanism: ${part}`);
-        }
-      });
-
-      return {
-        mechanisms,
-        lookups,
-        valid: lookups <= 10 && syntaxErrors.length === 0,
-        hasHardFail: spfRecord.includes('-all'),
-        syntaxErrors
-      };
-    } catch (error) {
-      return {
-        mechanisms: [],
-        lookups: 0,
-        valid: false,
-        hasHardFail: false,
-        syntaxErrors: ['Failed to parse SPF record']
-      };
-    }
-  };
-
-  // Enhanced DKIM analysis with real key calculations
-  const analyzeDKIMRecord = (dkimRecord) => {
-    if (!dkimRecord) return {
-      valid: false,
-      keyLength: 0,
-      publicKeyValid: false,
-      keyType: 'unknown',
-      algorithm: 'unknown'
-    };
-
-    try {
-      // Remove quotes and clean the record
-      let cleanRecord = dkimRecord;
+      domain: apiData.domain,
+      securityScore: {
+        overall: securityScore.percentage,
+        breakdown: securityScore.breakdown
+      },
+      domainHealth,
+      summary,
+      records,
+      recommendations,
+      overallScore: securityScore.percentage,
+      issues,
+      lastChecked,
+      checkId: apiData.metadata?.checkId || Date.now(),
       
-      // Remove surrounding quotes if present
-      if (cleanRecord.startsWith('"') && cleanRecord.endsWith('"')) {
-        cleanRecord = cleanRecord.slice(1, -1);
-      }
+      // Transform records to match existing component structure
+      spf: {
+        exists: records.spf.exists,
+        valid: records.spf.isValid,
+        record: records.spf.primary,
+        mechanisms: records.spf.exists ? analyzeSPFRecord(records.spf.primary) : [],
+        lookups: records.spf.exists ? countSPFLookups(records.spf.primary) : 0,
+        hasHardFail: records.spf.exists ? records.spf.primary.includes('-all') : false,
+        provider: records.spf.dnsProvider,
+        recommendation: getSPFRecommendation(records.spf, summary.hasSPF)
+      },
       
-      // Handle split quoted strings (like Google's format)
-      if (cleanRecord.includes('" "')) {
-        cleanRecord = cleanRecord.replace(/" "/g, '');
-      }
-
-      // Parse DKIM tags
-      const tags = {};
-      const tagPairs = cleanRecord.split(';').map(tag => tag.trim()).filter(tag => tag);
+      dkim: {
+        exists: records.dkim.exists,
+        valid: records.dkim.primary?.isValid || false,
+        selector: records.dkim.primary?.selector || 'not found',
+        record: records.dkim.primary?.record || null,
+        publicKeyValid: records.dkim.primary?.isValid || false,
+        keyLength: records.dkim.primary?.record ? calculateKeyLengthFromRecord(records.dkim.primary.record) : 0,
+        keyType: 'RSA',
+        algorithm: 'rsa',
+        provider: records.dkim.dnsProvider,
+        recommendation: getDKIMRecommendation(records.dkim, summary.hasDKIM)
+      },
       
-      tagPairs.forEach(tagPair => {
-        const [key, value] = tagPair.split('=').map(part => part.trim());
-        if (key && value) {
-          tags[key] = value;
-        }
-      });
-
-      // Extract and validate public key
-      let keyLength = 0;
-      let publicKeyValid = false;
-      let keyType = 'unknown';
-      let algorithm = tags.v === 'DKIM1' ? 'rsa' : 'unknown';
-
-      if (tags.p) {
-        // Enhanced Base64 validation with better cleaning
-        let base64Key = tags.p;
-        
-        // Remove any remaining quotes, spaces, or line breaks
-        base64Key = base64Key.replace(/["\s\n\r]/g, '');
-        
-        // Calculate actual key length from the public key
-        keyLength = calculateKeyLength(base64Key);
-        
-        // Enhanced validation for well-known providers
-        const isWellKnownProvider = cleanRecord.includes('google') || 
-                               cleanRecord.includes('microsoft') ||
-                               cleanRecord.includes('cloudflare') ||
-                               cleanRecord.includes('github');
-        
-        // More lenient validation for trusted providers
-        if (isWellKnownProvider && keyLength > 0) {
-          publicKeyValid = true;
-        } else {
-          publicKeyValid = keyLength >= 1024 && isValidBase64(base64Key);
-        }
-        
-        keyType = 'RSA';
-      }
-
-      // Check algorithm
-      if (tags.k) {
-        algorithm = tags.k.toLowerCase();
-      }
-
-      return {
-        valid: tags.v === 'DKIM1' && publicKeyValid,
-        keyLength,
-        publicKeyValid,
-        keyType,
-        algorithm,
-        tags
-      };
-    } catch (error) {
-      console.error('DKIM parsing error:', error);
-      return {
-        valid: false,
-        keyLength: 0,
-        publicKeyValid: false,
-        keyType: 'unknown',
-        algorithm: 'unknown'
-      };
-    }
-  };
-
-  // Enhanced DMARC analysis
-  const analyzeDMARCRecord = (dmarcRecord) => {
-    if (!dmarcRecord) return { 
-      valid: false, 
-      tags: {}, 
-      recommendations: [],
-      policy: 'not set'
-    };
-
-    const tags = {};
-    const recommendations = [];
-
-    try {
-      const tagPairs = dmarcRecord.split(';').map(tag => tag.trim()).filter(tag => tag);
-      
-      tagPairs.forEach(tagPair => {
-        const [key, value] = tagPair.split('=').map(part => part.trim());
-        if (key && value) {
-          tags[key] = value;
-        }
-      });
-
-      if (!tags.v) {
-        recommendations.push('Missing version tag (v=DMARC1)');
-      } else if (tags.v !== 'DMARC1') {
-        recommendations.push(`Invalid version: ${tags.v}. Should be DMARC1`);
-      }
-
-      if (!tags.p) {
-        recommendations.push('Missing policy tag (p=)');
-      } else if (!['none', 'quarantine', 'reject'].includes(tags.p)) {
-        recommendations.push(`Invalid policy: ${tags.p}. Should be none, quarantine, or reject`);
-      }
-
-      if (tags.pct) {
-        const pct = parseInt(tags.pct);
-        if (isNaN(pct) || pct < 0 || pct > 100) {
-          recommendations.push(`Invalid percentage: ${tags.pct}. Should be between 0-100`);
-        }
-      }
-
-      if (tags.aspf && !['r', 's'].includes(tags.aspf)) {
-        recommendations.push(`Invalid SPF alignment: ${tags.aspf}. Should be r (relaxed) or s (strict)`);
-      }
-
-      if (tags.adkim && !['r', 's'].includes(tags.adkim)) {
-        recommendations.push(`Invalid DKIM alignment: ${tags.adkim}. Should be r (relaxed) or s (strict)`);
-      }
-
-      return {
-        valid: recommendations.length === 0,
-        tags,
-        recommendations,
-        policy: tags.p || 'not set',
-        subdomainPolicy: tags.sp || tags.p || 'not set',
-        percentage: tags.pct ? parseInt(tags.pct) : 100,
+      dmarc: {
+        exists: records.dmarc.exists,
+        valid: records.dmarc.isValid,
+        record: records.dmarc.primary,
+        policy: records.dmarc.primary ? extractDMARCPolicy(records.dmarc.primary) : 'not set',
+        subdomainPolicy: records.dmarc.primary ? extractDMARCSubdomainPolicy(records.dmarc.primary) : 'not set',
+        percentage: records.dmarc.primary ? extractDMARCPercentage(records.dmarc.primary) : 100,
         alignment: {
-          spf: tags.aspf === 's' ? 'strict' : 'relaxed',
-          dkim: tags.adkim === 's' ? 'strict' : 'relaxed'
+          spf: 'relaxed',
+          dkim: 'relaxed'
         },
-        reporting: {
-          aggregate: tags.rua,
-          forensic: tags.ruf
-        }
-      };
-    } catch (error) {
-      return {
+        provider: records.dmarc.dnsProvider,
+        recommendation: getDMARCRecommendation(records.dmarc, summary.hasDMARC)
+      },
+      
+      blacklist: {
+        checked: records.blacklist.details.length,
+        listed: records.blacklist.listedCount,
+        successfulChecks: records.blacklist.details.filter(d => d.status !== 'ERROR').length,
+        failedChecks: records.blacklist.details.filter(d => d.status === 'ERROR').length,
+        details: records.blacklist.details.map(d => ({
+          name: d.list,
+          listed: d.status === 'LISTED',
+          response: d.status,
+          severity: d.severity
+        })),
+        recommendation: getBlacklistRecommendation(records.blacklist, summary.isBlacklisted)
+      },
+      
+      bimi: {
+        exists: false,
+        record: null,
         valid: false,
-        tags: {},
-        recommendations: ['Failed to parse DMARC record'],
-        policy: 'not set'
-      };
-    }
+        recommendation: 'No BIMI record found. BIMI allows brands to display logos in supporting email clients.'
+      }
+    };
   };
 
-  // Main domain checking function with Custom ID support
+  // Helper functions for data transformation
+  const analyzeSPFRecord = (spfRecord) => {
+    if (!spfRecord) return [];
+    
+    const mechanisms = [];
+    const parts = spfRecord.split(' ').filter(part => part && !part.startsWith('v='));
+    
+    parts.forEach(part => {
+      if (part.startsWith('include:')) {
+        mechanisms.push({ type: 'include', value: part.replace('include:', ''), valid: true });
+      } else if (part.startsWith('ip4:') || part.startsWith('ip6:')) {
+        mechanisms.push({ type: part.startsWith('ip4:') ? 'ip4' : 'ip6', value: part.replace('ip4:', '').replace('ip6:', ''), valid: true });
+      } else if (part === 'a' || part === 'mx') {
+        mechanisms.push({ type: part, value: 'self', valid: true });
+      } else if (part === '-all' || part === '~all' || part === '+all' || part === '?all') {
+        mechanisms.push({ type: 'all', value: part, valid: true });
+      }
+    });
+    
+    return mechanisms;
+  };
+
+  const countSPFLookups = (spfRecord) => {
+    if (!spfRecord) return 0;
+    const parts = spfRecord.split(' ');
+    return parts.filter(part => 
+      part.startsWith('include:') || part === 'a' || part === 'mx' || part.startsWith('redirect=')
+    ).length;
+  };
+
+  const calculateKeyLengthFromRecord = (dkimRecord) => {
+    // Extract base64 key and calculate length
+    const match = dkimRecord.match(/p=([^;]+)/);
+    if (match && match[1]) {
+      try {
+        const base64Key = match[1].replace(/\s/g, '');
+        const binaryKey = atob(base64Key);
+        return binaryKey.length * 8;
+      } catch (error) {
+        return 0;
+      }
+    }
+    return 0;
+  };
+
+  const extractDMARCPolicy = (dmarcRecord) => {
+    const match = dmarcRecord.match(/p=([^;]+)/);
+    return match ? match[1] : 'not set';
+  };
+
+  const extractDMARCSubdomainPolicy = (dmarcRecord) => {
+    const match = dmarcRecord.match(/sp=([^;]+)/);
+    return match ? match[1] : 'not set';
+  };
+
+  const extractDMARCPercentage = (dmarcRecord) => {
+    const match = dmarcRecord.match(/pct=([^;]+)/);
+    return match ? parseInt(match[1]) : 100;
+  };
+
+  // Recommendation functions
+  const getSPFRecommendation = (spfData, hasSPF) => {
+    if (!hasSPF) {
+      return 'No SPF record found. This can lead to email delivery issues and spoofing.';
+    }
+    if (!spfData.isValid) {
+      return 'SPF record is invalid. Please check the syntax.';
+    }
+    if (spfData.primary && spfData.primary.includes('-all')) {
+      return 'Your SPF record is properly configured with strict enforcement.';
+    }
+    return 'Your SPF record is configured but uses softfail. Consider changing ~all to -all for stricter enforcement.';
+  };
+
+  const getDKIMRecommendation = (dkimData, hasDKIM) => {
+    if (!hasDKIM) {
+      return 'No DKIM record found. This prevents email authentication and can affect deliverability.';
+    }
+    if (!dkimData.primary?.isValid) {
+      return 'DKIM record is invalid. Check the syntax and key format.';
+    }
+    const keyLength = calculateKeyLengthFromRecord(dkimData.primary.record);
+    if (keyLength >= 2048) {
+      return 'DKIM is properly configured with a strong 2048-bit key.';
+    }
+    return 'DKIM is configured but uses a weak key. Consider upgrading to 2048-bit RSA.';
+  };
+
+  const getDMARCRecommendation = (dmarcData, hasDMARC) => {
+    if (!hasDMARC) {
+      return 'No DMARC record found. This leaves your domain vulnerable to spoofing and phishing attacks.';
+    }
+    const policy = dmarcData.primary ? extractDMARCPolicy(dmarcData.primary) : 'not set';
+    if (policy === 'reject') {
+      return 'Your DMARC policy is properly configured with strict enforcement.';
+    }
+    if (policy === 'quarantine') {
+      return 'Your DMARC policy is set to quarantine. Consider moving to p=reject for maximum protection.';
+    }
+    return 'Your DMARC policy is set to monitoring only. Consider moving to p=quarantine or p=reject after monitoring.';
+  };
+
+  const getBlacklistRecommendation = (blacklistData, isBlacklisted) => {
+    if (!isBlacklisted) {
+      return 'Your domain is not listed on any major blacklists.';
+    }
+    return `Your domain is listed on ${blacklistData.listedCount} blacklist(s). This may affect email deliverability.`;
+  };
+
+  // Main domain checking function with API integration
   const handleDomainSubmit = async (e) => {
     e.preventDefault();
     
@@ -817,228 +592,13 @@ const AuthenticationChecker = () => {
     setIsLoading(true);
 
     try {
-      const [spfResult, dkimResult, dmarcResult, blacklistResults, bimiResults] = await Promise.allSettled([
-        lookupDnsRecord('spf', cleanedDomain),
-        lookupDnsRecord('dkim', cleanedDomain),
-        lookupDnsRecord('dmarc', cleanedDomain),
-        checkBlacklists(cleanedDomain),
-        checkBimi(cleanedDomain)
-      ]);
-
-      const spfRecord = spfResult.status === 'fulfilled' ? spfResult.value : { exists: false, record: null, error: spfResult.reason };
-      const dkimRecord = dkimResult.status === 'fulfilled' ? dkimResult.value : { exists: false, record: null, error: dkimResult.reason };
-      const dmarcRecord = dmarcResult.status === 'fulfilled' ? dmarcResult.value : { exists: false, record: null, error: dmarcResult.reason };
-      const blacklistData = blacklistResults.status === 'fulfilled' ? blacklistResults.value : [];
-      const bimiData = bimiResults.status === 'fulfilled' ? bimiResults.value : { exists: false, record: null };
-
-      // Analyze records with proper calculations
-      const spfAnalysis = spfRecord.exists ? analyzeSPFRecord(spfRecord.record) : { mechanisms: [], lookups: 0, valid: false, hasHardFail: false, syntaxErrors: [] };
-      const dkimAnalysis = dkimRecord.exists ? analyzeDKIMRecord(dkimRecord.record) : { valid: false, keyLength: 0, publicKeyValid: false, keyType: 'unknown', algorithm: 'unknown' };
-      const dmarcAnalysis = dmarcRecord.exists ? analyzeDMARCRecord(dmarcRecord.record) : { valid: false, tags: {}, recommendations: [], policy: 'not set' };
-
-      // ✅ REAL-TIME: Dynamic scoring based on actual results
-      const spfScore = spfRecord.exists ? 
-        (spfAnalysis.hasHardFail ? 100 : 
-         spfAnalysis.valid ? (spfAnalysis.lookups <= 10 ? 85 : 70) : 60) : 0;
-
-      const dkimScore = dkimRecord.exists ? 
-        (dkimAnalysis.valid ? (dkimAnalysis.keyLength >= 2048 ? 100 : 80) : 60) : 0;
-
-      const dmarcScore = dmarcRecord.exists ? 
-        (dmarcAnalysis.policy === 'reject' ? 100 :
-         dmarcAnalysis.policy === 'quarantine' ? 85 : 70) : 0;
+      // Call the backend API
+      const apiData = await checkDomainAuth(cleanedDomain);
       
-      // ✅ REAL-TIME: Better blacklist scoring based on actual results
-      const successfulBlacklistChecks = blacklistData.filter(b => b.response !== 'Check Failed');
-      const listedBlacklists = successfulBlacklistChecks.filter(b => b.listed === true);
-      const blacklistScore = successfulBlacklistChecks.length > 0 ? 
-        Math.max(0, 100 - (listedBlacklists.length * 15)) : 70;
-
-      const bimiScore = bimiData.exists ? 100 : 0;
-
-      // ✅ REAL-TIME: Balanced overall score calculation
-      const overallScore = Math.round(
-        (spfScore * 0.25) +
-        (dkimScore * 0.25) +
-        (dmarcScore * 0.30) +
-        (blacklistScore * 0.15) +
-        (bimiScore * 0.05)
-      );
-
-      // Generate issues list based on actual results
-      const issues = [];
-
-      if (!spfRecord.exists) {
-        issues.push({
-          type: 'error',
-          category: 'SPF',
-          message: 'No SPF record found',
-          description: 'This can lead to email delivery issues and spoofing.'
-        });
-      } else if (!spfAnalysis.hasHardFail) {
-        issues.push({
-          type: 'warning',
-          category: 'SPF',
-          message: 'SPF uses softfail (~all) instead of hardfail (-all)',
-          description: 'Consider changing ~all to -all for stricter enforcement.'
-        });
-      }
-
-      if (spfAnalysis.lookups > 10) {
-        issues.push({
-          type: 'error',
-          category: 'SPF',
-          message: `SPF has ${spfAnalysis.lookups} lookups (exceeds 10 limit)`,
-          description: 'Too many DNS lookups can cause SPF validation to fail.'
-        });
-      }
-
-      if (!dkimRecord.exists) {
-        issues.push({
-          type: 'error',
-          category: 'DKIM',
-          message: 'No DKIM record found',
-          description: 'This prevents email authentication and can affect deliverability.'
-        });
-      } else if (!dkimAnalysis.valid) {
-        issues.push({
-          type: 'error',
-          category: 'DKIM',
-          message: 'DKIM record is invalid',
-          description: 'The DKIM record has syntax errors or invalid format.'
-        });
-      } else if (dkimAnalysis.keyLength < 1024) {
-        issues.push({
-          type: 'warning',
-          category: 'DKIM',
-          message: `DKIM key length is only ${dkimAnalysis.keyLength} bits`,
-          description: 'Consider using at least 2048-bit RSA keys for better security.'
-        });
-      }
-
-      if (!dmarcRecord.exists) {
-        issues.push({
-          type: 'error',
-          category: 'DMARC',
-          message: 'No DMARC record found',
-          description: 'This leaves your domain vulnerable to spoofing and phishing attacks.'
-        });
-      } else if (dmarcAnalysis.policy === 'none') {
-        issues.push({
-          type: 'warning',
-          category: 'DMARC',
-          message: 'DMARC is in monitoring mode only (p=none)',
-          description: 'Consider moving to p=quarantine or p=reject after monitoring reports.'
-        });
-      }
-
-      // Blacklist issues based on actual results
-      const failedBlacklistChecks = blacklistData.filter(b => b.response === 'Check Failed');
-      if (listedBlacklists.length > 0) {
-        issues.push({
-          type: 'error',
-          category: 'Blacklist',
-          message: `Domain listed on ${listedBlacklists.length} blacklist(s)`,
-          description: `Listed on: ${listedBlacklists.map(b => b.name).join(', ')}. This may affect email deliverability.`
-        });
-      }
-
-      if (failedBlacklistChecks.length > 0) {
-        issues.push({
-          type: 'warning',
-          category: 'Blacklist',
-          message: `${failedBlacklistChecks.length} blacklist checks failed`,
-          description: `Unable to check: ${failedBlacklistChecks.map(b => b.name).join(', ')}. Results may be incomplete.`
-        });
-      }
-
-      if (!bimiData.exists) {
-        issues.push({
-          type: 'info',
-          category: 'BIMI',
-          message: 'No BIMI record found',
-          description: 'BIMI allows brands to display logos in supporting email clients.'
-        });
-      }
-
-      // Compile final results with accurate data
-      const newResults = {
-        domain: cleanedDomain,
-        spf: {
-          exists: spfRecord.exists,
-          valid: spfAnalysis.valid,
-          record: spfRecord.record,
-          mechanisms: spfAnalysis.mechanisms,
-          lookups: spfAnalysis.lookups,
-          hasHardFail: spfAnalysis.hasHardFail,
-          syntaxErrors: spfAnalysis.syntaxErrors,
-          provider: spfRecord.provider,
-          recommendation: spfRecord.exists ?
-            (spfAnalysis.hasHardFail ?
-              (spfAnalysis.lookups <= 10 ?
-                'Your SPF record is properly configured with strict enforcement.' :
-                'Your SPF record has too many DNS lookups. Consider reducing includes.') :
-              'Your SPF record is configured but uses softfail. Consider changing ~all to -all for stricter enforcement.') :
-            'No SPF record found. This can lead to email delivery issues.'
-        },
-        dkim: {
-          exists: dkimRecord.exists,
-          valid: dkimAnalysis.valid,
-          selector: dkimRecord.selector || 'not found',
-          record: dkimRecord.record,
-          publicKeyValid: dkimAnalysis.publicKeyValid,
-          keyLength: dkimAnalysis.keyLength,
-          keyType: dkimAnalysis.keyType,
-          algorithm: dkimAnalysis.algorithm,
-          provider: dkimRecord.provider,
-          recommendation: dkimRecord.exists ?
-            (dkimAnalysis.valid ?
-              (dkimAnalysis.keyLength >= 2048 ?
-                'DKIM is properly configured with a strong 2048-bit key.' :
-                'DKIM is configured but uses a weak key. Consider upgrading to 2048-bit RSA.') :
-              'DKIM record is invalid. Check the syntax and key format.') :
-            'No DKIM record found. This prevents email authentication and can affect deliverability.'
-        },
-        dmarc: {
-          exists: dmarcRecord.exists,
-          valid: dmarcAnalysis.valid,
-          record: dmarcRecord.record,
-          policy: dmarcAnalysis.policy,
-          subdomainPolicy: dmarcAnalysis.subdomainPolicy,
-          percentage: dmarcAnalysis.percentage,
-          alignment: dmarcAnalysis.alignment,
-          reporting: dmarcAnalysis.reporting,
-          tags: dmarcAnalysis.tags,
-          recommendations: dmarcAnalysis.recommendations,
-          provider: dmarcRecord.provider,
-          recommendation: dmarcRecord.exists ?
-            (dmarcAnalysis.policy === 'reject' ?
-              'Your DMARC policy is properly configured with strict enforcement.' :
-              dmarcAnalysis.policy === 'quarantine' ?
-                'Your DMARC policy is set to quarantine. Consider moving to p=reject for maximum protection.' :
-                'Your DMARC policy is set to monitoring only. Consider moving to p=quarantine or p=reject after monitoring.') :
-            'No DMARC record found. This leaves your domain vulnerable to spoofing and phishing attacks.'
-        },
-        blacklist: {
-          checked: blacklistData.length,
-          listed: listedBlacklists.length,
-          successfulChecks: successfulBlacklistChecks.length,
-          failedChecks: failedBlacklistChecks.length,
-          details: blacklistData,
-          recommendation: listedBlacklists.length === 0 ?
-            (successfulBlacklistChecks.length > 0 ?
-              'Your domain is not listed on any major blacklists.' :
-              'Unable to complete blacklist checks. Please try again.') :
-            'Your domain is listed on one or more blacklists. This may affect email deliverability.'
-        },
-        bimi: bimiData,
-        overallScore,
-        issues,
-        lastChecked: new Date().toISOString(),
-        checkId: Date.now()
-      };
-
-      setResults(newResults);
+      // Transform API response to match component structure
+      const transformedResults = transformApiResponse(apiData);
+      
+      setResults(transformedResults);
 
       // Add to history
       setHistory(prev => {
@@ -1048,15 +608,17 @@ const AuthenticationChecker = () => {
         return [{ 
           domain: cleanedDomain, 
           date: new Date().toISOString(), 
-          score: overallScore,
-          checkId: Date.now()
+          score: transformedResults.overallScore,
+          checkId: transformedResults.checkId
         }, ...filteredHistory];
       });
 
     } catch (error) {
+      console.error('Error in handleDomainSubmit:', error);
+      setValidationError(error.message);
       setResults({
         domain: cleanedDomain,
-        error: 'Failed to check domain. Please try again.',
+        error: error.message,
         lastChecked: new Date().toISOString()
       });
     } finally {
